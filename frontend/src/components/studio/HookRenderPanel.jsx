@@ -437,7 +437,11 @@ export default function HookRenderPanel({
   const downloadUrl = generation ? durableMediaUrl(generation) : null;
   const saveUrl = generation ? downloadMediaUrl(generation) || downloadUrl : null;
   const posterUrl = generation?.poster_url ? mediaUrl(generation.poster_url) : null;
-  const generateLabel = generation ? "Generate another" : "Generate the hook";
+  // The button names the video it renders (ADR 0313): "Generate
+  // the hook" collided with the hook card's Generate a new hook
+  // above it — two near-identical labels for writing a line and
+  // rendering a video.
+  const generateLabel = generation ? "Generate another video" : "Generate the video";
 
   return (
     <div className="space-y-3" data-testid="hook-render-panel">

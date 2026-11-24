@@ -29,7 +29,8 @@ One render path, single-pass video generation via OpenRouter.
   jobs-queue claim/lease helpers; `db.py` reads config through a `_server`
   back-reference. Domain
   routers (`routers/brands.py`, `routers/studio.py`, `routers/assets.py`,
-  `routers/history.py`) own their endpoints and resolve test-patched `server`
+  `routers/history.py`, `routers/hook_cta.py`, `routers/post_kit.py`,
+  `routers/health.py`, `routers/media.py`) own their endpoints and resolve test-patched `server`
   names at call time via `_cfg`; none may import `server` back (ADR 0111).
 - `backend/ai_service.py` — all OpenRouter calls; `VIDEO_MODELS` is the model
   catalog; `generate_video` submits, `describe_provider_refusal` classifies.
@@ -246,7 +247,11 @@ One render path, single-pass video generation via OpenRouter.
   finished render.
 - The craft scorer (`backend/creative_quality.py`) rewards first person and
   penalizes only diary framing; the story arc ends open, the demo completes
-  it, and the cover text is scored with the hook (ADR 0145). Generation
+  it, and the cover text is scored with the hook (ADR 0145). Since ADR 0312
+  the rendered report is the text model evaluating the pair against this
+  checklist's own rubric (dimensions, cues, reachable caps); the
+  deterministic scorer is the fallback and still serves list/mutation
+  payloads and generation's internal comparisons. Generation
   prompts follow the same doctrine — 'I' is the goal, never a ration. The
   plan drafts `cover_text` to the shared cover best-practice rules; Review
   shows it as plain text and regenerates it only as a suggestion the founder
@@ -316,7 +321,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. Three hundred and thirteen decisions (0001–0312; two
+Read `docs/adr/README.md` first. Three hundred and eighteen decisions (0001–0318; two
 share the number 0263, written in parallel on Nov 21–22 2026) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt

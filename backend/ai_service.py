@@ -5,6 +5,7 @@ AI service layer using OpenRouter API.
 - Video prompt generation via chat/completions
 - Video generation via /videos endpoint
 """
+import ast
 import asyncio
 import base64
 import json
@@ -19,7 +20,9 @@ import httpx
 
 from face_crop import crop_face_from_path
 # Strategy and rendering share the selected camera's shot instructions.
-from generation_planning import starting_shot, camera_move_section
+from generation_planning import (
+    camera_move_section, require_camera_setup_directions, starting_shot,
+)
 from template_library import (
     CONTENT_ANGLE_KINDS,
     HOOK_CATEGORIES,
@@ -4324,10 +4327,13 @@ def _spoken_line_rules_block() -> str:
         "clickbait, hype or exaggeration.\n"
         "- NAME THE PAIN, NOT THE ACTIVITY: the hook speaks to the pain "
         "the app resolves, never its activity. Talking about "
-        "journaling is vague, and nobody cares about writing a "
+        "journaling is vague; nobody cares about writing a "
         "journal; they care about the blank feeling. No vague "
         "stand-in and no abstract label ('notice feelings') where "
         "the pain belongs. The activity belongs to the script.\n"
+        "- OPEN ON THE MOMENT: open on the moment, "
+        "one concrete detail, the resolution withheld; cut any "
+        "app-behavior cue.\n"
         "- OPEN WITH THE GOAL, NOT THE PLACE: the hook opens with what the "
         "speaker is TRYING TO DO about that pain — the intention the "
         "GOAL in the ANGLE + GOAL RULE names for this video, as her "
@@ -4423,8 +4429,7 @@ def _spoken_line_rules_block() -> str:
         "- OUTCOMES, NOT FEATURES: say what the speaker noticed, discovered, "
         "understood or ended up doing. Describe the change in their life, never "
         "a feature or a screen, and never narrate scrolling, reading, or "
-        "seeing a chart, week, screen or app — the generated clip never "
-        "shows app content and the founder's demo does.\n"
+        "seeing a chart, week, screen or app.\n"
         "- CONVERSATIONAL: words you would actually say out loud, in short spoken "
         "sentences with contractions. One idea per sentence in the script. "
         "BREATH: no sentence runs past 18 words — a spoken line needs a "
@@ -6557,6 +6562,153 @@ REQUIRED_STRATEGY_KEYS = {
 STRATEGY_MAX_TOKENS = 24576
 
 
+# ADR 0317: the Fixed-camera conflict is caught where the strategy is
+# written. Until now the only enforcement was the submit-time guard
+# (generation_planning.require_camera_setup_directions), so a Fixed
+# strategy the model wrote with a handheld direction — a lean toward
+# the camera inside an otherwise good hook action — was stored as
+# written and the founder met the refusal at the Generate button, for
+# a direction the app itself had written (live, Nov 24 2026). The
+# guard's message names the field and the offending clause; that
+# wording is its public surface, pinned by its tests, so the field
+# and clause are read back out of it here rather than duplicating the
+# guard's matcher and letting the two drift apart.
+_FIXED_CONFLICT_MESSAGE = re.compile(
+    r"^Fixed camera conflicts with ([^:]+): "
+    r"('(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")\. Camera setup owns"
+)
+
+FIXED_CAMERA_REPAIR_SCHEMA = {
+    "type": "object",
+    "properties": {"rewritten": {"type": "string"}},
+    "required": ["rewritten"],
+    "additionalProperties": False,
+}
+
+
+def _strategy_direction(strategy: dict, field: str):
+    """Read one direction field by the guard's own naming: a flat key,
+    a section.key, or segments.<index>.<key>."""
+    if field.startswith("segments."):
+        _, index, key = field.split(".", 2)
+        segments = strategy.get("segments") or []
+        segment = segments[int(index)] if int(index) < len(segments) else {}
+        return segment.get(key) if isinstance(segment, dict) else None
+    if "." in field:
+        section, key = field.split(".", 1)
+        values = strategy.get(section)
+        return values.get(key) if isinstance(values, dict) else None
+    return strategy.get(field)
+
+
+def _set_strategy_direction(strategy: dict, field: str, value: str) -> None:
+    if field.startswith("segments."):
+        _, index, key = field.split(".", 2)
+        strategy["segments"][int(index)][key] = value
+        return
+    if "." in field:
+        section, key = field.split(".", 1)
+        strategy[section][key] = value
+        return
+    strategy[field] = value
+
+
+def _strategy_direction_limit(field: str) -> int:
+    """The same cap normalize_strategy applied to this field, so a
+    repair is held to the length the field was already allowed."""
+    if field.startswith("segments."):
+        return 400
+    if "." in field:
+        section, key = field.split(".", 1)
+        if section == "performance" and key == "movement":
+            return scene_consistency.MOVEMENT_LIMIT
+        if section == "camera_beat":
+            return 90
+        return 300
+    return _STRATEGY_TEXT_LIMITS.get(field, 600)
+
+
+async def _ensure_fixed_camera_strategy(strategy: dict) -> dict:
+    """Run the submit-time Fixed check over a freshly generated
+    strategy, with ONE automatic repair (ADR 0317).
+
+    Handheld strategies return untouched — the guard already returns
+    early for them, and no repair call is spent. A Fixed strategy that
+    conflicts gets one model call that rewrites ONLY the conflicting
+    field under the Fixed contract; the repaired strategy must then
+    pass the guard itself. If the repair call fails, comes back
+    empty, or still conflicts, the guard's own ValueError surfaces
+    here at generation — a strategy that would dead-end at render is
+    never handed back to be stored, and no field is ever silently
+    stripped (the guard's own rule: a mixed direction may carry
+    reviewed details that must not be thrown away).
+    """
+    if (strategy or {}).get("camera_setup") != "fixed":
+        return strategy
+    try:
+        require_camera_setup_directions(strategy)
+        return strategy
+    except ValueError as error:
+        original_error = error
+    match = _FIXED_CONFLICT_MESSAGE.match(str(original_error))
+    if not match:
+        raise original_error
+    field = match.group(1)
+    clause = ast.literal_eval(match.group(2))
+    current = str(_strategy_direction(strategy, field) or "")
+    prompt = (
+        "A video strategy was just generated for a FIXED camera setup, "
+        "and one of its direction fields conflicts with that setup.\n\n"
+        "THE FIXED CONTRACT: the camera is a stationary phone on a "
+        "shelf or tripod. It never moves, and framing belongs to the "
+        "setup alone: the presenter is already in frame, standing, "
+        "framed head-to-mid-thigh. No leaning, stepping or walking "
+        "toward or away from the camera, no handheld or selfie "
+        "framing, no zoom, pan, tilt or camera movement of any kind.\n\n"
+        f"FIELD: {field}\n"
+        f"CURRENT TEXT: {current}\n"
+        f"CONFLICTING CLAUSE: {clause}\n\n"
+        "Rewrite the field's text so the conflict is gone and the "
+        "Fixed contract holds. Change only what the conflict forces: "
+        "keep the action's energy, its mid-motion opening and every "
+        "non-conflicting detail exactly as written — if the presenter "
+        "leans toward the camera while a hand sweeps up, the sweep "
+        "stays and the lean goes. Do not add new actions, do not "
+        "mention the camera setup itself, and do not touch any spoken "
+        "words — this field is direction only.\n\n"
+        'Return {"rewritten": "the field\'s full rewritten text"}.'
+    )
+    try:
+        data = await _chat_json(
+            "You repair one camera direction inside a TikTok studio "
+            "app. You rewrite a single direction field so it obeys "
+            "the app's Fixed camera contract, and return only the "
+            "JSON object.",
+            prompt,
+            "Fixed camera strategy repair",
+            max_tokens=800,
+            attempts=1,
+            timeout=45,
+            json_schema=FIXED_CAMERA_REPAIR_SCHEMA,
+        )
+    except Exception:
+        raise original_error
+    rewritten = str((data or {}).get("rewritten") or "").strip()
+    if not rewritten:
+        raise original_error
+    _set_strategy_direction(
+        strategy, field,
+        _clean_strategy_text(rewritten, _strategy_direction_limit(field)),
+    )
+    # The guard itself is the verdict on the repair.
+    require_camera_setup_directions(strategy)
+    logger.info(
+        "Video strategy Fixed-camera direction repaired before save: %s",
+        field,
+    )
+    return strategy
+
+
 async def generate_video_strategy(
     profile: dict,
     template: dict,
@@ -7292,6 +7444,12 @@ async def generate_video_strategy(
                 + "; ".join(_spoken_over)
                 + ". Regenerate the strategy; no over-length draft was saved."
             )
+    # The Fixed-camera check runs here, at the writing, with one
+    # automatic repair (ADR 0317) — the endpoint stores what this
+    # returns, and its later steps (spoken-word binding, the camera
+    # beat re-derivation) never touch a field the guard checks, so a
+    # strategy that passes here cannot dead-end at the render.
+    strategy = await _ensure_fixed_camera_strategy(strategy)
     return strategy
 
 

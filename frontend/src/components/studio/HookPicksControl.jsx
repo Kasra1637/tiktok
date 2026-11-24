@@ -35,8 +35,10 @@ import { GroupLabel } from "../SectionCard";
  * choices. Changing a pick never regenerates on its own
  * (click-to-generate only): when a hook is already on file the
  * stale note says the line predates the picks and names the
- * remedy — the one hook button, Suggest a clearer hook, which the
- * founder presses themselves (ADR 0249's unified control).
+ * remedy — the one hook button, Generate a new hook, which the
+ * founder presses themselves (ADR 0313; ADR 0249's unified
+ * control named the suggestion here until the suggestion left
+ * the page).
  *
  * The Focus block also carries the outcome refresh (ADR 0288): the
  * host wires a handler that writes a fresh outcome layer onto the
@@ -229,7 +231,7 @@ export default function HookPicksControl({
 
       {stale && (
         <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-stale-note`}>
-          The line on file was written before these picks — suggest a clearer hook to
+          The line on file was written before these picks — generate a new hook to
           write it with them.
         </p>
       )}

@@ -1,6 +1,6 @@
 # 0010 — No warm fills on buttons: coral and red move out of the surface
 
-- **Status:** accepted
+- **Status:** partially superseded by 0011 (Demo + CTA wears accent)
 - **Date:** 2026-10-16
 - **Anchors:** `frontend/src/components/ui/button.jsx:22` (destructive),
   `:38` (brand), `frontend/src/index.css:895` (`.btn-bevel-brand`),

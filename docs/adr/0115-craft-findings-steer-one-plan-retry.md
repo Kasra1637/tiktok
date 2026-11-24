@@ -1,6 +1,6 @@
 # 0115 - Craft findings steer one bounded plan retry
 
-- **Status:** accepted
+- **Status:** partially superseded by 0116 (bar 80, hook frozen, quote salvage)
 - **Date:** 2026-11-10
 - **Anchors:** `backend/ai_service.py` (`CRAFT_RETRY_BELOW`, `_craft_retry_block`,
   `_read_plan_spoken`, `generate_creative_plan`), `backend/test_hook_voice.py`,

@@ -1,6 +1,6 @@
 # 0101 — The hook speaks to the viewer: the hook line uses 'I' at most once
 
-- **Status:** accepted
+- **Status:** partially superseded by 0106 (statement default; middle is two beats)
 - **Date:** 2026-11-06
 - **Anchors:** `backend/ai_service.py` (`_spoken_line_rules_block` HOOK
   bullet, `_FIRST_PERSON_I`, `_generated_spoken_issues`, the plan's schema

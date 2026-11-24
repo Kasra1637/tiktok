@@ -80,9 +80,9 @@ Paths below are relative to [backend](../backend/).
 | [scene_consistency.py](../backend/scene_consistency.py) | Scene-field agreement (ADR 0092/0103/0104): `reconcile_scene` patches what is patchable; Movement ≥600 is advisory, Props stays a hard block. |
 | [face_crop.py](../backend/face_crop.py) | YuNet face crop + defocus of surroundings; fallback returns the original image. Identity-only input to the video model. |
 | [feedback.py](../backend/feedback.py) | Whole-video verdict bundles and the prompt section built from them, plus the posted-performance record math (dated snapshots, the craft score frozen at submit). The verdict bundle is the only steering signal — and, for templates, the only ranking signal (ADR 0127); the record never steers or ranks (ADR 0124). |
-| [creative_quality.py](../backend/creative_quality.py) | The craft scorer: eight weighted dimensions over the hook, script and cover text. First person earns, only diary framing is penalized, the story arc pays the deliberately open ending, and the cover is scored with the hook (ADR 0145). Advisory only — it explains itself in Review's tooltips and never gates a render. |
+| [creative_quality.py](../backend/creative_quality.py) | The craft scorer: eight weighted dimensions over the hook, script and cover text. First person earns, only diary framing is penalized, the story arc pays the deliberately open ending, and the cover is scored with the hook (ADR 0145). Advisory only — it explains itself in Review's tooltips and never gates a render. Since ADR 0312 it also assembles the evaluation rubric from its own dimensions, cues and caps, and builds the rendered report from the text model's evaluation (`ai_service.assess_spoken_quality_with_model`); the deterministic scorer remains the fallback and the internal mirror. |
 | [hashtag_volume.py](../backend/hashtag_volume.py) | Post-count research for post kits (ADR 0139): best-effort lookups over the prompt's 12–15 candidate pool, cached 7 days (migration 0005), selecting exactly five by size band (three at 10k–50k posts, two at 100k–500k, never million-plus). Any lookup failure falls back to the pool's first five on wording alone. |
-| [routers/](../backend/routers) — `post_kit.py`, `health.py`, `media.py`, `brands.py`, `studio.py`, `assets.py`, `history.py` | Domain endpoint ownership (ADR 0111). `post_kit`/`health`/`media` take injected DB functions; `brands`/`studio`/`assets`/`history` resolve test-patched `server` names at call time via `_cfg`. None may import `server` back. |
+| [routers/](../backend/routers) — `post_kit.py`, `health.py`, `media.py`, `brands.py`, `studio.py`, `assets.py`, `history.py`, `hook_cta.py` | Domain endpoint ownership (ADR 0111). `post_kit`/`health`/`media` take injected DB functions; `brands`/`studio`/`assets`/`history` resolve test-patched `server` names at call time via `_cfg`. None may import `server` back. |
 | [observability.py](../backend/observability.py) | Structured request logs and process-local export counters at `/api/metrics`; observability only, never a gate. |
 | [pipeline.py](../backend/pipeline.py), [storage_service.py](../backend/storage_service.py), [media_signing.py](../backend/media_signing.py) | Local media operations, R2 durability and signed app URLs. Provider URLs are not durable browser playback links. |
 | [overlays.py](../backend/overlays.py) | Server ffmpeg composition helpers; not the current Demo + CTA browser editor. |
@@ -153,7 +153,7 @@ errors the production compiler may not report.
 - Schema is versioned in `schema.apply_schema` (ADR 0120): the historical
   bootstrap is the recorded baseline in `schema_migrations`, and later
   changes append numbered steps the runner applies once (currently through
-  0006, the plan's cover text). Back up before
+  0011, the project hook picks). Back up before
   applying a new schema (operations runbook); an image rollback is not a
   database rollback.
 - Post-render persistence runs through the `jobs` table with claim/lease/

@@ -24,7 +24,6 @@ import { CONTROL_CLASS } from "../components/formControls";
 import { DirectionSelect } from "../components/studio/ReviewPanels";
 import { PresenterPhotoControl } from "../components/studio/SelectionPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
-import LineRewriteAction from "../components/studio/LineRewriteAction";
 import HookRenderPanel from "../components/studio/HookRenderPanel";
 import VoiceModeControl from "../components/studio/VoiceModeControl";
 import HookPicksControl, { profileOutcomeLines } from "../components/studio/HookPicksControl";
@@ -533,9 +532,10 @@ export default function HookCta() {
   // The steering picks (ADR 0247) ride the same draft edits as every
   // other pick on the page; changing one over a written hook marks
   // the line as predating them — the note in the picks control says
-  // so, and nothing rewrites the line until the founder presses one
-  // of the card's remedies — the clearer-hook suggestion (ADR 0249)
-  // or the fresh generate from the current picks (ADR 0265).
+  // so, and nothing rewrites the line until the founder presses the
+  // card's one remedy — the fresh generate from the current picks
+  // (ADR 0265; the clearer-hook suggestion left this page with
+  // ADR 0313).
   const changePick = (field, value, options = {}) => {
     if (hasHook) setPicksStale(true);
     editField(field, value, options);
@@ -747,11 +747,13 @@ export default function HookCta() {
 
               {/* The spoken line area (ADR 0254): the label, the line
                   itself and the card's one hook button at the area's
-                  foot, in that order in BOTH states — ADR 0265's
-                  fresh-generate button joins the foot beside the
-                  stateful button, in one row, once a line exists
-                  (the row is ADR 0287), without moving it. Kasra ruled the
-                  button refines the line, so it stands inside this
+                  foot, in that order in BOTH states — Generate the
+                  hook before a line exists, Generate a new hook once
+                  one does (ADR 0313: the one button is a generate in
+                  both states; the clearer-hook suggestion that shared
+                  the foot under ADRs 0249/0287 is gone from this
+                  page). Kasra ruled the
+                  button acts on the line, so it stands inside this
                   area under the editor — it used to render ahead of
                   the area, above the line it refines. The area
                   stands before a line exists too: the editor renders
@@ -773,35 +775,40 @@ export default function HookCta() {
                   suggestClearerHook={false}
                 />
 
-                {/* The card's ONE stateful hook button (ADR 0249):
+                {/* The card's ONE hook button (ADR 0313,
+                    superseding the Hook + CTA half of ADR 0249's
+                    stateful button and ADR 0287's side-by-side row):
                     before a line exists it is Generate the hook,
                     driving the generation flow from the picks above;
-                    once a line exists the same control is Suggest a
-                    clearer hook, the suggestion offered beside the
-                    founder's words and written only on accept. The
-                    editor above mounts without its own rewrite, so
-                    the suggestion stands exactly once in the card.
-                    The separate fresh-generate button beside it
-                    (ADR 0265; the row is ADR 0287 — Kasra ordered the
-                    two hook buttons side by side in one row, not
-                    stacked) is not a state of this control and no
-                    part of the suggestion's flow — it runs the first
-                    generation again from the current picks. The
-                    generate busy state is plain: no countdown rides
-                    this wait (Kasra's order) — the plan and angle
-                    countdowns elsewhere keep theirs. */}
+                    once a line exists the only button in the row is
+                    Generate a new hook (ADR 0265's fresh generate,
+                    now standing alone) — it runs the first generation
+                    again from the current picks, the same generateHook
+                    handler flushing the picks as they stand now, and
+                    its result is the line on file directly, never a
+                    suggestion. Suggest a clearer hook is gone from
+                    this page: Kasra ruled the two hook buttons were
+                    too much — "Just keep generate a new hook" — and
+                    the editor above mounts without its own rewrite,
+                    so no suggestion stands anywhere in the card.
+                    Create Video's Review keeps its own clearer-hook
+                    button (ADR 0205 untouched). The generate busy
+                    state is plain: no countdown rides this wait
+                    (Kasra's order) — the plan and angle countdowns
+                    elsewhere keep theirs. */}
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-start gap-2">
                   {hasHook ? (
-                    <LineRewriteAction
-                      projectId={project.id}
-                      line={editValue("hook_line")}
-                      role="hook"
-                      onAccept={(next) => editField("hook_line", next)}
-                      testIdPrefix="hook-rewrite"
-                      buttonLabel="Suggest a clearer hook"
-                      busyLabel="Writing hook"
-                    />
+                    <Button
+                      variant="accent"
+                      onClick={generateHook}
+                      disabled={hookBusy}
+                      busy={hookBusy}
+                      data-testid="hook-generate-new"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {hookBusy ? "Writing the hook" : "Generate a new hook"}
+                    </Button>
                   ) : (
                     <Button
                       variant="accent"
@@ -812,30 +819,6 @@ export default function HookCta() {
                     >
                       <Sparkles className="h-4 w-4" />
                       {hookBusy ? "Writing the hook" : "Generate the hook"}
-                    </Button>
-                  )}
-                  {/* The fresh generate (ADR 0265): its own button,
-                      standing beside the stateful control in the
-                      same row once a line exists (ADR 0287). It runs
-                      the first generation again — the same
-                      generateHook handler, flushing the picks as
-                      they stand now — and its result is the line on
-                      file directly, never a suggestion: Kasra
-                      ordered it because a changed Focus left no way
-                      to write a brand-new hook from the new focus,
-                      only to refine the old line. Before a line
-                      exists it does not stand — the stateful button
-                      already generates the first hook. */}
-                  {hasHook && (
-                    <Button
-                      variant="accent"
-                      onClick={generateHook}
-                      disabled={hookBusy}
-                      busy={hookBusy}
-                      data-testid="hook-generate-new"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                      {hookBusy ? "Writing the hook" : "Generate a new hook"}
                     </Button>
                   )}
                   </div>

@@ -48,7 +48,7 @@ after edits. Never place a server secret in a `REACT_APP_*` variable.
 | Area | Owner |
 |---|---|
 | Routes and protected lazy pages | [src/App.js](src/App.js) |
-| Three-step wizard orchestration | [src/pages/CreateVideo.jsx](src/pages/CreateVideo.jsx) |
+| Four-step wizard orchestration | [src/pages/CreateVideo.jsx](src/pages/CreateVideo.jsx) |
 | Atomic draft/selection transitions | [src/pages/wizardDraft.js](src/pages/wizardDraft.js) |
 | Recommendation/tailoring lifecycle | [src/hooks/useWizardTemplates.js](src/hooks/useWizardTemplates.js) |
 | Angle/goal/template selection UI | [src/components/studio/SelectionPanels.jsx](src/components/studio/SelectionPanels.jsx) |
@@ -60,7 +60,7 @@ after edits. Never place a server secret in a `REACT_APP_*` variable.
 | Browser composition/editor | [src/demoCta](src/demoCta/) |
 | Surface spacing/type tokens | [src/index.css](src/index.css) |
 
-The wizard is **App Profile → Audience & template → Review & submit**. Selection
+The wizard is **App Profile → Audience & template → Review & submit → Demo + CTA**. Selection
 panels receive data and callbacks; project writes stay with the page. Review
 edits autosave through the server's claim-checked save path. The Demo + CTA
 editor instead saves a browser-local editing document with undo/redo; it is not

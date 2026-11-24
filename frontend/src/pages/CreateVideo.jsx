@@ -495,10 +495,10 @@ function CraftCheckCard({ report }) {
 /** What each progress state means, in words. Used for the pill tooltip and
  *  the aria-label, because both a tick and a dashed border are shape-only. */
 const STEP_STATE_COPY = {
-  done: "done",
-  todo: "not started",
-  blocked: "needs something from you",
-  locked: "locked",
+  done: "Done",
+  todo: "Not started",
+  blocked: "Needs something from you",
+  locked: "Locked",
 };
 
 /**
@@ -2459,7 +2459,7 @@ export default function CreateVideo() {
               summary={
                 <>
                   <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
-                  <Badge variant="outline" className="text-xs">optional</Badge>
+                  <Badge variant="outline" className="text-xs">Optional</Badge>
                 </>
               }
             >
@@ -3547,12 +3547,22 @@ export default function CreateVideo() {
           steps aside for the section header's chip below, which says the
           same words; the aria-label keeps both at every width. The
           segments wear no button chrome (ADR 0298): no border, no card,
-          no resting fill — flat tabs on the nav's hairline track, the
-          active one marked by its indigo underline and label alone, so
-          the page's filled shapes belong to its actions only. */}
+          no resting fill — flat tabs, the active one marked by its
+          indigo underline and label alone, so the page's filled shapes
+          belong to its actions only. The hairline track is gone
+          (ADR 0315, the founder's ruling): the only line under the
+          segments is the progress fill itself, a slim gradient
+          stretched from the left to the live score, and the active
+          segment's underline runs at half its length, from the left —
+          the colorful lines are progress and place, nothing else. */}
       <div data-testid="studio-progress-rail" className="space-y-2">
         <div className="flex min-w-0 items-center gap-2">
-        <nav aria-label="Progress" className="flex min-w-0 flex-1 items-stretch gap-1 border-b border-[color:var(--hairline)] sm:gap-1.5">
+        <nav aria-label="Progress" className="relative flex min-w-0 flex-1 items-stretch gap-1 sm:gap-1.5">
+          {/* The progress fill (ADR 0315): the rail's only line — a slim
+              gradient stretched from the left to the live score, the
+              same number the quarters and the end readout derive from,
+              so they can never disagree. */}
+          <span aria-hidden="true" className="rail-progress-fill" style={{ width: `${railPct}%` }} />
         {stepStates.map((s, i) => {
           const active = i === step;
           // Cumulative quarters: the segment states how much of the workflow
@@ -3574,7 +3584,7 @@ export default function CreateVideo() {
               // this is the one place the founder looks to answer "what is left".
               aria-label={
                 isLocked
-                  ? `${s.step.label}: locked — finish ${lockedBy} to unlock, ${cumulative}% complete`
+                  ? `${s.step.label}: Locked — finish ${lockedBy} to unlock, ${cumulative}% complete`
                   : value
                     ? `${s.step.label}: ${value}, done, ${cumulative}% complete`
                     : `${s.step.label}: ${STEP_STATE_COPY[s.state]}, ${cumulative}% complete`
@@ -3614,7 +3624,7 @@ export default function CreateVideo() {
                     because an angle label can be a sentence; the full text
                     lives in the aria-label above. */}
                 <span className="hidden truncate text-xs text-muted-foreground sm:block" aria-hidden="true">
-                  {isLocked ? `locked — finish ${lockedBy} to unlock` : value || STEP_STATE_COPY[s.state]}
+                  {isLocked ? `Locked — finish ${lockedBy} to unlock` : value || STEP_STATE_COPY[s.state]}
                 </span>
               </span>
               <span
@@ -3634,7 +3644,7 @@ export default function CreateVideo() {
             aria-valuemax={100}
             aria-valuenow={railPct}
             data-testid="studio-progress-pct"
-            className="shrink-0 text-xs tabular-nums text-muted-foreground"
+            className="shrink-0 text-xs tabular-nums text-foreground/70"
           >
             {railPct}%
           </span>
@@ -3693,7 +3703,7 @@ export default function CreateVideo() {
           const value = state === "done" ? pillValue(s.key) : null;
           const isLocked = !unlocked[i];
           const lockedBy = i > 0 ? STEPS[i - 1].label : null;
-          const chipText = isLocked ? `locked — finish ${lockedBy} to unlock` : value || STEP_STATE_COPY[state];
+          const chipText = isLocked ? `Locked — finish ${lockedBy} to unlock` : value || STEP_STATE_COPY[state];
           return (
             <section
               key={s.key}

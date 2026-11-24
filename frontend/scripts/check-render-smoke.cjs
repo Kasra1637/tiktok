@@ -5147,8 +5147,11 @@ async function main() {
       throw new Error("the done step's badge carries no completion pulse");
     }
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-    if (!css.includes(".rail-segment-active") || !css.includes("inset 0 -2px 0")) {
-      throw new Error("index.css carries no inset underline for the active rail segment");
+    if (!css.includes(".rail-segment-active") || !css.includes("background-size: 50% 2px")) {
+      throw new Error("index.css carries no half-length underline for the active rail segment (ADR 0315)");
+    }
+    if (!css.includes(".rail-progress-fill")) {
+      throw new Error("index.css carries no progress fill for the rail (ADR 0315)");
     }
     if (!css.includes("@keyframes rail-done-pulse") || !css.includes(".rail-done-badge")) {
       throw new Error("index.css carries no completion pulse for the rail's done badge");
@@ -8577,7 +8580,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (pill.getAttribute("data-state") === "done") {
       throw new Error("the Audience step is ticked before an objective is chosen");
     }
-    if (!(pill.getAttribute("aria-label") || "").includes("needs something from you")) {
+    if (!(pill.getAttribute("aria-label") || "").includes("Needs something from you")) {
       throw new Error(
         `the segment does not say it is blocked: ${pill.getAttribute("aria-label")}`
       );
@@ -8602,7 +8605,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (pill.getAttribute("data-state") === "done") {
         throw new Error("the Audience step is ticked with an objective but no angle picked");
       }
-      if (!(pill.getAttribute("aria-label") || "").includes("needs something from you")) {
+      if (!(pill.getAttribute("aria-label") || "").includes("Needs something from you")) {
         throw new Error(
           `the pill does not say it is blocked: ${pill.getAttribute("aria-label")}`
         );
@@ -8654,7 +8657,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (pill.getAttribute("data-state") === "done") {
             throw new Error("the Audience step is ticked for a template id that names no row");
           }
-          if (!(pill.getAttribute("aria-label") || "").includes("needs something from you")) {
+          if (!(pill.getAttribute("aria-label") || "").includes("Needs something from you")) {
             throw new Error(
               `the pill does not say it is blocked: ${pill.getAttribute("aria-label")}`
             );
@@ -8765,7 +8768,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (text.includes(PROFILE.brand_name)) {
       throw new Error(`the profile segment still names the app: ${JSON.stringify(text)}`);
     }
-    if (!(pill.getAttribute("aria-label") || "").startsWith("App Profile: done")) {
+    if (!(pill.getAttribute("aria-label") || "").startsWith("App Profile: Done")) {
       throw new Error(`the profile segment announces the app: ${pill.getAttribute("aria-label")}`);
     }
   });
@@ -14087,31 +14090,41 @@ async function runHookCtaChecks() {
         if (!ctx.container.querySelector('[data-testid="hook-editors"]')) {
           throw new Error("the editors block did not open around the written hook");
         }
-        // The unified button (ADR 0249): one control in the card.
-        // With a line written it IS the clearer-hook suggestion —
-        // there is no Regenerate button beside it, and the editor
-        // below does not grow a second suggestion button either.
+        // One hook button in the card (ADR 0313, superseding ADR
+        // 0249's stateful button on this page): with a line written
+        // it is Generate a new hook — the first-generate button is
+        // gone, no Suggest a clearer hook stands, and the editor
+        // does not grow a suggestion button either.
         if (ctx.container.querySelector('[data-testid="hook-generate"]')) {
           throw new Error("the generate button still stands beside the written hook");
         }
-        const suggest = ctx.container.querySelectorAll('[data-testid="hook-rewrite-button"]');
-        if (suggest.length !== 1 || !suggest[0].textContent.includes("Suggest a clearer hook")) {
-          throw new Error("the one button did not become Suggest a clearer hook once the line existed");
+        if (ctx.container.querySelector('[data-testid="hook-rewrite-button"]')) {
+          throw new Error("a Suggest a clearer hook button stands beside the written hook");
+        }
+        const fresh = ctx.container.querySelectorAll('[data-testid="hook-generate-new"]');
+        if (fresh.length !== 1 || !fresh[0].textContent.includes("Generate a new hook")) {
+          throw new Error("the one button did not become Generate a new hook once the line existed");
         }
         for (const el of ctx.container.querySelectorAll("button")) {
           if ((el.textContent || "").includes("Regenerate the hook")) {
             throw new Error("a Regenerate the hook button survives on the Hook + CTA page");
+          }
+          if ((el.textContent || "").includes("Suggest a clearer hook")) {
+            throw new Error("a Suggest a clearer hook button survives on the Hook + CTA page");
           }
         }
       }
     );
   });
 
-  await check("Suggest a clearer hook stands under the hook line inside the spoken line area (ADR 0254)", async (ctx) => {
-    // Kasra's ruling: the button refines the line, so it belongs
-    // inside the spoken line area, below the line it refines —
-    // never above it, where it stood when the button block rendered
-    // ahead of the editors block.
+  await check("Generate a new hook stands under the hook line inside the spoken line area (ADR 0313)", async (ctx) => {
+    // ADR 0254's placement, ADR 0313's control: the button that
+    // acts on the line belongs inside the spoken line area, below
+    // the line — never above it, where it stood when the button
+    // block rendered ahead of the editors block. Since Kasra's
+    // Nov 24 2026 ruling that button is Generate a new hook, the
+    // card's only hook button once a line exists; no Suggest a
+    // clearer hook stands anywhere on the page.
     await inHookCta(
       ctx,
       {
@@ -14126,12 +14139,15 @@ async function runHookCtaChecks() {
         if (!field || field.value !== HOOK) {
           throw new Error("the spoken line area does not hold the written hook line");
         }
-        const suggest = area.querySelector('[data-testid="hook-rewrite-button"]');
-        if (!suggest) {
-          throw new Error("Suggest a clearer hook does not stand inside the spoken line area");
+        const fresh = area.querySelector('[data-testid="hook-generate-new"]');
+        if (!fresh) {
+          throw new Error("Generate a new hook does not stand inside the spoken line area");
         }
-        if (!(field.compareDocumentPosition(suggest) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
-          throw new Error("Suggest a clearer hook stands above the hook line it refines");
+        if (!(field.compareDocumentPosition(fresh) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+          throw new Error("Generate a new hook stands above the hook line it replaces");
+        }
+        if (area.querySelector('[data-testid="hook-rewrite-button"]')) {
+          throw new Error("Suggest a clearer hook still stands inside the spoken line area");
         }
       }
     );
@@ -14168,8 +14184,14 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("a written hook's one button offers the clearer line and writes it only on accept (ADR 0249)", async (ctx) => {
-    const CLEARER = "I'm trying to notice my mood, and I keep missing it every day.";
+  await check("a written hook carries no clearer-hook suggestion on Hook + CTA (ADR 0313)", async (ctx) => {
+    // Kasra's ruling (Nov 24 2026): the suggestion control is off
+    // this page — once a line exists the hook card's only hook
+    // button is Generate a new hook, and nothing on the page
+    // offers the LineRewriteAction flow: no button, no offered
+    // suggestion, and the rewrite endpoint is never called from
+    // here. Create Video's Review keeps its own button (ADR 0205
+    // untouched).
     const rewrites = [];
     await inHookCta(
       ctx,
@@ -14178,7 +14200,7 @@ async function runHookCtaChecks() {
         getGenerations: async () => ({ generations: [] }),
         rewriteLine: async (id, payload) => {
           rewrites.push(payload);
-          return { line: CLEARER };
+          return { line: "unused" };
         },
       },
       "",
@@ -14186,30 +14208,23 @@ async function runHookCtaChecks() {
         if (ctx.container.querySelector('[data-testid="hook-generate"]')) {
           throw new Error("the generate button still stands beside the written hook");
         }
-        if (ctx.container.querySelectorAll('[data-testid="hook-rewrite-button"]').length !== 1) {
-          throw new Error("the written hook does not have exactly one clearer-hook button");
+        if (ctx.container.querySelector('[data-testid="hook-rewrite-button"]')) {
+          throw new Error("a Suggest a clearer hook button still stands on the Hook + CTA page");
         }
-        const button = ctx.container.querySelector('[data-testid="hook-rewrite-button"]');
-        if (!button) throw new Error("the unified button is not the clearer-hook suggestion beside a written hook");
-        await clickEl(ctx, button);
-        await act(async () => {});
-        if (rewrites.length !== 1 || rewrites[0].line !== HOOK || rewrites[0].role !== "hook") {
-          throw new Error(`the suggestion was not asked for the written line: ${JSON.stringify(rewrites)}`);
+        if (ctx.container.querySelector('[data-testid="hook-rewrite-suggestion"]')) {
+          throw new Error("a clearer-hook suggestion is offered on the Hook + CTA page");
         }
-        const offered = ctx.container.querySelector('[data-testid="hook-rewrite-suggestion"]');
-        if (!offered || !offered.textContent.includes("notice my mood")) {
-          throw new Error("the clearer line was not offered beside the founder's own words");
+        for (const el of ctx.container.querySelectorAll("button")) {
+          if ((el.textContent || "").includes("Suggest a clearer hook")) {
+            throw new Error("a Suggest a clearer hook button survives on the Hook + CTA page");
+          }
         }
-        // Nothing changes until the founder accepts.
-        const before = ctx.container.querySelector("#review-hook_line");
-        if (!before || before.value !== HOOK) {
-          throw new Error("the written line changed before the founder accepted the suggestion");
+        const fresh = ctx.container.querySelector('[data-testid="hook-generate-new"]');
+        if (!fresh || !fresh.textContent.includes("Generate a new hook")) {
+          throw new Error("Generate a new hook is not the written hook's one hook button");
         }
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-rewrite-accept"]'));
-        await act(async () => {});
-        const field = ctx.container.querySelector("#review-hook_line");
-        if (!field || field.value !== CLEARER) {
-          throw new Error(`accepting did not write the clearer line: ${field && field.value}`);
+        if (rewrites.length) {
+          throw new Error("the Hook + CTA hook card spent a rewrite call");
         }
       }
     );
@@ -14218,8 +14233,8 @@ async function runHookCtaChecks() {
   await check("no fresh-generate button stands before a hook line exists (ADR 0265)", async (ctx) => {
     // The new button's whole job is replacing a line on file with a
     // fresh one from the current picks; before a line exists the
-    // one stateful button already generates the first hook, so the
-    // card carries no second generate control.
+    // card's one button — Generate the hook — already writes the
+    // first hook, so the card carries no second generate control.
     await inHookCta(
       ctx,
       {
@@ -14243,8 +14258,8 @@ async function runHookCtaChecks() {
     // new focus — the only path refined the old line. The new
     // button runs the same fresh generation as the first Generate,
     // from the picks as they stand, and its result is the line on
-    // file directly — no suggestion, no accept step. The
-    // clearer-hook suggestion beside it is untouched.
+    // file directly — no suggestion, no accept step. Since ADR
+    // 0313 it is the hook card's only hook button.
     const FIRST_FOCUS = "Clearing the day's thoughts out loud";
     const NEW_FOCUS = "Fall asleep without replaying the day";
     const NEW_HOOK = "I'm trying to fall asleep without replaying the whole day again.";
@@ -14279,11 +14294,10 @@ async function runHookCtaChecks() {
       },
       "",
       async () => {
-        // Both controls stand: the untouched suggestion and the
-        // new fresh-generate button beside it.
-        const suggest = ctx.container.querySelector('[data-testid="hook-rewrite-button"]');
-        if (!suggest || !suggest.textContent.includes("Suggest a clearer hook")) {
-          throw new Error("Suggest a clearer hook does not stand beside the written hook");
+        // The fresh-generate button is the written hook's only
+        // hook button (ADR 0313): no suggestion control stands.
+        if (ctx.container.querySelector('[data-testid="hook-rewrite-button"]')) {
+          throw new Error("Suggest a clearer hook still stands beside the written hook");
         }
         const fresh = ctx.container.querySelector('[data-testid="hook-generate-new"]');
         if (!fresh) throw new Error("the fresh-generate button does not stand beside the written hook");
@@ -14327,10 +14341,14 @@ async function runHookCtaChecks() {
         if (ctx.container.querySelector('[data-testid="hook-picks-stale-note"]')) {
           throw new Error("the stale note still stands over a hook written from the current picks");
         }
-        // And the suggestion control still stands, unchanged.
-        const suggestAfter = ctx.container.querySelector('[data-testid="hook-rewrite-button"]');
-        if (!suggestAfter || !suggestAfter.textContent.includes("Suggest a clearer hook")) {
-          throw new Error("Suggest a clearer hook changed when the fresh hook landed");
+        // And Generate a new hook still stands, unchanged, with
+        // no suggestion control beside it.
+        const freshAfter = ctx.container.querySelector('[data-testid="hook-generate-new"]');
+        if (!freshAfter || !freshAfter.textContent.includes("Generate a new hook")) {
+          throw new Error("Generate a new hook changed when the fresh hook landed");
+        }
+        if (ctx.container.querySelector('[data-testid="hook-rewrite-button"]')) {
+          throw new Error("a Suggest a clearer hook button appeared when the fresh hook landed");
         }
       }
     );
@@ -14395,6 +14413,11 @@ async function runHookCtaChecks() {
         const button = ctx.container.querySelector('[data-testid="hook-render-generate"]');
         if (!button) throw new Error("the render button did not render");
         if (button.disabled) throw new Error("the render button is disabled with its gates passed");
+        // ADR 0313: the render button names the video, not the
+        // hook — before a render exists it reads Generate the video.
+        if (!button.textContent.includes("Generate the video")) {
+          throw new Error(`the render button reads "${button.textContent}", expected Generate the video before a render exists`);
+        }
         await clickEl(ctx, button);
         await act(async () => {});
         if (submits.length !== 1) {
@@ -14533,6 +14556,11 @@ async function runHookCtaChecks() {
         const button = ctx.container.querySelector('[data-testid="hook-render-generate"]');
         if (!button || button.disabled) {
           throw new Error("the render button is not enabled on the draft opened through its link");
+        }
+        // ADR 0313: with a render already on file the button reads
+        // Generate another video.
+        if (!button.textContent.includes("Generate another video")) {
+          throw new Error(`the render button reads "${button.textContent}", expected Generate another video with a render on file`);
         }
       }
     );
@@ -15284,7 +15312,7 @@ async function runHookCtaChecks() {
         await act(async () => {});
         const note = ctx.container.querySelector('[data-testid="hook-picks-stale-note"]');
         if (!note) throw new Error("the stale note did not show after the pick changed");
-        if (!note.textContent.includes("suggest a clearer hook")) {
+        if (!note.textContent.includes("generate a new hook")) {
           throw new Error("the note does not name the remedy");
         }
         const generationCalls = apiCalls.slice(callsBefore).filter((name) =>

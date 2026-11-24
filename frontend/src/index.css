@@ -542,17 +542,41 @@ body {
 }
 
 /* The wizard rail's active step and done badge (ADR 0283): the active
- * segment carries a crisp indigo underline inside its own frame — an
- * inset shadow, so the accent never shifts the layout — on the
- * rail's hairline track (the segments wear no border or wash since
- * ADR 0298; the underline and the indigo label are the whole mark).
- * A done step's filled
+ * segment carries a crisp indigo underline at half its length, from
+ * the left (ADR 0315), drawn as a background line so the accent
+ * never shifts the layout (the segments wear no border or wash
+ * since ADR 0298; the underline and the indigo label are the whole
+ * mark). A done step's filled
  * badge settles with one soft indigo pulse as it lands: an entrance
  * on the app's signature ease, declared only inside the no-preference
  * gate; under reduced motion there is no pulse and the badge is
  * simply filled, exactly as before. */
 .rail-segment-active {
-    box-shadow: inset 0 -2px 0 0 var(--brand-indigo);
+    /* The active segment's underline at half length, from the left
+     * (ADR 0315): a background line, not a full-width inset rule. */
+    background-image: linear-gradient(var(--brand-indigo), var(--brand-indigo));
+    background-size: 50% 2px;
+    background-position: left bottom;
+    background-repeat: no-repeat;
+}
+/* The rail's only line is its progress (ADR 0315): the white
+ * hairline track is removed, and a slim gradient fill stretches
+ * from the left to the live score along the nav's bottom edge.
+ * A line, never a shape — nothing on the rail competes with the
+ * page's buttons. Its width eases on the app's signature curve,
+ * declared only inside the no-preference gate. */
+.rail-progress-fill {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 2px;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, var(--brand-indigo), #a5b4fc);
+    box-shadow: 0 0 8px rgba(129, 140, 248, 0.35);
+    pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .rail-progress-fill { transition: width 500ms cubic-bezier(0.16, 1, 0.3, 1); }
 }
 @keyframes rail-done-pulse {
     from { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.45); }

@@ -1,5 +1,7 @@
 # 0247 — The founder steers the hook: focus, tone and shape picks on Hook + CTA
 
+- **Status:** accepted
+
 Kasra's order (2026-11-20, the same evening the page landed): the
 founder gets direction and customization over the generated hook
 line, so the line is tailored to their app in the way THEY want.

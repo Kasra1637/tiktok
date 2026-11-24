@@ -1,6 +1,6 @@
 # 0092 — Render & result scene fields agree before render
 
-- **Status:** accepted (props scope refined by 0103: Props names what the person carries, wears or uses, never scenery; Movement cap raised to 600 and overflow made advisory by 0104)
+- **Status:** partially superseded by 0103 (props scope: carried objects, not scenery) (props scope refined by 0103: Props names what the person carries, wears or uses, never scenery; Movement cap raised to 600 and overflow made advisory by 0104)
 - **Date:** 2026-11-04
 - **Anchors:** `backend/scene_consistency.py` (`split_location`,
   `reconcile_scene`, `clean_placeholders`), `backend/server.py`

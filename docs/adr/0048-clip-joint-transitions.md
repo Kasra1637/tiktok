@@ -1,6 +1,6 @@
 # 0048 — Five joint transitions between the two clips
 
-- **Status:** accepted
+- **Status:** partially superseded by 0049 (swipe replaced by flash + fade)
 - **Date:** 2026-10-26
 - **Anchors:** `frontend/src/demoCta/transitions.js` (catalog, `transitionAt`), `frontend/src/demoCta/usePreviewLoop.js` (`paintJointTransition`), `frontend/src/demoCta/DemoCtaEditor.jsx` (`TransitionPicker`); jest `frontend/src/demoCta/transitions.test.js`
 

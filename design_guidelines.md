@@ -551,11 +551,11 @@ disagree (ADRs 0140/0145).
 
 ### Voice (read aloud)
 
-Read-aloud controls are the `.pill-studio` icon button (`ListenButton`) placed
-on every text-heavy card, on each group bar and on the page-level master
-control — plus the single
-`ListenDock` that `AppShell` mounts for the whole session (pause, stop,
-0.75/1/1.25/1.5× rate, persisted). Speech is built from the data model, never
+Read-aloud controls are the `.pill-studio` icon button (`ListenButton`),
+placed on the App Profile surfaces (profile cards and section group bars in
+`profileUi.jsx`) and on Brand Setup's field rows; one session-level
+`ListenDock`, mounted by `AppShell`, owns transport (pause, stop,
+0.75/1/1.25/1.5× rate, persisted). No other card carries a listen control. Speech is built from the data model, never
 scraped from the DOM, the controls hide entirely where the browser cannot
 speak, and nothing autoplays — the dock exists only while a voice is playing
 or an error needs naming. See ADR 0088.

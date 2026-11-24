@@ -2463,6 +2463,13 @@ async def generate_project_strategy(
         from ai_service import TruncatedResponse, ModelRefusal
 
         logger.error(f"Strategy generation failed for project {project_id}: {e!r}")
+        if isinstance(e, ValueError) and str(e).startswith(
+            "Fixed camera conflicts with"
+        ):
+            # ADR 0317: a Fixed conflict that survived its one repair
+            # surfaces with the guard's own wording, whole — the
+            # generic wrapper below would cut it mid-clause.
+            raise HTTPException(status_code=502, detail=str(e))
         if isinstance(e, TruncatedResponse):
             raise HTTPException(
                 status_code=502,

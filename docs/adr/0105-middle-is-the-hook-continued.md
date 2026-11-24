@@ -1,6 +1,6 @@
 # 0105 — The middle is the hook, continued
 
-- **Status:** accepted
+- **Status:** partially superseded by 0106 (statement default; middle is two beats)
 - **Date:** 2026-11-06
 - **Anchors:** `backend/ai_service.py` (strategy prompt "THE MIDDLE IS THE
   HOOK, CONTINUED", "WRITE THE MIDDLE AS SPOKEN WORDS, NOT APP COPY",
