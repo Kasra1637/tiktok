@@ -504,6 +504,12 @@ export function AngleSelector({
           the picked row opens, because two open panels side by side are
           two half-read angles, and the fields are what the render
           downstream is held to. */}
+      {/* Two-up from lg (ADR 0328): a full-width row left a dead stretch
+          between the title and the fit pill stranded at its far right.
+          The cards stand in the same two-up grid rule as the step's
+          template cards, each keeping its own height, so an open card
+          never stretches its row-mate. Below lg the stack stands. */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2" data-testid="angle-card-grid">
       {angles.map((a, i) => {
         const picked = angleId === a.id;
         const details = picked ? angleDetails(a, hookLine) : [];
@@ -540,7 +546,7 @@ export function AngleSelector({
               aria-controls={picked ? `angle-details-${a.id}` : undefined}
               onClick={() => onSelect(a.id)}
               data-testid={`angle-option-${a.id}`}
-              className={`flex w-full min-w-0 items-center gap-3 row-pad text-left transition-colors hover:bg-[color:var(--indigo-6)] ${
+              className={`flex w-full min-w-0 items-center gap-3 row-pad angle-option-row text-left transition-colors hover:bg-[color:var(--indigo-6)] ${
                 picked ? "bg-[color:var(--indigo-6)]" : ""
               }`}
             >
@@ -554,13 +560,15 @@ export function AngleSelector({
                   picked ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"
                 }`}
               />
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+              <span className="min-w-0 truncate text-sm font-semibold">
                 {sentenceCase(a.label).replace(/\.\s*$/, "")}
               </span>
               {/* The fittest score rides on the closed row, so the list can be
                   compared without opening any angle — and picking re-shows
                   the same pill on the now-open row rather than a second
-                  titled badge, which read one number as two findings. */}
+                  titled badge, which read one number as two findings. It
+                  sits beside the title it scores (ADR 0328), not at the
+                  row's far right: only the chevron stands at that edge. */}
               <span className="shrink-0">
                 <FitBadge
                   score={angleFit.score}
@@ -569,7 +577,7 @@ export function AngleSelector({
                 />
               </span>
               <ChevronDown
-                className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                className={`ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
                   picked ? "rotate-180" : ""
                 }`}
               />
@@ -600,6 +608,7 @@ export function AngleSelector({
           </div>
         );
       })}
+      </div>
     </div>
   );
 

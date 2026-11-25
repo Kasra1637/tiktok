@@ -1286,6 +1286,56 @@ async function main() {
     }
   });
 
+  await check("the angle cards pull their right edge in: two-up grid, fit pill beside the title", async (ctx) => {
+    // ADR 0328 (Kasra's report, Nov 24 2026): on a wide step the angle
+    // rows stretched the panel's full width while their content stood
+    // at the left — title, then a dead stretch, then the fit pill and
+    // chevron stranded at the far right. The cards now stand two-up
+    // from lg (the same grid rule as the step's goal cards and the
+    // template cards), each card keeps its own height, and inside a
+    // row the fit pill annotates the title directly instead of riding
+    // the row's far edge; only the chevron — the expand affordance —
+    // stands at the right.
+    global.__SMOKE_PARAMS = "";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Audience & template");
+      const list = ctx.container.querySelector('[data-testid="audience-angle-list"]');
+      if (!list) throw new Error("the angle list is not rendered on open");
+      const grid = list.querySelector('[data-testid="angle-card-grid"]');
+      if (!grid) throw new Error("the angle cards do not stand in a grid");
+      const gridClass = grid.getAttribute("class") || "";
+      if (!gridClass.includes("lg:grid-cols-2") || !gridClass.includes("items-start")) {
+        throw new Error(`the angle grid is not the two-up, own-height grid: ${gridClass}`);
+      }
+      const row = ctx.container.querySelector('[data-testid="angle-option-a1"]');
+      if (!row) throw new Error("no angle row to inspect");
+      if (!(row.getAttribute("class") || "").includes("angle-option-row")) {
+        throw new Error("the angle row does not carry its pulled-in right edge");
+      }
+      const title = row.querySelector("span.truncate");
+      if (!title) throw new Error("the angle row has no title span");
+      if ((title.getAttribute("class") || "").includes("flex-1")) {
+        throw new Error("the title still stretches the row, stranding the fit pill at the far right");
+      }
+      const fit = row.querySelector('[data-testid="angle-row-fit-a1"]');
+      if (!fit) throw new Error("the angle row has no fit pill");
+      const chevron = [...row.querySelectorAll("svg")].pop();
+      if (!chevron) throw new Error("the angle row has no chevron");
+      if (!(title.compareDocumentPosition(fit) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+        throw new Error("the fit pill does not follow the title");
+      }
+      if (!(fit.compareDocumentPosition(chevron) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+        throw new Error("the chevron does not close the row after the fit pill");
+      }
+      if (!(chevron.getAttribute("class") || "").includes("ml-auto")) {
+        throw new Error("the chevron is not the row's right-edge affordance");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   await check("a fixed camera's angle section says the angles are staged indoors", async (ctx) => {
     // ADR 0233: the angles were written before the camera setup was
     // picked, so under a fixed camera the angle section carries a small

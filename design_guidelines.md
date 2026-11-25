@@ -278,7 +278,12 @@ says it borrows the angle row's chrome), different container. The angle row's
 own title is the exception: it is the list's reading text, so it is a
 sentence-case 14px semibold name, not the uppercase tracked group label.
 `RecommendationCard`'s 2-up grid is the same rule as the angle list: picked
-things are objects, so they are framed.
+things are objects, so they are framed. Since ADR 0328 the angle list itself
+stands in that 2-up grid from `lg` (each card at its own height), its Fit
+pill sits beside the title it scores rather than at the row's far right —
+only the chevron stands at that edge — and the angle rows' right padding
+pulls in to 12px via the scoped `.angle-option-row`; `.row-pad` itself is
+unchanged for the bars that share it.
 
 A group's glyph is not decoration: on the App Profile detail page every
 `ProfileCard` and `SectionGroup` carries one, and `runIconChecks` fails the page
