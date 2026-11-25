@@ -9,7 +9,6 @@ import { recordSignal } from "../lib/feedback";
 import { directionDrifted } from "../lib/strategyStaleness";
 import { PostKitSection } from "./PostKitSection";
 import { CONTROL_CLASS } from "./formControls";
-import { AppSelect } from "./AppSelect";
 import {
   exceedsSinglePass, readPieceSeconds, singlePassCeiling,
 } from "../lib/videoLength";
@@ -911,61 +910,49 @@ const handleGenerate = async () => {
           button — the gate still refuses the render, it just speaks once. */}
 
       {models && (
+        // ADR 0329: no model dropdown — HeyGen Video is the only
+        // model (ADR 0327), so there is nothing to pick; the panel
+        // still resolves the model it renders on. The resolution
+        // stands side by side in the History verdict buttons' design
+        // when the model offers a choice beside its default.
         <div className="space-y-2">
-          <label htmlFor="gen-model" className="text-sm font-semibold">Model</label>
-          <AppSelect
-            id="gen-model"
-            block
-            value={selectedModel}
-            onChange={(next) => {
-              setSelectedModel(next);
-              // A resolution picked for another model must not ride along: the
-              // server refuses values the new model does not offer, so the
-              // dropdown falls back to that model's default.
-              setSelectedResolution("");
-              try {
-                if (projectId) {
-                  window.localStorage.setItem(modelStorageKey(projectId), next);
-                  window.localStorage.removeItem(resolutionStorageKey(projectId));
-                }
-              } catch {
-                /* a choice that does not persist is still a choice for this render */
-              }
-            }}
-            disabled={inFlight}
-            className={CONTROL_CLASS}
-            options={models.models.map((m) => ({
-              value: m.key,
-              label: `${m.name} — one render, up to ${m.max_duration}s${m.key === models.default ? " (default)" : ""}`,
-            }))}
-          />
-          {(capability?.supported_resolutions || []).length > 0 && (
-            <div className="space-y-2 pt-1">
-              <label htmlFor="gen-resolution" className="text-sm font-semibold">Resolution</label>
-              <AppSelect
-                id="gen-resolution"
-                block
-                value={selectedResolution}
-                onChange={(next) => {
-                  setSelectedResolution(next);
-                  try {
-                    if (projectId) {
-                      if (next) window.localStorage.setItem(resolutionStorageKey(projectId), next);
-                      else window.localStorage.removeItem(resolutionStorageKey(projectId));
-                    }
-                  } catch {
-                    /* a choice that does not persist is still a choice for this render */
-                  }
-                }}
-                disabled={inFlight}
-                className={CONTROL_CLASS}
-                options={[
-                  { value: "", label: `${capability?.resolution || ""} (default)` },
-                  ...(capability.supported_resolutions || [])
-                    .filter((r) => r !== capability?.resolution)
-                    .map((r) => ({ value: r, label: r })),
-                ]}
-              />
+          {(capability?.supported_resolutions || []).some((r) => r !== capability?.resolution) && (
+            <div className="space-y-2">
+              <span className="text-sm font-semibold">Resolution</span>
+              <div className="thumb-pair flex flex-wrap items-center gap-2" role="group" aria-label="Resolution" data-testid="gen-resolution">
+                {[capability.resolution, ...(capability.supported_resolutions || []).filter((r) => r !== capability.resolution)].map((r) => {
+                  const isDefault = r === capability.resolution;
+                  const picked = isDefault
+                    ? !selectedResolution || selectedResolution === r
+                    : selectedResolution === r;
+                  return (
+                    <Button
+                      key={r}
+                      type="button"
+                      variant={picked ? "brand" : "secondary"}
+                      size="sm"
+                      className={`tap-chip${picked ? " thumb-selected" : ""}`}
+                      aria-pressed={picked}
+                      data-testid={`gen-resolution-${r}`}
+                      disabled={inFlight}
+                      onClick={() => {
+                        const next = isDefault ? "" : r;
+                        setSelectedResolution(next);
+                        try {
+                          if (projectId) {
+                            if (next) window.localStorage.setItem(resolutionStorageKey(projectId), next);
+                            else window.localStorage.removeItem(resolutionStorageKey(projectId));
+                          }
+                        } catch {
+                          /* a choice that does not persist is still a choice for this render */
+                        }
+                      }}
+                    >
+                      {r}
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -1034,7 +1021,7 @@ const handleGenerate = async () => {
       )}
       {tooLong && (
         <p role="status" className="text-base text-muted-foreground">
-          Choose a model above that supports {pieceSeconds}s, or pick a shorter template on Audience &amp; template and regenerate the plan.
+          Pick a shorter template on Audience &amp; template and regenerate the plan.
         </p>
       )}
       {noAngle && (

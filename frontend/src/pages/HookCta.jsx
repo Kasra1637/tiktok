@@ -16,16 +16,14 @@ import PageHeader from "../components/PageHeader";
 import SectionCard, { GroupLabel } from "../components/SectionCard";
 import EmptyState from "../components/EmptyState";
 import { AppPicker } from "../components/AppPicker";
-import { AppSelect } from "../components/AppSelect";
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/ui/skeleton";
-import { CONTROL_CLASS } from "../components/formControls";
 import { DirectionSelect } from "../components/studio/ReviewPanels";
 import { PresenterPhotoControl } from "../components/studio/SelectionPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
 import HookRenderPanel from "../components/studio/HookRenderPanel";
 import VoiceModeControl from "../components/studio/VoiceModeControl";
-import HookPicksControl, { profileOutcomeLines, profileOutcomeMenuStale } from "../components/studio/HookPicksControl";
+import HookPicksControl, { PickPills, profileOutcomeLines, profileOutcomeMenuStale } from "../components/studio/HookPicksControl";
 import PostKitSection from "../components/PostKitSection";
 import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { useWizardDirections } from "./useWizardDirections";
@@ -528,6 +526,14 @@ export default function HookCta() {
     loadState === "ready" && approved.length > 0 && !project && draftsSettled && drafts.length === 0
   );
   const hasHook = Boolean(String(editValue("hook_line")).trim());
+  // ADR 0329: the spoken line area shows no field before a hook
+  // exists — only the generated line shows there. Once a line
+  // exists the editor stands for the rest of the visit, so
+  // clearing the line while editing never unmounts it mid-edit.
+  const [lineRevealed, setLineRevealed] = useState(false);
+  useEffect(() => {
+    if (hasHook) setLineRevealed(true);
+  }, [hasHook]);
   const hookFinished = generation?.status === "completed";
   // The steering picks (ADR 0247) ride the same draft edits as every
   // other pick on the page; changing one over a written hook marks
@@ -699,16 +705,17 @@ export default function HookCta() {
                   One line, written from your app and the direction you set.
                 </p>
                 <div className="space-y-2">
-                  <label htmlFor="hook-cta-frame-length" className="text-sm font-semibold">Hook length</label>
-                  <AppSelect
-                    id="hook-cta-frame-length"
+                  <span className="text-sm font-semibold">Hook length</span>
+                  {/* ADR 0329: two options stand side by side as the
+                      page's own pick pills — a dropdown is for four
+                      options or more. */}
+                  <PickPills
                     testId="hook-cta-frame-length"
-                    block
-                    value={String(editValue("duration_seconds", 5))}
+                    ariaLabel="Hook length"
+                    current={String(editValue("duration_seconds", 5))}
                     onChange={(value) =>
                       editField("duration_seconds", Number(value), { omitDefault: true })
                     }
-                    className={CONTROL_CLASS}
                     options={HOOK_FRAME_SECONDS.map((seconds) => ({
                       value: String(seconds),
                       label: `${seconds} seconds`,
@@ -752,20 +759,26 @@ export default function HookCta() {
                   gracefully empty (a labelled field, no checks or
                   warnings of its own), so the order — line first,
                   button under it — holds from the first visit and
-                  the control never changes home. */}
+                  the control never changes home. ADR 0329
+                  supersedes the empty-editor half of that standing
+                  on this page: the editor now renders only once a
+                  hook line exists, so no blank field stands in the
+                  area before the first generate. */}
               <div className="space-y-4" data-testid="hook-editors">
                 <GroupLabel icon={AudioLines}>The spoken line</GroupLabel>
                 <p className="text-sm text-muted-foreground" data-subtitle="">
                   The hook line, checked as you edit — sharpen it if you like.
                 </p>
 
-                <HookLineEditor
-                  projectId={project.id}
-                  value={editValue("hook_line")}
-                  onChange={(next) => editField("hook_line", next)}
-                  clipLabel="short hook clip"
-                  suggestClearerHook={false}
-                />
+                {lineRevealed && (
+                  <HookLineEditor
+                    projectId={project.id}
+                    value={editValue("hook_line")}
+                    onChange={(next) => editField("hook_line", next)}
+                    clipLabel="short hook clip"
+                    suggestClearerHook={false}
+                  />
+                )}
 
                 {/* The card's ONE hook button (ADR 0313,
                     superseding the Hook + CTA half of ADR 0249's

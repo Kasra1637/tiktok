@@ -3260,26 +3260,31 @@ async function main() {
     supports_last_frame: false,
   };
 
-  await check("the resolution toggle appears only for models that offer a choice", async (ctx) => {
+  await check("the resolution buttons appear only for models that offer a choice", async (ctx) => {
     dom.window.localStorage.removeItem("studio-video-model:p1");
     dom.window.localStorage.removeItem("studio-video-resolution:p1");
     await withApi({
       getGenerations: async () => ({ generations: [] }),
       getStudioVideoModels: async () => ({ default: "heygen-video-1", models: [HEYGEN_CAPABILITY] }),
     }, () => mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx));
-    const res = ctx.container.querySelector("#gen-resolution");
-    if (!res) throw new Error("no resolution toggle for a model that offers 480p and 768p");
-    if (res.dataset.value !== "") {
-      throw new Error(`the toggle does not default to 768p (value ${JSON.stringify(res.dataset.value)})`);
+    // ADR 0329: the choice stands side by side as verdict-style
+    // buttons, the model's default (768p) standing picked.
+    const row = ctx.container.querySelector('[data-testid="gen-resolution"]');
+    if (!row) throw new Error("no resolution buttons for a model that offers 480p and 768p");
+    const picked = row.querySelector('[data-testid="gen-resolution-768p"]');
+    if (!picked) throw new Error("the default 768p carries no button");
+    if (picked.getAttribute("aria-pressed") !== "true") {
+      throw new Error("the resolution row does not default to 768p");
     }
-    const options = await offeredOptionValues(ctx, res);
-    if (!options.includes("480p")) {
-      throw new Error(`480p is not offered: ${JSON.stringify(options)}`);
+    if (!row.querySelector('[data-testid="gen-resolution-480p"]')) {
+      throw new Error("480p is not offered as a button");
     }
-    await clickEl(ctx, res, "close the resolution menu");
+    if (ctx.container.querySelector("#gen-model")) {
+      throw new Error("a model dropdown still renders (ADR 0329)");
+    }
   });
 
-  await check("no resolution toggle renders for a model with no choice", async (ctx) => {
+  await check("no resolution buttons render for a model with no choice", async (ctx) => {
     // A model whose record offers no per-render resolution gets no toggle.
     dom.window.localStorage.removeItem("studio-video-model:p1");
     dom.window.localStorage.removeItem("studio-video-resolution:p1");
@@ -3287,8 +3292,8 @@ async function main() {
       getGenerations: async () => ({ generations: [] }),
       getStudioVideoModels: async () => ({ default: "acme-video-1", models: [NO_CHOICE_CAPABILITY] }),
     }, () => mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx));
-    if (ctx.container.querySelector("#gen-resolution")) {
-      throw new Error("a resolution toggle renders for a model which offers no choice");
+    if (ctx.container.querySelector('[data-testid="gen-resolution"]')) {
+      throw new Error("resolution buttons render for a model which offers no choice");
     }
   });
 
@@ -3305,9 +3310,9 @@ async function main() {
       },
     }, async () => {
       await mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx);
-      const res = ctx.container.querySelector("#gen-resolution");
-      if (!res) throw new Error("no resolution toggle to choose from");
-      await chooseOption(ctx, res, "480p");
+      const resButton = ctx.container.querySelector('[data-testid="gen-resolution-480p"]');
+      if (!resButton) throw new Error("no 480p resolution button to choose");
+      await clickEl(ctx, resButton, "the 480p resolution button");
       const btn = renderButton(ctx);
       if (btn.disabled) throw new Error("Generate is not live on a ready heygen project");
       await act(async () => {
@@ -3353,37 +3358,9 @@ async function main() {
     });
   });
 
-  await check("switching models resets the resolution choice", async (ctx) => {
-    dom.window.localStorage.removeItem("studio-video-model:p1");
-    dom.window.localStorage.removeItem("studio-video-resolution:p1");
-    await withApi({
-      getGenerations: async () => ({ generations: [] }),
-      getStudioVideoModels: async () => ({
-        default: "heygen-video-1",
-        models: [HEYGEN_CAPABILITY, NO_CHOICE_CAPABILITY],
-      }),
-    }, async () => {
-      await mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx);
-      const res = ctx.container.querySelector("#gen-resolution");
-      if (!res) throw new Error("no resolution toggle to choose from");
-      await chooseOption(ctx, res, "480p");
-      if (res.dataset.value !== "480p") throw new Error("the 480p pick did not stick");
-      const model = ctx.container.querySelector("#gen-model");
-      if (!model) throw new Error("no model picker to switch with");
-      // A 480p pick for heygen must not ride along onto a model that does
-      // not offer it: the server refuses values the new model does not offer.
-      await chooseOption(ctx, model, "acme-video-1");
-      if (ctx.container.querySelector("#gen-resolution")) {
-        throw new Error("the resolution toggle survives a switch to a model with no choice");
-      }
-      await chooseOption(ctx, model, "heygen-video-1");
-      const resAgain = ctx.container.querySelector("#gen-resolution");
-      if (!resAgain) throw new Error("the toggle did not return with heygen");
-      if (resAgain.dataset.value !== "") {
-        throw new Error(`switching back kept the stale 480p pick: ${JSON.stringify(resAgain.dataset.value)}`);
-      }
-    });
-  });
+  // The model-switch reset check that stood here is retired with
+  // the dropdown it exercised (ADR 0329): there is no model switch
+  // left to reset a resolution pick.
 
   await check("no native select remains: the render panel and Review dropdowns are the app's own listbox", async (ctx) => {
     // ADR 0163: ADR 0162 drew the filter dropdowns' menus itself because a
@@ -3402,10 +3379,12 @@ async function main() {
     if (ctx.container.querySelector("select")) {
       throw new Error("the render panel still renders a native select");
     }
+    // ADR 0329: the render panel's model dropdown is gone and its
+    // resolution stands as buttons, so neither control renders in
+    // any form, listbox or otherwise.
     for (const id of ["gen-model", "gen-resolution"]) {
-      const control = ctx.container.querySelector(`#${id}`);
-      if (!control || control.getAttribute("aria-haspopup") !== "listbox") {
-        throw new Error(`#${id} is not the app-drawn dropdown`);
+      if (ctx.container.querySelector(`#${id}`)) {
+        throw new Error(`#${id} still renders as a control (ADR 0329)`);
       }
     }
     global.__SMOKE_PARAMS = "?project=p1";
@@ -5258,6 +5237,31 @@ async function main() {
     const panels = fs.readFileSync(path.join(SRC, "components/studio/SelectionPanels.jsx"), "utf8");
     if (panels.includes("hover:bg-[color:var(--indigo-6)]") || panels.includes("hover:border-[color:var(--indigo-35)]")) {
       throw new Error("the audience step's cards still answer the mouse (ADR 0328)");
+    }
+  });
+
+  // ADR 0329 (Kasra's orders, Nov 24 2026): few-option controls
+  // stand side by side — the hook length and the resolution are
+  // button rows, not dropdowns — and the model dropdown is gone
+  // from both render panels, because HeyGen Video is the only
+  // model left to pick.
+  await check("few-option controls stand side by side and no model dropdown remains", async (ctx) => {
+    const gen = fs.readFileSync(path.join(SRC, "components/GenerationPanel.jsx"), "utf8");
+    const hookPanel = fs.readFileSync(path.join(SRC, "components/studio/HookRenderPanel.jsx"), "utf8");
+    for (const [name, src] of [["GenerationPanel", gen], ["HookRenderPanel", hookPanel]]) {
+      if (src.includes(' id="gen-model"') || src.includes(' id="hook-gen-model"')) {
+        throw new Error(`${name} still renders a model dropdown (ADR 0329)`);
+      }
+      if (src.includes(' id="gen-resolution"') || src.includes(' id="hook-gen-resolution"')) {
+        throw new Error(`${name} still renders the resolution as a dropdown (ADR 0329)`);
+      }
+      if (!src.includes("thumb-pair")) {
+        throw new Error(`${name} carries no verdict-style resolution row (ADR 0329)`);
+      }
+    }
+    const cta = fs.readFileSync(path.join(SRC, "pages/HookCta.jsx"), "utf8");
+    if (cta.includes(' id="hook-cta-frame-length"')) {
+      throw new Error("the hook length is still a dropdown (ADR 0329)");
     }
   });
 
@@ -14169,6 +14173,11 @@ async function runHookCtaChecks() {
       },
       "",
       async () => {
+        // ADR 0329: no blank hook field stands before a hook exists —
+        // only the generated line will show in the area.
+        if (ctx.container.querySelector("#review-hook_line")) {
+          throw new Error("the blank hook field stands before a hook exists (ADR 0329)");
+        }
         const button = ctx.container.querySelector('[data-testid="hook-generate"]');
         if (!button) throw new Error("the Generate hook button did not render");
         if (!button.textContent.includes("Generate the hook")) {
@@ -14247,11 +14256,13 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("the spoken line area stands before a line exists, its field above the Generate button (ADR 0254)", async (ctx) => {
-    // The same area in the empty state: the hook line field stands
-    // (empty) above the one button in its Generate state, so the
-    // control keeps one home and the order — line first, button
-    // under it — holds from the first visit.
+  await check("the spoken line area stands before a line exists, with no field above the Generate button (ADR 0329)", async (ctx) => {
+    // The same area in the empty state. ADR 0254 stood the empty
+    // field above the button from the first visit; ADR 0329
+    // supersedes that half on this page (Kasra: the blank field
+    // looks obnoxious and long) — the area, its guidance and the
+    // one button in its Generate state stand, and no field stands
+    // until a hook line exists.
     await inHookCta(
       ctx,
       {
@@ -14267,12 +14278,8 @@ async function runHookCtaChecks() {
         if (!generate) {
           throw new Error("the Generate button does not stand inside the spoken line area");
         }
-        const field = area.querySelector("#review-hook_line");
-        if (!field) {
-          throw new Error("the hook line field does not stand above the Generate button");
-        }
-        if (!(field.compareDocumentPosition(generate) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
-          throw new Error("the Generate button stands above the hook line field");
+        if (area.querySelector("#review-hook_line")) {
+          throw new Error("a blank hook field stands in the area before a line exists (ADR 0329)");
         }
       }
     );
@@ -14602,10 +14609,11 @@ async function runHookCtaChecks() {
         if (creates.length !== 1) {
           throw new Error(`the fresh visit minted ${creates.length} canvases beside the worked draft, expected one`);
         }
-        const field = ctx.container.querySelector("#review-hook_line");
-        if (!field) throw new Error("the hook editor did not render on the fresh canvas");
-        if (field.value !== "") {
-          throw new Error(`the last draft's hook is standing in the editor on a fresh visit: ${field.value}`);
+        // ADR 0329: a blank canvas shows no hook field at all, so
+        // the field's absence is the blank signal now — a standing
+        // field would mean the last draft's line is on the page.
+        if (ctx.container.querySelector("#review-hook_line")) {
+          throw new Error("the last draft's hook field stands on a fresh visit (ADR 0329)");
         }
         if (ctx.container.querySelector('[data-testid="platform-preview-video"]')) {
           throw new Error("the last draft's finished render is standing in the frame on a fresh visit");
@@ -14687,8 +14695,7 @@ async function runHookCtaChecks() {
       if (creates.length !== 0) {
         throw new Error(`the visit minted ${creates.length} drafts beside the untouched one`);
       }
-      const field = ctx.container.querySelector("#review-hook_line");
-      if (!field || field.value !== "") {
+      if (ctx.container.querySelector("#review-hook_line")) {
         throw new Error("the visit did not open on the blank canvas");
       }
       if (ctx.container.querySelector('[data-testid="hook-cta-drafts-card"]')) {
@@ -14730,8 +14737,7 @@ async function runHookCtaChecks() {
       if (creates.length !== 1) {
         throw new Error(`the first fresh visit minted ${creates.length} canvases, expected one`);
       }
-      const field = ctx.container.querySelector("#review-hook_line");
-      if (!field || field.value !== "") {
+      if (ctx.container.querySelector("#review-hook_line")) {
         throw new Error("the first fresh visit did not open on the blank canvas");
       }
     });
@@ -14740,8 +14746,7 @@ async function runHookCtaChecks() {
       if (creates.length !== 1) {
         throw new Error(`the second fresh visit brought the mint count to ${creates.length}, expected it to stay at one`);
       }
-      const field = ctx.container.querySelector("#review-hook_line");
-      if (!field || field.value !== "") {
+      if (ctx.container.querySelector("#review-hook_line")) {
         throw new Error("the second fresh visit did not open on the blank canvas");
       }
       if (ctx.container.querySelector('[data-testid="hook-cta-drafts-card"]')) {
@@ -14778,9 +14783,9 @@ async function runHookCtaChecks() {
       },
       "",
       async () => {
-        const control = ctx.container.querySelector('[data-testid="hook-cta-frame-length"]');
-        if (!control) throw new Error("the hook length control did not render");
-        await chooseOption(ctx, control, "4");
+        const pill = ctx.container.querySelector('[data-testid="hook-cta-frame-length-4"]');
+        if (!pill) throw new Error("the hook length pills did not render");
+        await clickEl(ctx, pill, "the 4 seconds pill");
         // The autosave debounce is a second; give the save its time.
         await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
         if (!patches.some((p) => p.duration_seconds === 4)) {
@@ -14897,14 +14902,12 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("an unwritten hook wears no highlight", async (ctx) => {
+  await check("an unwritten hook shows no field and wears no highlight", async (ctx) => {
     // ADR 0264: the generated-text highlight is the output's dress,
-    // not the field's furniture. Kasra's screenshot showed the Hook
-    // + CTA hook field standing as an empty full-width indigo bar
-    // before anything was generated — the wash painted a field with
-    // no words in it. The rule, on every generated-text surface: no
-    // text, no wash. The empty field is a plain field, and
-    // placeholder prose is not generated text.
+    // not the field's furniture — no text, no wash. ADR 0329 takes
+    // the next step on this page: before a hook exists there is no
+    // field at all, so the fresh page carries neither the field nor
+    // any wash.
     await inHookCta(
       ctx,
       {
@@ -14915,10 +14918,11 @@ async function runHookCtaChecks() {
       },
       "",
       async () => {
-        const hookField = ctx.container.querySelector("#review-hook_line");
-        if (!hookField) throw new Error("the fresh page's hook field did not render");
-        if (hookField.closest(".generated-highlight-field")) {
-          throw new Error("the empty hook field already wears the generated-text highlight (ADR 0264: no text, no wash)");
+        if (ctx.container.querySelector("#review-hook_line")) {
+          throw new Error("the fresh page renders a hook field before a hook exists (ADR 0329)");
+        }
+        if (ctx.container.querySelector(".generated-highlight-field")) {
+          throw new Error("the fresh page carries a highlight field with nothing generated (ADR 0264: no text, no wash)");
         }
         if (ctx.container.querySelector(".generated-highlight")) {
           throw new Error("the fresh page carries a generated-text highlight with nothing generated");

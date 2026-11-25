@@ -124,7 +124,7 @@ const SHAPE_OPTIONS = [
   { value: "statement", label: "Statement" },
 ];
 
-function PickPills({ options, current, onChange, disabled, testId, ariaLabel }) {
+export function PickPills({ options, current, onChange, disabled, testId, ariaLabel }) {
   return (
     <div className="flex flex-wrap gap-2" role="group" aria-label={ariaLabel}>
       {options.map((option) => (
