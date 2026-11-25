@@ -5004,28 +5004,19 @@ async function main() {
       if (!ctx.container.querySelector('[data-testid="wizard-section-body-profile"]')) {
         throw new Error("the standing page renders no body");
       }
-      await clickEl(
-        ctx,
-        ctx.container.querySelector('[data-testid="studio-progress-segment-angle"]'),
-        "the Audience segment"
-      );
-      if (standing().length !== 1 || standing()[0] !== "angle") {
-        throw new Error("paging to Audience did not swap the page");
-      }
-      if (!ctx.container.querySelector('[data-testid="wizard-section-body-angle"]')) {
-        throw new Error("the Audience page renders no body");
-      }
-      await clickEl(
-        ctx,
-        ctx.container.querySelector('[data-testid="studio-progress-segment-review"]'),
-        "the Review segment"
-      );
-      if (standing().length !== 1 || standing()[0] !== "review") {
-        throw new Error("paging to Review did not swap the page");
-      }
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="wizard-back-button"]'), "Back to the angle step");
-      if (standing().length !== 1 || standing()[0] !== "angle") {
-        throw new Error("the Back arrow did not return to the Audience page");
+      // ADR 0328: with no profile on file every later step is locked,
+      // its segment renders disabled, and a click pages nowhere — the
+      // founder sees the locked steps but cannot click through them.
+      // Unlocked paging is covered by the circuit check below, whose
+      // walk completes the steps it pages between.
+      for (const key of ["angle", "review"]) {
+        const seg = ctx.container.querySelector(`[data-testid="studio-progress-segment-${key}"]`);
+        if (!seg) throw new Error(`the desktop wizard renders no ${key} segment`);
+        if (!seg.disabled) throw new Error(`the locked ${key} segment is still clickable (ADR 0328)`);
+        await clickEl(ctx, seg, `the locked ${key} segment`);
+        if (standing().length !== 1 || standing()[0] !== "profile") {
+          throw new Error(`clicking the locked ${key} segment paged the wizard (ADR 0328)`);
+        }
       }
     } finally {
       dom.window.matchMedia = prevMatchMedia;
@@ -5112,20 +5103,27 @@ async function main() {
       if (seg.tagName !== "BUTTON") throw new Error(`progress segment ${i + 1} is not navigable`);
       if (!seg.getAttribute("aria-label")) throw new Error(`progress segment ${i + 1} lost its state`);
     });
+    // ADR 0328: a locked segment is seen, not clicked — it renders
+    // disabled, so no click can open its step; an unlocked segment is
+    // never disabled. (The harness dispatches raw events, which bypass
+    // a disabled button, so the attribute is the pin; the browser
+    // supplies the consequence.) Later steps are locked in this
+    // fixture, so only the Audience segment's click-through is
+    // exercised here — full progression is covered by the checks that
+    // complete each step in turn.
+    for (const seg of segments) {
+      const locked = seg.getAttribute("data-locked") === "true";
+      if (locked && !seg.disabled) {
+        throw new Error("a locked progress segment is still clickable (ADR 0328)");
+      }
+      if (!locked && seg.disabled) {
+        throw new Error("an unlocked progress segment is disabled (ADR 0328)");
+      }
+    }
     await clickEl(ctx, segments[1], "the Audience segment");
     const active = ctx.container.querySelector('[data-testid="wizard-section-angle"]');
     if (!active || active.getAttribute("data-active") !== "true") {
       throw new Error("clicking a segment did not open its section");
-    }
-    await clickEl(ctx, segments[2], "the Review segment");
-    const review = ctx.container.querySelector('[data-testid="wizard-section-review"]');
-    if (!review || review.getAttribute("data-active") !== "true") {
-      throw new Error("clicking the Review segment did not open its section");
-    }
-    await clickEl(ctx, segments[3], "the Demo + CTA segment");
-    const finish = ctx.container.querySelector('[data-testid="wizard-section-finish"]');
-    if (!finish || finish.getAttribute("data-active") !== "true") {
-      throw new Error("clicking the last segment did not open its section");
     }
   });
 
@@ -5227,6 +5225,39 @@ async function main() {
     }
     if (!css.includes("@keyframes rail-done-pulse") || !css.includes(".rail-done-badge")) {
       throw new Error("index.css carries no completion pulse for the rail's done badge");
+    }
+  });
+
+  // ADR 0328 (Kasra's orders, Nov 24 2026): the Audience & template
+  // step sits flush — its step card and inset panels tighten so the
+  // cards reach the section's edge — and nothing in the wizard
+  // answers the mouse: the rail segments, the pickable cards and the
+  // angle rows carry no hover effect. One section wears the tight
+  // shell for now; the founder approves the look before it spreads.
+  await check("the audience step sits flush and the wizard carries no card hover", async (ctx) => {
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!css.includes(".surface-step-tight")) {
+      throw new Error("index.css carries no tightened step shell (ADR 0328)");
+    }
+    if (css.includes(".card-pickable:hover")) {
+      throw new Error("pickable cards still answer the mouse (ADR 0328)");
+    }
+    const create = fs.readFileSync(path.join(SRC, "pages/CreateVideo.jsx"), "utf8");
+    if (!create.includes("surface-step-tight")) {
+      throw new Error("no wizard step wears the tightened shell (ADR 0328)");
+    }
+    if (create.includes("duration-300 hover:bg-[color:var(--indigo-8)]")) {
+      throw new Error("the rail segments still answer the mouse (ADR 0328)");
+    }
+    if (create.includes("hover:border-[color:var(--indigo-35)]")) {
+      throw new Error("a wizard card still answers the mouse (ADR 0328)");
+    }
+    if (!create.includes("disabled={isLocked}")) {
+      throw new Error("locked rail segments are still clickable (ADR 0328)");
+    }
+    const panels = fs.readFileSync(path.join(SRC, "components/studio/SelectionPanels.jsx"), "utf8");
+    if (panels.includes("hover:bg-[color:var(--indigo-6)]") || panels.includes("hover:border-[color:var(--indigo-35)]")) {
+      throw new Error("the audience step's cards still answer the mouse (ADR 0328)");
     }
   });
 
@@ -25772,8 +25803,19 @@ function renderButton(ctx) {
  */
 async function openStep(ctx, label) {
   const pill = stepPill(ctx, label);
+  // ADR 0328: a locked segment is disabled and cannot be clicked
+  // through. When the segment refuses, the harness opens the step by
+  // its section header instead — the standing path for reading a
+  // locked step's notice and, once active, its gates.
+  let target = pill;
+  if (pill.disabled) {
+    const segments = [...ctx.container.querySelectorAll('[data-testid^="studio-progress-segment-"]')];
+    const key = ["profile", "angle", "review", "finish"][segments.indexOf(pill)];
+    const toggle = key && ctx.container.querySelector(`[data-testid="wizard-section-toggle-${key}"]`);
+    if (toggle) target = toggle;
+  }
   await act(async () => {
-    pill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    target.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
   });
   await act(async () => {});
   await act(async () => {});

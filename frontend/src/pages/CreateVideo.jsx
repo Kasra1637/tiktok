@@ -2198,7 +2198,7 @@ export default function CreateVideo() {
                     className={`card-pickable row-pad w-full rounded-xl border text-left ${
                       profileId === p.id
                         ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-                        : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+                        : "border-[color:var(--hairline)]"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -3575,6 +3575,10 @@ export default function CreateVideo() {
             <button
               key={s.step.key}
               type="button"
+              // A locked segment is seen, not clicked (ADR 0328): it
+              // names what unlocks it and does nothing on a click, so
+              // a locked step cannot be opened from the bar at all.
+              disabled={isLocked}
               onClick={() => setStep(i)}
               aria-current={active ? "step" : undefined}
               // Announced rather than shown only: the tick is a shape-only cue, and
@@ -3590,7 +3594,7 @@ export default function CreateVideo() {
               data-state={isLocked ? "locked" : s.state}
               data-locked={isLocked ? "true" : "false"}
               data-testid={`studio-progress-segment-${s.step.key}`}
-              className={`tap-chip flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-2 text-center transition-colors duration-300 hover:bg-[color:var(--indigo-8)] sm:flex-row sm:gap-2 sm:px-2.5 sm:text-left ${
+              className={`tap-chip flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-2 text-center transition-colors duration-300 sm:flex-row sm:gap-2 sm:px-2.5 sm:text-left ${
                 isLocked ? "opacity-70" : ""
               }`}
             >
@@ -3710,7 +3714,11 @@ export default function CreateVideo() {
               data-locked={isLocked ? "true" : "false"}
               className={`surface surface-step scroll-mt-24 rounded-2xl ${
                 active ? "ring-1 ring-[color:var(--indigo-35)]" : ""
-              } ${isLocked ? "opacity-60" : ""}`}
+              } ${isLocked ? "opacity-60" : ""} ${
+                // One tightened step (ADR 0328): Audience & template's
+                // inside padding is trimmed so its cards sit flush.
+                s.key === "angle" ? "surface-step-tight" : ""
+              }`}
             >
               <button
                 type="button"

@@ -148,7 +148,7 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
       className={`card-pickable animate-fade-up flex h-full w-full flex-col rounded-xl border p-4 text-left ${
         selected
           ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)]"
-          : "border-[color:var(--hairline)] hover:border-[color:var(--indigo-35)]"
+          : "border-[color:var(--hairline)]"
       }`}
     >
       <div>
@@ -546,7 +546,7 @@ export function AngleSelector({
               aria-controls={picked ? `angle-details-${a.id}` : undefined}
               onClick={() => onSelect(a.id)}
               data-testid={`angle-option-${a.id}`}
-              className={`flex w-full min-w-0 items-center gap-3 row-pad angle-option-row text-left transition-colors hover:bg-[color:var(--indigo-6)] ${
+              className={`flex w-full min-w-0 items-center gap-3 row-pad angle-option-row text-left transition-colors ${
                 picked ? "bg-[color:var(--indigo-6)]" : ""
               }`}
             >
