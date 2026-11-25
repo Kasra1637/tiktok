@@ -417,10 +417,10 @@ def next_goal_suggestion_variant(variant, count: int = GOAL_SUGGESTION_VARIANTS)
 DIRECTION_OPTIONS = {
     "wellness": {
         "location": [
-            "Quiet garden bench",
-            "Calm living room with a plant beside the chair",
-            "Balcony with a simple chair",
-            "Tidy desk with a notebook",
+            "Garden bench",
+            "Living room",
+            "Home balcony",
+            "Home desk",
         ],
         "lighting": [
             "Soft morning window light",
@@ -449,10 +449,10 @@ DIRECTION_OPTIONS = {
     },
     "fitness": {
         "location": [
-            "Home gym corner with a mat",
-            "Park bench beside a running path",
-            "Clean kitchen counter with a shaker bottle",
-            "Balcony with a city view",
+            "Home gym",
+            "Park bench",
+            "Kitchen counter",
+            "City balcony",
         ],
         "lighting": [
             "Bright daylight, crisp and clear",
@@ -481,10 +481,10 @@ DIRECTION_OPTIONS = {
     },
     "finance": {
         "location": [
-            "Tidy home office desk with a laptop",
-            "Kitchen table with papers neatly stacked",
-            "Minimal living room with a bookshelf",
-            "Clean cafe corner table",
+            "Home office",
+            "Kitchen table",
+            "Living room",
+            "Cafe table",
         ],
         "lighting": [
             "Clear neutral office daylight",
@@ -513,10 +513,10 @@ DIRECTION_OPTIONS = {
     },
     "food": {
         "location": [
-            "Home kitchen counter with ingredients laid out",
-            "Cozy dining table with a finished dish",
+            "Kitchen counter",
+            "Dining table",
             "Market aisle",
-            "Small cafe table by the window",
+            "Cafe table",
         ],
         "lighting": [
             "Warm kitchen daylight",
@@ -545,10 +545,10 @@ DIRECTION_OPTIONS = {
     },
     "learning": {
         "location": [
-            "Tidy study desk with books stacked",
-            "Quiet library corner table",
-            "Park table with a notebook",
-            "Calm armchair with a side table",
+            "Study desk",
+            "Library table",
+            "Park table",
+            "Home armchair",
         ],
         "lighting": [
             "Clear study-friendly daylight",
@@ -577,10 +577,10 @@ DIRECTION_OPTIONS = {
     },
     "work": {
         "location": [
-            "Modern home office with a shelf behind",
-            "Bright coworking desk corner",
-            "Minimal living room workspace",
-            "Cafe table with a notebook open",
+            "Home office",
+            "Coworking desk",
+            "Living room",
+            "Cafe table",
         ],
         "lighting": [
             "Clean professional daylight",
@@ -609,10 +609,10 @@ DIRECTION_OPTIONS = {
     },
     "default": {
         "location": [
-            "Tidy living room",
-            "Airy rooftop corner",
-            "Simple home office with a neutral wall",
-            "Neutral balcony",
+            "Living room",
+            "Rooftop corner",
+            "Home office",
+            "Home balcony",
         ],
         "lighting": [
             "Soft natural window light",

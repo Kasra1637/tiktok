@@ -273,21 +273,21 @@ export default function HookPicksControl({
                 onClick={() => setFocusOpen(false)}
               />
               <div
-                className="surface-card relative max-h-[85vh] w-full max-w-2xl overflow-y-auto p-5"
+                className="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[color:var(--hairline)] bg-card shadow-lg"
                 data-testid={`${testId}-focus-popup`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-base font-semibold">Focus</span>
+                <div className="flex items-center justify-between gap-2 border-b border-[color:var(--hairline)] row-pad">
+                  <span className="text-sm font-semibold">Focus</span>
                   <button
                     type="button"
                     aria-label="Close"
                     onClick={() => setFocusOpen(false)}
-                    className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground"
+                    className="shrink-0 text-muted-foreground"
                   >
                     <X className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </div>
-                <div className="mt-3 space-y-1" role="listbox" aria-label="Focus options">
+                <div className="row-pad space-y-1" role="listbox" aria-label="Focus options">
                   {focusRows.map((row) => {
                     const picked = focusValue === row.value;
                     return (

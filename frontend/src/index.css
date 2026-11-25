@@ -2340,7 +2340,20 @@ h1,
    angle pop-up, the Focus pop-up, and the shared dialog
    overlay behind every confirm dialog. */
 .pop-scrim {
-    background-color: rgba(0, 0, 0, 0.55);
+    /* The tour's full dim (ADR 0338): Show me around stacks its
+       55% backdrop under the spotlight ring's 55% shadow, which
+       composites to just under 80% black — the pop-ups match
+       that combined weight, not the single layer. */
+    background-color: rgba(0, 0, 0, 0.8);
+}
+
+/* Direction buttons wrap their label inside the pill rather
+   than ever cutting it (ADR 0337): the shared Button base is
+   nowrap, and a long place or wardrobe name wraps to a second
+   line, whole. Un-layered so it beats the base. */
+.direction-btn {
+    white-space: normal;
+    text-align: center;
 }
 
 /* ---------- The one secondary button (ADR 0336) ----------

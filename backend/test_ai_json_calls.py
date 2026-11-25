@@ -2007,6 +2007,47 @@ class TestDirectionRefreshBudget:
         assert rec.payloads[0]["max_tokens"] == ai_service.DIRECTION_REFRESH_MAX_TOKENS
         assert rec.timeouts == [90]
 
+    def test_direction_refresh_asks_for_short_complete_labels(self, monkeypatch):
+        """ADR 0337: fresh options are born inside the button's 25
+        characters, each a complete phrase — the display trim is
+        only the safety net, never the writer."""
+        import ai_service
+        rec = _Recorder([_completion(json.dumps({"options": self.OPTIONS}))])
+        rec.timeouts = []
+        _install_direction_transport(monkeypatch, rec)
+        asyncio.run(ai_service.refresh_direction_options(self.PROFILE, "location"))
+        payload = json.dumps(rec.payloads[0])
+        assert "at most 25 characters" in payload
+        assert "stands complete on its own" in payload
+
+    def test_direction_refresh_location_names_only_the_place(self, monkeypatch):
+        """ADR 0339 (Kasra's rule): a location option names only the
+        place itself, in two or three words — no adjectives, no
+        extra wording. Wardrobe carries no such rule."""
+        import ai_service
+        rec = _Recorder([_completion(json.dumps({"options": self.OPTIONS}))])
+        rec.timeouts = []
+        _install_direction_transport(monkeypatch, rec)
+        asyncio.run(ai_service.refresh_direction_options(self.PROFILE, "location"))
+        payload = json.dumps(rec.payloads[0])
+        assert "name only the place itself" in payload
+        assert "two or three words" in payload
+        rec2 = _Recorder([_completion(json.dumps({"options": self.OPTIONS}))])
+        rec2.timeouts = []
+        _install_direction_transport(monkeypatch, rec2)
+        asyncio.run(ai_service.refresh_direction_options(self.PROFILE, "wardrobe"))
+        assert "name only the place itself" not in json.dumps(rec2.payloads[0])
+
+    def test_spoken_rules_land_the_verb(self):
+        """ADR 0340 (Kasra's rule): the shared spoken-line block tells
+        the generator to finish the sentence itself — a question
+        carries its verb, and a verb takes its second half."""
+        import ai_service
+        block = ai_service._spoken_line_rules_block()
+        assert "LAND THE VERB" in block
+        assert "why don't my words come out right?" in block
+        assert "before they slip away" in block
+
     def test_direction_refresh_recovers_when_the_first_reply_is_all_thinking(self, monkeypatch):
         """The live failure becomes a result on the doubled retry.
 
@@ -2899,7 +2940,12 @@ class TestStrategyBudget:
         # so the block grows in every prompt that writes spoken lines,
         # strategy included. The ceiling moves by a measured 1,600 to
         # 48,600, keeping ~790 of headroom.
-        CEILING = 48_600
+        #
+        # ADR 0340 adds Kasra's LAND THE VERB passage to the same
+        # block (+430 chars; the fully populated prompt now measures
+        # 48,978), so the ceiling moves by a measured 900 to 49,500,
+        # keeping ~520 of headroom.
+        CEILING = 49_500
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "

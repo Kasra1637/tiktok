@@ -12,19 +12,44 @@ import { Button } from "../ui/button";
 // Kasra's cap (ADR 0332): a direction button's text never runs
 // past 25 characters, so the row stays a row of buttons instead
 // of a wall of prose. The full option still applies underneath —
-// the pick stores the whole string; only the label is trimmed,
-// at a word boundary, with the full text on the button's title.
-// ADR 0334 (Kasra's ruling, Nov 25 2026): the trim never wears an
-// ellipsis — a label ending in dots read as a broken, half-shown
-// word on screen, so the label simply ends at the last whole word
-// inside the cap, clean.
+// The button label stays inside Kasra's 25 characters
+// (ADR 0332), shortened the safe way (ADR 0337, his ruling,
+// Nov 25 2026): the old trim backed off to the last whole word
+// and still amputated phrases mid-thought on his screen —
+// "Calm living room with a", "Balcony with a simple". A
+// shortened label must still read as a complete phrase with
+// its spelling, meaning and grammar intact, so the trim cuts
+// at a word boundary and then drops any trailing word still
+// waiting for the rest of its phrase: articles, prepositions
+// and conjunctions, and an article + describing word whose
+// noun was cut away. The pick stores the whole string; only
+// the button's text is shortened, and it never wears dots.
 const DIRECTION_BUTTON_MAX = 25;
+const DANGLING_END_WORDS = new Set([
+  "a", "an", "the", "with", "in", "on", "at", "by", "of", "for",
+  "to", "and", "or", "but", "beside", "near", "under", "over",
+  "from", "into", "onto", "behind", "between", "against",
+]);
 function directionButtonLabel(option) {
   const text = String(option);
   if (text.length <= DIRECTION_BUTTON_MAX) return text;
   const cut = text.slice(0, DIRECTION_BUTTON_MAX);
   const lastSpace = cut.lastIndexOf(" ");
-  return (lastSpace > 8 ? cut.slice(0, lastSpace) : cut).trimEnd();
+  const words = (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd().split(/\s+/);
+  while (words.length > 1) {
+    const last = words[words.length - 1].toLowerCase();
+    if (DANGLING_END_WORDS.has(last)) {
+      words.pop();
+      continue;
+    }
+    const prev = (words[words.length - 2] || "").toLowerCase();
+    if (prev === "a" || prev === "an" || prev === "the") {
+      words.splice(words.length - 2, 2);
+      continue;
+    }
+    break;
+  }
+  return words.join(" ");
 }
 
 export function DirectionSelect({
@@ -97,7 +122,7 @@ export function DirectionSelect({
                 data-value={option}
                 disabled={disabled}
                 onClick={() => onPick(option)}
-                className={`tap-chip option-btn ${picked ? "thumb-selected" : ""}`}
+                className={`tap-chip option-btn direction-btn ${picked ? "thumb-selected" : ""}`}
                 title={option}
               >
                 {directionButtonLabel(option)}

@@ -7960,17 +7960,18 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         if (JSON.stringify(pairValues()) !== JSON.stringify(ALL_LOCATIONS.slice(0, 3))) {
           throw new Error(`a handheld camera was not offered every location: ${JSON.stringify(pairValues())}`);
         }
-        // Kasra's cap (ADR 0332): no direction button's text runs
-        // past 25 characters, however long the offered place is.
+        // ADR 0337 (Kasra's ruling, Nov 25 2026): a direction
+        // button's label stays inside 25 characters, shortened
+        // the safe way — a complete phrase, never amputated
+        // mid-thought ("Calm living room with a" is the banned
+        // shape), never wearing dots. The fixture's long places
+        // shorten to their complete cores.
         const pairLabels = [...ctx.container.querySelectorAll('[data-testid="review-location-direction"] button')].map((b) => b.textContent.trim());
-        if (pairLabels.some((t) => t.length > 25)) {
-          throw new Error(`a direction button's text runs past 25 characters: ${JSON.stringify(pairLabels)}`);
+        if (JSON.stringify(pairLabels) !== JSON.stringify(["Quiet garden bench", "Calm living room", "Balcony"])) {
+          throw new Error(`a direction button's label is not the safely shortened phrase: ${JSON.stringify(pairLabels)}`);
         }
-        // ADR 0334 (Kasra's ruling, Nov 25 2026): the trimmed label
-        // never wears dots — a label ending in an ellipsis read as
-        // a broken, half-shown word on his screen.
-        if (pairLabels.some((t) => t.includes("…") || t.includes("..."))) {
-          throw new Error(`a direction button's text ends in dots: ${JSON.stringify(pairLabels)}`);
+        if (pairLabels.some((t) => t.length > 25 || t.includes("…"))) {
+          throw new Error(`a direction button's text runs long or ends in dots: ${JSON.stringify(pairLabels)}`);
         }
         // ADR 0334: "New options" stands beside the field's title,
         // in the title's own row, right after it — the Focus row's
@@ -15504,8 +15505,8 @@ async function runHookCtaChecks() {
     const path = require("path");
     const read = (rel) => fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
     const css = read("src/index.css");
-    if (!css.includes(".pop-scrim") || !css.includes("rgba(0, 0, 0, 0.55)")) {
-      throw new Error("the shared pop-up scrim is not the tour's 55% black (ADR 0335)");
+    if (!css.includes(".pop-scrim") || !css.includes("rgba(0, 0, 0, 0.8)")) {
+      throw new Error("the shared pop-up scrim is not the tour's combined dim (ADRs 0335/0338)");
     }
     if (!css.includes(".btn-secondary-pill") || !css.includes("border-radius: 9999px")) {
       throw new Error("the unified secondary pill is missing from the stylesheet (ADR 0336)");

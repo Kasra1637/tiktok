@@ -359,3 +359,7 @@ come from the architecture map and code, not an old record's UI description.
 | [0334](0334-softer-picks-full-labels-and-the-focus-pop-up.md) | Unpicked options stand light, direction labels never wear dots, New options stands beside the title, and the Focus pick opens in a centered pop-up |
 | [0335](0335-pop-ups-dim-the-screen-like-the-tour.md) | Every pop-up dims the rest of the screen with the tour's own 55% black (.pop-scrim) |
 | [0336](0336-one-secondary-button.md) | One secondary button for the whole app: the Show me around pill; outline and ghost are retired |
+| [0337](0337-direction-labels-shorten-safely.md) | Direction labels shorten safely — inside 25 characters, always a complete phrase |
+| [0338](0338-focus-pop-up-matches-the-angle-pop-up-and-the-tour-dim.md) | The Focus pop-up takes the angle pop-up's display, and the pop-up scrim matches the tour's combined dim |
+| [0339](0339-location-labels-name-only-the-place.md) | Location labels name only the place — two or three words, no adjectives, in the library and the refresh writer |
+| [0340](0340-the-generator-lands-the-verb.md) | The generator lands the verb: a hook arrives as a finished sentence, never a fragment |

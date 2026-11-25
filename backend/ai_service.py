@@ -2177,10 +2177,17 @@ async def refresh_direction_options(profile: dict, field: str, avoid: Optional[l
     avoid_list = [str(a) for a in (avoid or []) if str(a or "").strip()][:12]
     avoid_block = ("\n\nALREADY SHOWN (do not repeat any of these):\n" + "\n".join(f"- {a}" for a in avoid_list)) if avoid_list else ""
 
+    place_rule = (
+        "For location, name only the place itself, in two or three words — no adjectives, "
+        "no extra wording ('Garden bench', 'In the car'; never 'Calm living room with a plant'). "
+        if field == "location" else ""
+    )
     prompt = (
         f"APP PROFILE:\n{json.dumps(context, indent=2)}{angle_block}{avoid_block}\n\n"
         f"Propose exactly 4 DISTINCT options for the video's {field}: {_DIRECTION_FIELD_BRIEFS[field]}. "
         "Each option is one short concrete phrase a founder can picture instantly. "
+        "Each option is at most 25 characters and stands complete on its own — never ending in a, an, the, with, or a describing word still waiting for what it describes. "
+        f"{place_rule}"
         "Suit them to this app's category, usage moments and outcomes — a meditation app earns quiet outdoor places, not gym floors. "
         "Never describe the presenter's face, body, age, skin, hair or build. "
         "Never state a feature, price, rating or outcome as a fact about the app. "
@@ -4488,7 +4495,14 @@ def _spoken_line_rules_block() -> str:
         "MEANING too (ADR 0249): a question carries its object ('why "
         "does my mood keep surprising me?'), never a bare tail after a "
         "comma ('…, why so surprised?'), and the key noun is never "
-        "dropped to fit — a smaller whole thought wins.\n"
+        "dropped to fit — a smaller whole thought wins. LAND THE VERB "
+        "(ADR 0340, Kasra's rule): the generator finishes the sentence "
+        "itself before the hook is shown — a question carries its verb, "
+        "never drops it ('why don't my words come out right?', never "
+        "'why don't my words?'), and a verb that needs its second half "
+        "takes it ('before they slip away', never 'before they slip' "
+        "left hanging). A hook that arrives as a fragment is a failed "
+        "draft, however strong its opening words are.\n"
         "- HOOK POWER (the hook line only — it earns the stop, or nothing after "
         "it matters): speak as the person living the moment, never as a report "
         "about it. FIRST PERSON, LIVED FEELING: the feeling in the speaker's "

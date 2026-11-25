@@ -2400,8 +2400,8 @@ class TestDirectionOptionsEndpoint:
         out = _run(api.profile_direction_options(
             profile_id=calm["id"], camera_setup="fixed", user_id=ANON))
         assert out["location"] == [
-            "Calm living room with a plant beside the chair",
-            "Tidy desk with a notebook",
+            "Living room",
+            "Home desk",
         ]
         assert len(out["wardrobe"]) == 4
         assert len(out["lighting"]) == 4
@@ -2433,8 +2433,8 @@ class TestDirectionOptionsEndpoint:
         out = _run(api.profile_direction_options(
             profile_id=calm["id"], angle_id=angle_id, camera_setup="fixed", user_id=ANON))
         assert out["location"] == [
-            "Calm living room with a plant beside the chair",
-            "Tidy desk with a notebook",
+            "Living room",
+            "Home desk",
         ]
 
     def test_handheld_with_an_outdoor_angle_still_leads_with_the_moment(self, api):
