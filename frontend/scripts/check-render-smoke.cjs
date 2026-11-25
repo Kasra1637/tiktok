@@ -194,11 +194,12 @@ const { createRoot } = require("react-dom/client");
 // `id` is deliberately stripped, so a fixture carrying `id` instead makes every
 // <option key={m.key}> undefined and renders a misleading key warning.
 const CAPABILITY = {
-  key: "minimax-h3-max",
-  name: "MiniMax H3 Max",
+  key: "heygen-video-1",
+  name: "HeyGen Video",
   max_duration: 15,
   min_duration: 5,
   resolution: "768p",
+  supported_resolutions: ["480p", "768p"],
   aspect_ratio: "9:16",
   supports_references: true,
   supports_native_audio: true,
@@ -380,7 +381,7 @@ const SUPPORTED_DURATIONS = [8, 10, 12, 15];
 
 const apiStub = {
   recordFeedback: async () => ({}),
-  getStudioVideoModels: async () => ({ default: "minimax-h3-max", models: [CAPABILITY] }),
+  getStudioVideoModels: async () => ({ default: "heygen-video-1", models: [CAPABILITY] }),
   getGenerations: async () => ({ generations: [SEGMENT] }),
   pollGeneration: async () => SEGMENT,
   getTemplates: async () => ({ templates: [TEMPLATE] }),
@@ -3192,6 +3193,23 @@ async function main() {
     supports_last_frame: false,
   };
 
+  // A synthetic second model that offers no resolution choice. The studio
+  // has exactly one real model since ADR 0327 (HeyGen Video); this record
+  // exists only so the panel's per-model behaviors — no toggle without a
+  // choice, and a stale pick reset on switch — stay pinned against the
+  // generic code that implements them.
+  const NO_CHOICE_CAPABILITY = {
+    key: "acme-video-1",
+    name: "Acme Video",
+    max_duration: 15,
+    min_duration: 5,
+    resolution: "768p",
+    aspect_ratio: "9:16",
+    supports_references: true,
+    supports_native_audio: true,
+    supports_last_frame: false,
+  };
+
   await check("the resolution toggle appears only for models that offer a choice", async (ctx) => {
     dom.window.localStorage.removeItem("studio-video-model:p1");
     dom.window.localStorage.removeItem("studio-video-resolution:p1");
@@ -3212,14 +3230,15 @@ async function main() {
   });
 
   await check("no resolution toggle renders for a model with no choice", async (ctx) => {
-    // MiniMax H3 Max renders at its catalog resolution with no per-render option.
+    // A model whose record offers no per-render resolution gets no toggle.
     dom.window.localStorage.removeItem("studio-video-model:p1");
     dom.window.localStorage.removeItem("studio-video-resolution:p1");
     await withApi({
       getGenerations: async () => ({ generations: [] }),
+      getStudioVideoModels: async () => ({ default: "acme-video-1", models: [NO_CHOICE_CAPABILITY] }),
     }, () => mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx));
     if (ctx.container.querySelector("#gen-resolution")) {
-      throw new Error("a resolution toggle renders for minimax-h3-max, which offers no choice");
+      throw new Error("a resolution toggle renders for a model which offers no choice");
     }
   });
 
@@ -3291,7 +3310,7 @@ async function main() {
       getGenerations: async () => ({ generations: [] }),
       getStudioVideoModels: async () => ({
         default: "heygen-video-1",
-        models: [HEYGEN_CAPABILITY, CAPABILITY],
+        models: [HEYGEN_CAPABILITY, NO_CHOICE_CAPABILITY],
       }),
     }, async () => {
       await mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx);
@@ -3301,9 +3320,9 @@ async function main() {
       if (res.dataset.value !== "480p") throw new Error("the 480p pick did not stick");
       const model = ctx.container.querySelector("#gen-model");
       if (!model) throw new Error("no model picker to switch with");
-      // A 480p pick for heygen must not ride along onto minimax-h3-max: the server
-      // refuses values the new model does not offer.
-      await chooseOption(ctx, model, "minimax-h3-max");
+      // A 480p pick for heygen must not ride along onto a model that does
+      // not offer it: the server refuses values the new model does not offer.
+      await chooseOption(ctx, model, "acme-video-1");
       if (ctx.container.querySelector("#gen-resolution")) {
         throw new Error("the resolution toggle survives a switch to a model with no choice");
       }

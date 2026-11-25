@@ -193,7 +193,10 @@ class TestRenderPrompt:
             template={}, duration=12, assets={}, plan={"hook_seconds": 3},
         )
         if budget is None:
-            return gp.build_segment_prompt(**kwargs)
+            # The full form, selected with a roomy budget: the default is
+            # HeyGen's tight ceiling itself since ADR 0327, which builds
+            # the condensed form these tests do not pin.
+            return gp.build_segment_prompt(**kwargs, prompt_budget=20000)
         return gp.build_segment_prompt(**kwargs, prompt_budget=budget)
 
     def test_the_full_prompt_states_the_enacting_opening(self):
@@ -316,7 +319,10 @@ class TestHalfSecondSnap:
             template={}, duration=12, assets={}, plan={"hook_seconds": 3},
         )
         if budget is None:
-            return gp.build_segment_prompt(**kwargs)
+            # The full form, selected with a roomy budget: the default is
+            # HeyGen's tight ceiling itself since ADR 0327, which builds
+            # the condensed form these tests do not pin.
+            return gp.build_segment_prompt(**kwargs, prompt_budget=20000)
         return gp.build_segment_prompt(**kwargs, prompt_budget=budget)
 
     def test_the_full_render_prompt_states_the_half_second_snap(self):

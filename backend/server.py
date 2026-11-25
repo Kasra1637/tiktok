@@ -1264,9 +1264,8 @@ async def _studio_identity_references(
     works: image reference in, matching person out.
 
     Returns the cropped face PATH, not a request payload, because different
-    models carry it in different fields: both studio models take it as the
-    opening frame — Hailuo 3 Max because it refuses input_references
-    outright (proven live), HeyGen because the pinned frame is the hard
+    models carry it in different fields: the studio's one model takes it as
+    the opening frame — HeyGen, because the pinned frame is the hard
     anchor a soft reference was not. The caller (_submit_generation) picks
     the field from the model's identity_via_first_frame capability — this
     function only proves which photo, loudly.
@@ -1636,24 +1635,23 @@ async def _submit_generation(
                                  for k in ("hook_promise", "hook_concept")),
             )
             render_plan["location"] = place_only
-    # Each provider has its own prompt ceiling. Hailuo's was measured live at
-    # 7,000; others are lower, and sending them a Hailuo-sized prompt 400s
-    # after the founder has asked for it. The builder scales every field
-    # budget to fit rather than cutting the finished tail. On a tight ceiling
-    # the spoken script is additionally sacred: the ceiling tripped the
-    # protection withdrawal on ordinary strategies, so only the direction and
-    # template wording is trimmed there, never the founder's own words.
+    # The one model has one prompt ceiling: HeyGen Video's 4,090 (ADR 0327).
+    # The builder scales every field budget to fit it rather than cutting
+    # the finished tail, and its tightest tier trims the direction's own
+    # redundant phrasing when even the tightest squeeze would land over —
+    # the fit is guaranteed in the builder, so there is no ceiling refusal
+    # here any more. The spoken script is additionally sacred: the ceiling
+    # tripped the protection withdrawal on ordinary strategies, so only
+    # the direction and template wording is trimmed, never the founder's
+    # own words.
     prompt_ceiling = video_providers.capability(model_key).get("prompt_char_limit")
     prompt_budget = prompt_ceiling
     if silent and prompt_budget:
         # The silence direction appended below is a fixed instruction
         # (ADR 0246): reserve its characters from the BUILDER's budget
-        # so the assembled prompt still fits the provider's ceiling
-        # instead of the ceiling check refusing a hook whose talking
-        # version rendered fine. The check itself keeps the real
-        # ceiling — the reserve is a building allowance, not a new
-        # limit, and its refusal must name the number the provider
-        # actually accepts.
+        # so the assembled prompt, silence direction included, still fits
+        # the provider's ceiling. The reserve is a building allowance,
+        # not a new limit.
         prompt_budget = max(1, prompt_budget - len(SILENT_PERFORMANCE_DIRECTION))
     if strategy:
         try:
@@ -1696,36 +1694,14 @@ async def _submit_generation(
         # other fixed instruction.
         prompt = prompt + SILENT_PERFORMANCE_DIRECTION
 
-    # The fixed instructions in a prompt do not scale with the budget, only the
-    # variables do, so a tight ceiling can still land over it. That is knowable
-    # here and nowhere else, and it is knowable BEFORE spending — so it is
-    # refused here rather than discovered as a provider 400 the founder pays for.
-    #
-    # The message is built from catalog data, not typed: the alternative model
-    # is the roomiest one this deployment actually offers above this ceiling.
-    # The fit has already squeezed the app's direction wording to its
-    # tightest by the time this guard can fire, so the refusal names that
-    # cause and never advises cutting the script (ADR 0255).
-    if prompt_ceiling and len(prompt) > prompt_ceiling:
-        capability = video_providers.capability(model_key)
-        alternative = None
-        for candidate in video_providers.list_capabilities():
-            candidate_ceiling = int(candidate.get("prompt_char_limit") or 0)
-            if candidate_ceiling <= int(prompt_ceiling):
-                continue
-            if alternative is None or candidate_ceiling > int(
-                alternative.get("prompt_char_limit") or 0
-            ):
-                alternative = candidate
-        raise HTTPException(
-            status_code=409,
-            detail=generation_planning.prompt_ceiling_refusal(
-                prompt_chars=len(prompt),
-                ceiling=int(prompt_ceiling),
-                model_name=capability.get("name", ""),
-                alternative=alternative,
-            ),
-        )
+    # No ceiling guard stands here any more (ADR 0327). It used to refuse
+    # a prompt that still landed over its ceiling after fitting — latterly
+    # suggesting a switch to the roomier model — but that model is removed
+    # and the founder ruled the refusal itself out: the builder's fit,
+    # tightest tier included, guarantees the assembled prompt (silence
+    # direction included, reserved above) fits HeyGen's 4,090, so there
+    # is nothing left to refuse. An over-limit assembly would be a builder
+    # defect, pinned by the builders' saturated-fixture tests.
 
     # Stamp the strategy version whenever the project has one, not only when a
     # strategy was passed in, so the generation record says which strategy it
@@ -1737,12 +1713,10 @@ async def _submit_generation(
     # Avatar influencer: the attached character_reference rides along as the
     # identity guide, following the proven legacy face-swap mechanics (identity
     # image + prompt lock, no V2V video involved). WHICH request field carries
-    # it depends on the model, because providers differ: both studio models
-    # take it as the opening frame — Hailuo 3 Max because it refuses
-    # input_references outright (proven live: the serving provider 400s it),
-    # HeyGen because the pinned frame is the hard anchor a soft reference
-    # was not. Sending the wrong field spends a failed
-    # submit at best — this branch is what keeps a Max render submittable.
+    # it depends on the model, because providers differ: the studio's one
+    # model takes it as the opening frame — HeyGen, because the pinned frame
+    # is the hard anchor a soft reference was not. Sending the wrong field
+    # spends a failed submit at best.
     # Anything else (missing file, a model that takes no identity image at
     # all) fails the submission loudly rather than spending money on a
     # lookalike.
@@ -1764,8 +1738,7 @@ async def _submit_generation(
     # HeyGen used to appear in this list and no longer does: pinning the
     # photograph as its opening frame made the first second of every clip the
     # photo's own room and light instead of the planned scene, so its identity
-    # now rides as a reference image and Hailuo 3 Max is the only first-frame
-    # renderer left.
+    # now rides as a reference image.
     continuity_frame = None
 
     generation_id = str(uuid.uuid4())
@@ -2718,8 +2691,7 @@ _MODEL_HEAD_TRIM_SECONDS = {"heygen-video-1": 0.2}
 # A Hook + CTA hook render's head cut (ADR 0250). The dissolve on the
 # short hook renders runs longer than HeyGen's 0.2s — Kasra's live 4s
 # hook still opened on it — so a hook-surface render takes a longer
-# cut, on BOTH models (MiniMax H3 Max has no entry in the table above
-# at all). The value is derived from the codebase's own precedent,
+# cut. The value is derived from the codebase's own precedent,
 # not measured from Kasra's file (his live renders are hosted
 # elsewhere and cannot be read from here): posters.py takes the
 # poster frame at 0.5s precisely because that is "past a possible
@@ -2876,8 +2848,8 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
 
             # A Hook + CTA hook's head cut (ADR 0250): the dissolve on
             # the short hook renders outlasts the regular 0.2s cut, so
-            # the hook takes _HOOK_HEAD_TRIM_SECONDS off the head on
-            # either model — composed with its beat tail cut as ONE
+            # the hook takes _HOOK_HEAD_TRIM_SECONDS off the head —
+            # composed with its beat tail cut as ONE
             # outcome, so the delivered length is still exactly the
             # pick. The composition is staged on a temp file and only
             # replaces the canonical clip when both cuts land: if

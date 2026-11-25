@@ -353,11 +353,12 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
       .then((data) => {
         if (cancelled) return;
         setModels(data);
-        // The choice survives a reload, per project. A comparison run on H3 Max
-        // used to revert to the H3 default on refresh, so the founder could pay
-        // for a clip on a model they had already switched away from. A saved
-        // key the server no longer offers falls back to the default rather than
-        // sticking the select on a model that cannot render.
+        // The choice survives a reload, per project. A comparison run on a
+        // since-removed model used to revert to the default on refresh, so
+        // the founder could pay for a clip on a model they had already
+        // switched away from. A saved key the server no longer offers —
+        // minimax-h3-max after ADR 0327, say — falls back to the default
+        // rather than sticking the select on a model that cannot render.
         let saved = "";
         try {
           saved = projectId ? window.localStorage.getItem(modelStorageKey(projectId)) || "" : "";

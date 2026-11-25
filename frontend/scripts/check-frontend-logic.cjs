@@ -81,13 +81,13 @@ function loadModule(src = SRC, extraGlobals = {}) {
 }
 
 const L = loadModule();
-// MiniMax H3 is the only studio-eligible model, and it is the only one these
-// helpers are predicting against. WIDE is a hypothetical longer-range
-// capability, kept so the ceiling math is asserted against two shapes instead
-// of one — which is the point: the helpers must read the ceiling off the
-// capability rather than hard-code 15.
+// HeyGen Video is the only studio-eligible model (ADR 0327), and it is the
+// only one these helpers are predicting against. WIDE is a hypothetical
+// longer-range capability, kept so the ceiling math is asserted against two
+// shapes instead of one — which is the point: the helpers must read the
+// ceiling off the capability rather than hard-code 15.
 const WIDE = { min_duration: 4, max_duration: 30 };
-const MINIMAX = { min_duration: 5, max_duration: 15 };
+const HEYGEN = { min_duration: 5, max_duration: 15 };
 
 console.log("=".repeat(70));
 console.log("frontend/src/lib/videoLength.js");
@@ -104,7 +104,7 @@ console.log("=".repeat(70));
 console.log("\nDEFAULT_DURATION - the fallback, not a user choice");
 check("it is 15s", L.DEFAULT_DURATION === 15, L.DEFAULT_DURATION);
 check("the fallback is inside the only eligible model's single pass",
-  !L.exceedsSinglePass(L.DEFAULT_DURATION, MINIMAX), L.DEFAULT_DURATION);
+  !L.exceedsSinglePass(L.DEFAULT_DURATION, HEYGEN), L.DEFAULT_DURATION);
 check("the fallback is also inside a longer model's single pass",
   !L.exceedsSinglePass(L.DEFAULT_DURATION, WIDE), L.DEFAULT_DURATION);
 check("it is a real number, not a string the template math would swallow",
@@ -208,7 +208,7 @@ console.log("-".repeat(70));
 // second step, so the endpoint refuses the whole request with a 400. The UI's
 // job is now to say so before the click rather than to compute a step.
 console.log("\nsinglePassCeiling - read off the model, never assumed");
-check("15s on MiniMax", L.singlePassCeiling(MINIMAX) === 15, L.singlePassCeiling(MINIMAX));
+check("15s on HeyGen", L.singlePassCeiling(HEYGEN) === 15, L.singlePassCeiling(HEYGEN));
 check("30s on a longer model", L.singlePassCeiling(WIDE) === 30, L.singlePassCeiling(WIDE));
 check("an unknown capability is 0, not a hard-coded 15",
   L.singlePassCeiling(null) === 0, L.singlePassCeiling(null));
@@ -217,11 +217,11 @@ check("a non-numeric ceiling is 0", L.singlePassCeiling({ max_duration: "lots" }
 check("a zero or negative ceiling is 0", L.singlePassCeiling({ max_duration: 0 }) === 0);
 
 console.log("\nexceedsSinglePass - the refusal the endpoint will make");
-check("10s on MiniMax fits", L.exceedsSinglePass(10, MINIMAX) === false);
-check("15s on MiniMax is exactly the ceiling and still fits",
-  L.exceedsSinglePass(15, MINIMAX) === false);
-check("16s on MiniMax does not fit", L.exceedsSinglePass(16, MINIMAX) === true);
-check("30s on MiniMax does not fit", L.exceedsSinglePass(30, MINIMAX) === true);
+check("10s on HeyGen fits", L.exceedsSinglePass(10, HEYGEN) === false);
+check("15s on HeyGen is exactly the ceiling and still fits",
+  L.exceedsSinglePass(15, HEYGEN) === false);
+check("16s on HeyGen does not fit", L.exceedsSinglePass(16, HEYGEN) === true);
+check("30s on HeyGen does not fit", L.exceedsSinglePass(30, HEYGEN) === true);
 check("30s on a 30s model fits", L.exceedsSinglePass(30, WIDE) === false);
 check("31s on a 30s model does not", L.exceedsSinglePass(31, WIDE) === true);
 // Every length the facets endpoint offers is one render, which is the invariant
@@ -230,7 +230,7 @@ check("31s on a 30s model does not", L.exceedsSinglePass(31, WIDE) === true);
 // the product, so it is asserted here against the real set.
 for (const d of [8, 10, 12, 15]) {
   check(`${d}s is one render on the only eligible model`,
-    L.exceedsSinglePass(d, MINIMAX) === false, d);
+    L.exceedsSinglePass(d, HEYGEN) === false, d);
 }
 // Fail OPEN on an unknown ceiling. The one thing this must never do is block a
 // render the model would have accepted: a hard-coded fallback would tell a
@@ -241,8 +241,8 @@ check("an unknown ceiling never blocks a render",
   L.exceedsSinglePass(60, null) === false, L.exceedsSinglePass(60, null));
 check("garbage against an unknown ceiling never blocks",
   L.exceedsSinglePass("junk", {}) === false);
-check("a zero length never trips the guard", L.exceedsSinglePass(0, MINIMAX) === false);
-check("a negative length never trips the guard", L.exceedsSinglePass(-9, MINIMAX) === false);
+check("a zero length never trips the guard", L.exceedsSinglePass(0, HEYGEN) === false);
+check("a negative length never trips the guard", L.exceedsSinglePass(-9, HEYGEN) === false);
 
 console.log("\n" + "-".repeat(70));
 console.log("Two sections, in render order");

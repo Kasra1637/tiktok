@@ -337,16 +337,21 @@ class TestAppSpecificity:
         submit. There is no separate hook endpoint any more: the piece is one
         render, so this goes through the same gate as any generation.
 
-        The model is named — H3 Max — because this class pins the FULL-form
-        prompt contract: the headings, the directives and the two apps'
-        content side by side. Since ADR 0221 the default is HeyGen, whose
-        4,090 ceiling hands the builder the condensed form of the same
-        contract; condensing is pinned in its own suites
-        (TestPerProviderPromptBudget, TestHeygenScriptSacred), and asserting
-        full-form phrases against a default submit would test the fit, not
-        the content.
+        The model is named — HeyGen Video, the only one left since ADR
+        0327 removed MiniMax H3 Max — and its prompt ceiling is patched
+        up for the submit, because this class pins the FULL-form prompt
+        contract: the headings, the directives and the two apps' content
+        side by side. At HeyGen's real 4,090 ceiling the builder hands
+        back the condensed form of the same contract; condensing is
+        pinned in its own suites (TestPerProviderPromptBudget,
+        TestHeygenScriptSacred), and asserting full-form phrases against
+        a real-ceiling submit would test the fit, not the content.
         """
         from models import StudioGenerationRequest
+        import video_providers
+        monkeypatch.setitem(
+            video_providers._CAPABILITY_NOTES["heygen-video-1"],
+            "prompt_char_limit", 20000)
         project, _profile, _template = _make_project(api, spec)
         _store_strategy(api, project["id"], hook_line, persona, scene,
                         problem=problem, feature=feature, cta=cta)
@@ -359,7 +364,7 @@ class TestAppSpecificity:
         calls = _mock_submit(api, monkeypatch)
         _run(api.submit_project_generation(
             project_id=project["id"],
-            payload=StudioGenerationRequest(model="minimax-h3-max"), user_id=ANON))
+            payload=StudioGenerationRequest(model="heygen-video-1"), user_id=ANON))
         assert calls, "the generation never reached the provider"
         return calls[0]["prompt"]
 
@@ -603,7 +608,7 @@ class TestMustNotShowIsEnforced:
         import generation_planning
         prompt = generation_planning.build_single_pass_prompt(
             plan={"hook_line": "h", "script": "s", "cta": "c"},
-            profile=self._profile(),
+            profile=self._profile(), prompt_budget=20000,
         )
         assert "MUST NOT APPEAR" in prompt
         for item in self.FORBIDDEN:
@@ -639,7 +644,7 @@ class TestMustNotShowIsEnforced:
         })
         prompt = generation_planning.build_segment_prompt(
             strategy=strategy, profile=self._profile(),
-            duration=12, plan={"hook_seconds": 3},
+            duration=12, plan={"hook_seconds": 3}, prompt_budget=20000,
         )
         assert prompt.count("MUST NOT APPEAR") == 1
         for item in self.FORBIDDEN:
@@ -677,7 +682,7 @@ class TestMustNotShowIsEnforced:
             profile={
                 "brand_name": "ShiftLog",
                 "must_not_show": "a hospital corridor\na competitor's app icon",
-            },
+            }, prompt_budget=20000,
         )
         assert "a hospital corridor" in prompt
         assert "a competitor's app icon" in prompt

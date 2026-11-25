@@ -29,13 +29,17 @@ import character_policy
 
 # Hard ceiling on the assembled render prompt, in characters.
 #
-# Proven live: a 7,724-char prompt to minimax/hailuo-3-max was refused with
-# "content[0].text too long: 7724 > 7000 characters". The /videos payload
-# sends our prompt as the text verbatim, so the prompt itself must stay under
-# the provider's 7,000. The 200-char margin covers any measuring difference on
-# their side (e.g. astral-plane characters counted as two units); it is not
-# round-number comfort, and the test below pins the measured worst case so any
-# growth forces a conscious trim rather than a surprise 400.
+# This is HeyGen Video's ceiling — founder-specified at 4,090 — and since
+# ADR 0327 it is the only video model's ceiling there is: MiniMax H3 Max,
+# whose 6,800 this constant used to carry, was removed outright at the
+# founder's order, and with it the prompt-length refusal that used to
+# offer it as the escape. The prompt is now built against 4,090 from the
+# first assembly (the submit path passes the same number in from the
+# capability record), and the fit machinery below — scaling, condensing,
+# and the tightest tier — guarantees the assembled prompt lands inside
+# it: the spoken script is never cut, only the app's own direction
+# wording gives. An assembly that still came out over would be a builder
+# defect to fix here, never a message shown to the founder.
 #
 # Enforced structurally, not by truncating the finished string: every variable
 # read below goes through _clip, so the worst case is bounded no matter what
@@ -43,16 +47,16 @@ import character_policy
 # before this ceiling existed. Cutting the finished tail instead would
 # amputate the identity close at the end, which is the worst part of the
 # prompt to lose.
-RENDER_PROMPT_LIMIT = 6800
+RENDER_PROMPT_LIMIT = 4090
 
 # How much of the field budgets above to actually grant this render.
 #
-# The budgets above are sized for the provider whose ceiling RENDER_PROMPT_LIMIT
-# was measured against. A second provider with a lower ceiling cannot be given
-# the same prompt: it 400s, and the founder pays for the attempt. Rather than
-# truncate the finished string — which would amputate the identity close at the
-# very end, the worst part of the prompt to lose — every _clip is scaled, so the
-# bound holds structurally at any ceiling.
+# The budgets above are sized against this ceiling. A caller working to a
+# lower budget cannot be given the same prompt: it 400s, and the founder
+# pays for the attempt. Rather than truncate the finished string — which
+# would amputate the identity close at the very end, the worst part of
+# the prompt to lose — every _clip is scaled, so the bound holds
+# structurally at any ceiling.
 #
 # A ContextVar rather than a parameter threaded through all four helper
 # functions: the scale is set once at the top of build_segment_prompt and must
@@ -145,6 +149,24 @@ FINAL_FIT_DECAY = 0.7
 # scale and for the same reason: it has to reach the assembler without threading
 # a parameter through every helper.
 _PROMPT_CONDENSED: ContextVar = ContextVar("hookforge_prompt_condensed", default=False)
+
+# Whether the tightest tier of the fixed instructions is engaged (ADR 0327).
+#
+# The last resort, reached only when the measured walk has bottomed out at
+# FINAL_SCALE and the assembly is still over its budget: the fixed direction
+# text itself gives up its remaining redundant phrasing — the handoff and
+# the audio rule in their shortest forms, the place label shortened, and
+# the one direction line the scene lock and identity close already carry
+# between them dropped outright. The spoken script is untouched, as it is
+# at every tier. This tier is what makes the fit a guarantee rather than a
+# hope: with MiniMax gone there is no roomier model to offer instead, and
+# the founder's order is that an over-limit assembly is a builder defect
+# to absorb here, never a refusal shown to them. Measured against the
+# saturated fixture: the worst bottom-out — fixed camera at the silent
+# build's reduced 3,631 budget — stood 26 over after the walk; with the
+# tier engaged it lands 85 under, and the speaking build at the full
+# 4,090 lands 65 under.
+_PROMPT_TIGHTEST: ContextVar = ContextVar("hookforge_prompt_tightest", default=False)
 
 # Any ceiling under this renders with the condensed instructions.
 #
@@ -315,19 +337,23 @@ SINGLE_PASS_PROMPT_FLOOR = 2951
 # ceiling no squeezing could pull back: the profile normalizer caps how many
 # items a list has and never how long a string is, so a long pasted name arrives
 # whole, and past roughly 630 characters the fit loop bottoms out with the
-# prompt still over HeyGen's 4,090 — which the submit guard reports as the
+# prompt still over HeyGen's 4,090 — reported, in the refusal era, as the
 # script being too long, on the one provider whose ceiling is tight enough for
 # the name to matter. Sixty characters is far longer than any real app name.
 APP_NAME_PROMPT_CHARS = 60
 
-# What the variables are given at the default ceiling, derived rather than
-# measured: the default ceiling is a TOTAL, and the floor is part of it.
+# The natural size of the variable text at full budgets — the scale's
+# denominator. It was derived as the old 6,800 default ceiling minus the
+# full floor; ADR 0327 keeps the measured value itself rather than the
+# derivation, because the ceiling it was derived from is gone and the
+# quantity it names — how much variable text a saturated strategy carries
+# at full budgets — did not change when the ceiling did.
 #
 # This overestimates the variable text the code can actually assemble, which is
 # the safe direction. Saturated fields top out around 3,830 characters, not
 # 4,753, so a tight budget clips marginally harder than it strictly needs to.
 # Erring toward a shorter prompt that fits beats an exact split that does not.
-NATURAL_VARIABLE_SPACE = RENDER_PROMPT_LIMIT - FULL_PROMPT_FLOOR
+NATURAL_VARIABLE_SPACE = 2790
 
 
 def _prompt_floors(strategy, condensed: bool) -> int:
@@ -360,7 +386,7 @@ def _budget_scale(prompt_budget, condensed: bool, floor=None) -> float:
     scale = available / float(NATURAL_VARIABLE_SPACE)
     # A ceiling at or below the floor leaves the variables nothing. Squeeze to
     # the floor of the scale rather than to zero: a prompt of one-character
-    # stubs reads as corruption, and the submit guard will refuse it anyway.
+    # stubs reads as corruption, and the fit walk below it takes the rest.
     return max(MIN_SCALE, min(1.0, scale))
 
 
@@ -449,8 +475,8 @@ def _clip(text, limit: int, protect: bool = False, sacred: bool = False,
     if len(s) <= effective:
         return s
     head = s[:effective].rstrip()
-    # Clean boundary on any squeeze, not only the condensed path: a 6,800-char
-    # Hailuo prompt over budget squeezes to scale < 1.0 with condensed False,
+    # Clean boundary on any squeeze, not only the condensed path: a prompt
+    # over budget squeezes to scale < 1.0 with condensed False,
     # and a hard mid-word cut there is noise the model reads as an instruction.
     if _PROMPT_CONDENSED.get() or scale < 1.0:
         return _clean_boundary(head)
@@ -486,6 +512,46 @@ _CONDENSED_HANDOFF = (
     "Founder adds demo/close later. Do NOT film the app in use or render any "
     "interface, screenshot, button, price, rating, review/download count, logo "
     "or text. Use locked Location/light/props from verified app facts; never invent claims."
+)
+
+# The tightest tier's forms (ADR 0327, see _PROMPT_TIGHTEST): the same
+# rules with their redundant phrasing trimmed — the handoff drops the
+# enumerated list the UI warning's condensed twin already implies, and
+# the audio rule loses its doubled negatives. Engaged only when the fit
+# walk has bottomed out over budget.
+_TIGHTEST_HANDOFF = (
+    "Founder adds demo/close later. Do NOT film the app in use or render any "
+    "interface, price, rating, logo or text. Use locked Location/light/props "
+    "from verified facts; never invent claims."
+)
+
+_TIGHTEST_AUDIO = (
+    "Audio: the presenter's voice only. No music, no sound effects."
+)
+
+# The tightest opening: ADR 0187/0223's rule whole — mid-motion, the
+# story's own channel, the snap inside the first half second, voice from
+# the first frame, escalation, no resting pose — with the two clauses
+# the rest of the prompt already carries ("follow the score" is what
+# the sections are; the question is the hook's job, stated in its
+# heading) trimmed out.
+_TIGHTEST_OPENING = (
+    "Pattern interrupt: first frame already moving, voice already speaking; "
+    "1-2s: clearly visible movement, gesture or position change — no neutral "
+    "pose, fade, greeting. One beat enacts this story's central action at its "
+    "sharpest instant via this video's channel (hand, face, mouth, body, "
+    "camera) — snap inside the first half-second; then escalate via face, "
+    "gaze, hands, posture; no resting pose, hand on the chest, or slow "
+    "settle. Ground beats in this video's own situation."
+)
+
+# The tightest phone handoff (fixed camera): every constraint of the
+# condensed framing survives — whole phone, uncropped, margins, eyes on
+# it, sharp to the last frame, central 88% — in fewer words.
+_TIGHTEST_PHONE_HANDOFF_FRAMING = (
+    "Final 1-2s: she raises the phone into view, back to camera, screen to "
+    "her; whole phone visible, uncropped, clear margins, eyes on it, "
+    "excited, never glancing away, through the last frame; sharp; central 88%."
 )
 
 # The one-take / no-cut rule is not restated here: the condensed header's
@@ -936,9 +1002,9 @@ def build_single_pass_prompt(
     with no way to fit a tight ceiling — nothing in it could be squeezed and a
     prompt that did not fit could only be refused. The submit path refuses a
     strategy-less project before it builds any prompt, so this is not the path
-    behind the 4,152-character HeyGen refusal; it is the same ceiling with no
-    answer for it, and it now scales like its sibling instead of depending on
-    the guard.
+    behind the 4,152-character HeyGen refusal of the refusal era; it is the
+    same ceiling with no answer for it, and it now scales and tightens like
+    its sibling instead of depending on a guard.
 
     `script_sacred` carries the same meaning as in `build_segment_prompt`: the
     founder's spoken words hold their full budget and the direction absorbs the
@@ -1020,6 +1086,31 @@ def build_single_pass_prompt(
                 _PROMPT_CONDENSED.reset(t_condensed)
                 _PROMPT_SCALE.reset(t_scale)
             if len(prompt) <= budget or final_scale <= FINAL_SCALE:
+                break
+            step *= FINAL_FIT_DECAY
+    # The tightest tier, as on the segment builder (ADR 0327): still over
+    # at FINAL_SCALE means the fixed text itself gives up its remaining
+    # redundant phrasing and the walk measures once more — never a refusal.
+    if len(prompt) > budget:
+        step = final_scale
+        for _ in range(FINAL_FIT_MAX_STEPS):
+            tight_scale = max(FINAL_SCALE, step)
+            t_scale = _PROMPT_SCALE.set(tight_scale)
+            t_condensed = _PROMPT_CONDENSED.set(condensed)
+            t_protect = _PROMPT_PROTECT.set(False)
+            t_sacred = _PROMPT_SCRIPT_SACRED.set(bool(script_sacred))
+            t_tightest = _PROMPT_TIGHTEST.set(True)
+            try:
+                prompt = _assemble_single_pass_prompt(
+                    plan, profile, template, duration, segment, is_extension,
+                )
+            finally:
+                _PROMPT_TIGHTEST.reset(t_tightest)
+                _PROMPT_SCRIPT_SACRED.reset(t_sacred)
+                _PROMPT_PROTECT.reset(t_protect)
+                _PROMPT_CONDENSED.reset(t_condensed)
+                _PROMPT_SCALE.reset(t_scale)
+            if len(prompt) <= budget or tight_scale <= FINAL_SCALE:
                 break
             step *= FINAL_FIT_DECAY
     return prompt
@@ -1159,6 +1250,8 @@ def _assemble_single_pass_prompt(
     # is banned from these renders, so the founder's saved sound direction —
     # which this line used to print — is deliberately not read here.
     sections.append(
+        _TIGHTEST_AUDIO
+        if _PROMPT_TIGHTEST.get() else
         "The only audio is the presenter's spoken voice. No background music, "
         "no songs, no ambient music, no sound effects — voice only."
     )
@@ -1184,7 +1277,8 @@ def _assemble_single_pass_prompt(
         # Same first-frame release as the main path, worded for a prompt with
         # no scene lock: this fallback renders from the plan alone, so the
         # place comes from the described scene rather than a locked one.
-        if not (_PROMPT_CONDENSED.get() and _PROMPT_SCRIPT_SACRED.get()):
+        # The tightest tier drops it (ADR 0327), as on the main path.
+        if not (_PROMPT_CONDENSED.get() and _PROMPT_SCRIPT_SACRED.get()) and not _PROMPT_TIGHTEST.get():
             sections.append(
                 "Open in the scene described above, never the photo's room: the "
                 "photo supplies only the person."
@@ -1196,70 +1290,6 @@ def _assemble_single_pass_prompt(
     )
 
     return "\n\n".join(sections)
-
-
-def prompt_ceiling_refusal(
-    prompt_chars: int,
-    ceiling: int,
-    model_name: str,
-    alternative: Optional[dict] = None,
-) -> str:
-    """
-    The 409 body for a prompt still over its provider's ceiling after fitting.
-
-    This lives here, as a pure function, because the wording IS the refusal: the
-    founder has just been stopped before any spend, and this sentence is the
-    only thing telling them what to do next.
-
-    This is the backstop, not the fit (ADR 0255). Both builders walk their
-    scale down until the assembled prompt fits, squeezing the app's own
-    direction wording — the script is sacred and is never the squeeze's
-    source. What reaches here is a prompt whose unscalable mass alone (the
-    fixed instructions, the spoken words, the scene's absolutes) exceeds
-    the model's ceiling even at the tightest assembly. The refusal
-    therefore never advises cutting the script: the old wording did
-    exactly that ("Cut about 9 characters from the script"), sending the
-    founder to trim the one part of the prompt the fit never touches,
-    for an overflow the direction wording caused. The levers that remain
-    are the ones that can actually change the outcome:
-
-    - The model, and only to one this deployment offers above this ceiling.
-      `alternative` is that model's capability record (or None when this is
-      already the roomiest), so the number quoted is the number the submit
-      path enforces rather than a name typed into a string.
-    - A shorter scene and direction, rebuilt on the Hook + Story step —
-      the mass that does scale, reduced at its source.
-
-    "Nothing has been charged" stays in every variant: the guard runs before
-    the provider call, and that reassurance is the difference between a
-    refusal the founder retries and one they abandon.
-    """
-    prompt_chars = int(prompt_chars)
-    ceiling = int(ceiling)
-    over = max(0, prompt_chars - ceiling)
-    name = (model_name or "this model").strip()
-    message = (
-        f"This script and photo assemble a {prompt_chars}-character prompt, {over} over "
-        f"the {ceiling} {name} accepts."
-    )
-
-    alt_name = (alternative.get("name") or alternative.get("key") or "").strip() if alternative else ""
-    alt_ceiling = int(alternative.get("prompt_char_limit") or 0) if alternative else 0
-    has_alternative = bool(alt_name and alt_ceiling > ceiling)
-    if has_alternative:
-        message += f" {alt_name} accepts {alt_ceiling}."
-
-    message += (
-        " The app's direction around your words is already squeezed to its "
-        "tightest and still does not fit, so cutting the script is not the fix."
-    )
-    advice = (
-        f"Switch to {alt_name} on the Generate step"
-        if has_alternative
-        else "No model in this workspace accepts a longer prompt; shorten the "
-        "scene and direction on the Hook + Story step and build the strategy again"
-    )
-    return f"{message} {advice} — nothing has been charged."
 
 
 def is_recoverable_error(message: str) -> bool:
@@ -1369,8 +1399,8 @@ def person_anchor_notes(assets: list) -> str:
     attached character reference, or "" when none is attached.
 
     The reference image itself rides along as a model input (see server.py's
-    _submit_generation, which carries it as the opening frame on both studio
-    models, Hailuo 3 Max and HeyGen Video). This text tells the
+    _submit_generation, which carries it as the opening frame on the studio's
+    one model, HeyGen Video). This text tells the
     model what that image IS: the exact person who must appear on camera. First matching character_reference asset wins —
     attach only one per project.
 
@@ -1785,8 +1815,8 @@ def build_segment_prompt(
             both agreed on. Nothing else is taken from it: the strategy already
             carries the approved words.
         prompt_budget: this render's character ceiling. Defaults to
-            RENDER_PROMPT_LIMIT, which is the measured figure for Hailuo. A
-            provider with a lower ceiling passes its own; every field budget is
+            RENDER_PROMPT_LIMIT — HeyGen Video's 4,090, the only model's.
+            A caller with a lower budget passes its own; every field budget is
             scaled down to fit rather than the tail being cut off. A ceiling low
             enough to leave the fixed instructions most of the budget (see
             CONDENSE_BELOW) also switches the fixed text to its condensed form,
@@ -1887,33 +1917,31 @@ def build_segment_prompt(
     # default is what the parameter always claimed to do.
     if prompt_budget is None:
         prompt_budget = RENDER_PROMPT_LIMIT
-    if prompt_budget:
-        try:
-            budget = float(prompt_budget)
-        except (TypeError, ValueError):
-            budget = 0.0
-        # A zero, negative or non-numeric budget is a caller bug, not a tight
-        # budget. Falling back to the measured default keeps the prompt whole;
-        # clamping it would silently shrink every Hailuo render to a tenth of
-        # its detail because someone passed -1.
-        if budget > 0:
-            condensed = budget < CONDENSE_BELOW
-            scale = _budget_scale(budget, condensed, _prompt_floors(strategy, condensed))
-
-    # Normalised, not just ignored: the retry loop below tests the budget for
-    # truthiness, and a negative one is truthy while no prompt can ever be <= it,
-    # so it would squeeze the render to nothing. A caller bug gets the
-    # measured default — which is what the docstring promises, and what an
-    # omitted prompt_budget now gets too — rather than an unlimited prompt.
+    try:
+        budget = float(prompt_budget)
+    except (TypeError, ValueError):
+        budget = 0.0
+    # A zero, negative or non-numeric budget is a caller bug, not a tight
+    # budget. Falling back to the measured default keeps the prompt whole;
+    # clamping it would silently shrink every render to a tenth of
+    # its detail because someone passed -1. The fallback budget derives
+    # its condensed flag and scale like any other budget (ADR 0327):
+    # normalizing only the number left a nonsense budget building the
+    # full form at scale 1.0 and squeezing from there — a different
+    # prompt from the default build it claims to fall back to, which
+    # only stayed invisible while the default ceiling was roomy enough
+    # for the two to coincide.
     if budget <= 0:
         budget = float(RENDER_PROMPT_LIMIT)
+    condensed = budget < CONDENSE_BELOW
+    scale = _budget_scale(budget, condensed, _prompt_floors(strategy, condensed))
 
     # Protected values hold their full budget, so the scale is no longer a
     # reliable predictor of the assembled length and can undershoot on a very
     # full strategy. Measure what was actually built and squeeze again rather
-    # than hand the guard an over-budget prompt: the guard's answer is to refuse
-    # the render, which makes the model unusable for exactly the detailed
-    # founders who gave it the most to work with.
+    # than hand back an over-budget prompt: an over-budget assembly makes the
+    # model unusable for exactly the detailed founders who gave it the most
+    # to work with.
     prompt = ""
     for attempt in range(MAX_FIT_ATTEMPTS):
         token = _PROMPT_SCALE.set(scale)
@@ -1951,7 +1979,7 @@ def build_segment_prompt(
         scale = max(MIN_SCALE, scale * room / variable * 0.99)
 
     # Still over after the correction loop. That means the scale bottomed out at
-    # MIN_SCALE with the prompt above the ceiling, and until now the only
+    # MIN_SCALE with the prompt above the ceiling, and in the refusal era the
     # remaining outcome was the submit guard refusing the render — the founder
     # reading that their script was too long when it was the description around
     # it that would not fit. That is the shape of the report this closes: a
@@ -2023,6 +2051,38 @@ def build_segment_prompt(
                 _PROMPT_CONDENSED.reset(token2)
                 _PROMPT_SCALE.reset(token)
             if len(prompt) <= budget or final_scale <= FINAL_SCALE:
+                break
+            step *= FINAL_FIT_DECAY
+
+    # Still over at FINAL_SCALE: the unscalable mass alone — the condensed
+    # fixed text, the absolutes, the sacred words — exceeds the budget.
+    # Until ADR 0327 this prompt went back over budget and the submit path
+    # refused the render, latterly suggesting the founder switch to the
+    # roomier model. That model is gone and the refusal with it (Kasra's
+    # order): the tightest tier engages instead — the fixed direction text
+    # gives up its remaining redundant phrasing (see _PROMPT_TIGHTEST) —
+    # and the same measured walk runs once more against the shorter text,
+    # starting from the scale the walk bottomed out at. The spoken words
+    # do not move at this tier either.
+    if budget and len(prompt) > budget:
+        step = final_scale
+        for _ in range(FINAL_FIT_MAX_STEPS):
+            tight_scale = max(FINAL_SCALE, step)
+            token = _PROMPT_SCALE.set(tight_scale)
+            token2 = _PROMPT_CONDENSED.set(condensed)
+            token3 = _PROMPT_PROTECT.set(False)
+            token4 = _PROMPT_SCRIPT_SACRED.set(bool(script_sacred))
+            token5 = _PROMPT_TIGHTEST.set(True)
+            try:
+                prompt = _assemble_prompt(
+                    strategy, profile, template, duration, assets, plan)
+            finally:
+                _PROMPT_TIGHTEST.reset(token5)
+                _PROMPT_SCRIPT_SACRED.reset(token4)
+                _PROMPT_PROTECT.reset(token3)
+                _PROMPT_CONDENSED.reset(token2)
+                _PROMPT_SCALE.reset(token)
+            if len(prompt) <= budget or tight_scale <= FINAL_SCALE:
                 break
             step *= FINAL_FIT_DECAY
     return prompt
@@ -2104,12 +2164,16 @@ def _assemble_prompt(
                 "the viewer to download or install anything."
             )
         )
-        sections.append(_CONDENSED_HANDOFF)
+        sections.append(_TIGHTEST_HANDOFF if _PROMPT_TIGHTEST.get() else _CONDENSED_HANDOFF)
 
     # The requirement the beats below have to satisfy. Placed ahead of them, so
     # the model reads it as the standard for what follows rather than as another
     # fact about the video.
-    sections.append(_CONDENSED_OPENING if condensed else _OPENING_INTERRUPT)
+    sections.append(
+        _TIGHTEST_OPENING
+        if _PROMPT_TIGHTEST.get() and condensed else
+        _CONDENSED_OPENING if condensed else _OPENING_INTERRUPT
+    )
 
     # A hook render's opening is its physical gesture, not a face
     # channel (ADR 0250) — stated beside the general opening rule it
@@ -2167,7 +2231,12 @@ def _assemble_prompt(
         plan.get("location") or plan.get("visual_direction"), 160, protect=True
     )
     if location:
+        # The tightest tier shortens the label (ADR 0327): the scene lock
+        # below carries the one-place rule in full, so the label's own
+        # restatement is the redundancy that gives.
         sections.append(
+            f"WHERE — one place, one time, whole take: {location}"
+            if _PROMPT_TIGHTEST.get() else
             "WHERE THIS HAPPENS — one place, one time, for the whole take, and "
             f"every visual detail happens here: {location}"
         )
@@ -2295,7 +2364,11 @@ def _assemble_prompt(
     # The final moment: the phone handoff when both hands are free, the chosen
     # physical ending when the camera is the phone in their hand (ADR 0093).
     if str(strategy.get("camera_setup") or "handheld") == "fixed":
-        sections.append(_CONDENSED_PHONE_HANDOFF_FRAMING if condensed else _PHONE_HANDOFF_FRAMING)
+        sections.append(
+            _TIGHTEST_PHONE_HANDOFF_FRAMING
+            if _PROMPT_TIGHTEST.get() and condensed else
+            _CONDENSED_PHONE_HANDOFF_FRAMING if condensed else _PHONE_HANDOFF_FRAMING
+        )
     else:
         ending = " ".join(str(strategy.get("final_beat") or "").split()).strip()
         if not ending:
@@ -2311,6 +2384,8 @@ def _assemble_prompt(
     # music in one pass with no way to separate them afterwards, so without
     # this every render arrives with a music bed under the speech.
     sections.append(
+        _TIGHTEST_AUDIO
+        if _PROMPT_TIGHTEST.get() else
         "The only audio is the presenter's spoken voice. No background music, "
         "no songs, no ambient music, no sound effects — voice only."
     )
@@ -2331,11 +2406,12 @@ def _assemble_prompt(
         sections.append(person_anchor)
         # A model that pins the photo as its first frame opens ON that photo:
         # without this the opening is the uploaded room and the prompted scene
-        # only arrives mid-clip. HeyGen used to be that shape and no longer is
-        # (its identity rides as a reference image), but Hailuo 3 Max still
-        # pins one — and even a *reference* image biases the room a model invents.
+        # only arrives mid-clip. HeyGen pins the photo as its first frame —
+        # and even a *reference* image biases the room a model invents.
         # HeyGen's condensed anchor already carries that rule; other prompts state it here.
-        if not (_PROMPT_CONDENSED.get() and _PROMPT_SCRIPT_SACRED.get()):
+        # The tightest tier drops the line outright (ADR 0327): the scene
+        # lock and the identity close carry the rule between them.
+        if not (_PROMPT_CONDENSED.get() and _PROMPT_SCRIPT_SACRED.get()) and not _PROMPT_TIGHTEST.get():
             sections.append(
                 "Open in the locked scene, never the photo's room: the photo "
                 "supplies only the person."

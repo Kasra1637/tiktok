@@ -35,33 +35,6 @@ logger = logging.getLogger(__name__)
 # supports_combined_refs: whether one request can carry both a first-frame
 # image and other references. False means we must pick one.
 _CAPABILITY_NOTES = {
-    "minimax-h3-max": {
-        "vertical": True,
-        # Proven REFUSED live: the serving provider 400s input_references with
-        # "does not support image input references", even though OpenRouter
-        # lists the field for this model. The count below is input_references
-        # capacity specifically, so it is 0 — accepts_identity_reference() must
-        # not read it as permission to send any. Identity rides as the opening
-        # frame instead (documented supported: https URL or base64 data URL),
-        # which _submit_generation selects via identity_via_first_frame.
-        "max_reference_images": 0,
-        "max_reference_videos": 3,
-        "max_reference_audio": 3,
-        "supports_first_frame": True,
-        "supports_last_frame": True,
-        "identity_via_first_frame": True,
-        # Same provider as H3, so the same measured ceiling.
-        "prompt_char_limit": 6800,
-        "notes": (
-            "768p (not 2K), 5-15s per generation. Faster, with tighter "
-            "prompt adherence, which makes it useful for testing a "
-            "script quickly. Picture is softer, and native audio is not "
-            "requested because the provider does not document the flag for "
-            "this model. Your photo opens the video as its first frame rather "
-            "than riding alongside as a reference image. Opt-in: HeyGen "
-            "Video is the default."
-        ),
-    },
     "heygen-video-1": {
         "vertical": True,
         # One reference image, carried as the pinned opening frame — see
@@ -75,8 +48,8 @@ _CAPABILITY_NOTES = {
         "max_reference_audio": 0,
         # The model does accept a first frame (listed). We DELIBERATELY pin the
         # opening frame to the founder's photo instead of generating from the
-        # plan, so the photo is a hard anchor — the same first-frame route
-        # H3 Max uses — rather than a soft input_references suggestion.
+        # plan, so the photo is a hard anchor rather than a soft
+        # input_references suggestion.
         # accepts_identity_reference() stays True: the photo is accepted; the
         # flag records that it rides as the opening frame.
         "supports_first_frame": True,
@@ -106,12 +79,12 @@ _CAPABILITY_NOTES = {
 # template workflow removed. Any other configured key resolves back to the
 # default with a logged reason.
 #
-# H3 Max sits alongside the default as an opt-in comparison: both are
-# generative, so the founder can render the same script on either and
-# compare. Order here does not decide the default — that is
+# HeyGen Video is the only entry (ADR 0327): MiniMax H3 Max, the opt-in
+# comparison that sat alongside it, was removed outright at the founder's
+# order. Order here does not decide the default — that is
 # ai_service.DEFAULT_VIDEO_MODEL, HeyGen Video since ADR 0221. Listing a
 # model only makes it selectable in the studio's model dropdown.
-STUDIO_ELIGIBLE = ("minimax-h3-max", "heygen-video-1")
+STUDIO_ELIGIBLE = ("heygen-video-1",)
 
 # The hook length used when nothing states one. 5s is the lowest length the
 # current provider can render, so it needs no trim; a template's own
@@ -197,11 +170,9 @@ def is_studio_eligible(key: str) -> bool:
 def accepts_identity_reference(key: str) -> bool:
     """Whether the provider can take the founder's identity image at all.
 
-    Hailuo 3 Max refuses input_references outright (proven live: the
-    serving provider 400s it), but takes the photo as the opening frame,
-    so it still accepts the identity — through a different field, selected
-    by identity_via_first_frame. HeyGen Video takes the same first-frame
-    route. Editors (Aleph) need a real clip to edit — the template
+    HeyGen Video takes the photo as the opening frame, so it accepts the
+    identity — through that field, selected by identity_via_first_frame.
+    Editors (Aleph) need a real clip to edit — the template
     workflow has none — so they are refused here too.
     """
     if not is_known(key):

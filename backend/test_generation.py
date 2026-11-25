@@ -18,8 +18,16 @@ class TestProviderResolution:
         assert vp.default_model_key() == "heygen-video-1"
 
     def test_env_override_changes_the_default(self, monkeypatch):
+        monkeypatch.setenv("VIDEO_MODEL_DEFAULT", "heygen-video-1")
+        assert vp.default_model_key() == "heygen-video-1"
+
+    def test_env_override_naming_a_removed_model_is_ignored(self, monkeypatch):
+        """ADR 0327: MiniMax H3 Max is out of the catalog, so an env
+        override still naming it cannot resurrect it — the default
+        resolves to HeyGen with the override ignored, as for any
+        unusable value."""
         monkeypatch.setenv("VIDEO_MODEL_DEFAULT", "minimax-h3-max")
-        assert vp.default_model_key() == "minimax-h3-max"
+        assert vp.default_model_key() == "heygen-video-1"
 
     def test_bad_env_default_is_ignored(self, monkeypatch):
         monkeypatch.setenv("VIDEO_MODEL_DEFAULT", "not-a-model")
@@ -36,9 +44,23 @@ class TestProviderResolution:
         assert vp.default_model_key() == "heygen-video-1"
 
     def test_resolve_honours_an_allowed_request(self):
-        key, reason = vp.resolve("minimax-h3-max")
-        assert key == "minimax-h3-max"
+        key, reason = vp.resolve("heygen-video-1")
+        assert key == "heygen-video-1"
         assert "requested" in reason
+
+    def test_resolve_falls_back_for_the_removed_h3_max(self):
+        """
+        MiniMax H3 Max was removed from VIDEO_MODELS in ADR 0327. Rows
+        and saved choices saved before that still name minimax-h3-max,
+        so resolving it must degrade to the default — HeyGen — with a
+        reason, never raise and never silently keep it. Same contract
+        as Hailuo 3 below.
+        """
+        assert vp.is_known("minimax-h3-max") is False
+        key, reason = vp.resolve("minimax-h3-max")
+        assert key == "heygen-video-1"
+        assert "unknown" in reason
+        assert vp.capability("minimax-h3-max")["key"] == "heygen-video-1"
 
     def test_resolve_falls_back_for_unknown_model(self):
         key, reason = vp.resolve("does-not-exist")
@@ -100,12 +122,13 @@ class TestCapabilities:
     def test_only_generative_models_are_studio_providers(self):
         """
         The point of this list is that every entry can generate a video from a
-        prompt, so no in-context editor is ever offered. H3 Max is a second
-        MiniMax generative model offered for comparison against the default.
-        Aleph stays out because it edits a clip rather than making one.
+        prompt, so no in-context editor is ever offered. Since ADR 0327 the
+        list is exactly one model — HeyGen Video; MiniMax H3 Max was removed
+        outright. Aleph stays out because it edits a clip rather than
+        making one.
         """
         keys = [c["key"] for c in vp.list_capabilities()]
-        assert keys == ["minimax-h3-max", "heygen-video-1"]
+        assert keys == ["heygen-video-1"]
         assert "aleph-2" not in keys
         for cap in vp.list_capabilities():
             assert cap["is_video_editor"] is False
@@ -123,14 +146,14 @@ class TestCapabilities:
     def test_heygen_video_is_the_default(self):
         """
         Kasra's ruling (ADR 0221, Nov 19 2026): Hailuo 3 leaves the list and
-        HeyGen Video is the default in its place. A render that names no
-        model uses HeyGen; a render that names H3 Max is honoured, not
-        swapped — promoting the default must not move explicit picks.
+        HeyGen Video is the default in its place. Since ADR 0327 it is also
+        the only model: a render that names no model uses HeyGen, and a
+        render naming the removed H3 Max degrades to it (pinned in
+        TestProviderResolution).
         """
         assert vp.is_studio_eligible("heygen-video-1") is True
         assert vp.default_model_key() == "heygen-video-1"
         assert vp.resolve(None)[0] == "heygen-video-1"
-        assert vp.resolve("minimax-h3-max")[0] == "minimax-h3-max"
 
     def test_heygen_video_is_registered_at_its_real_id(self):
         cap = vp.capability("heygen-video-1")
@@ -165,20 +188,19 @@ class TestCapabilities:
         cap = vp.capability("heygen-video-1")
         assert cap["supported_resolutions"] == ["480p", "768p"]
         assert cap["resolution"] == "768p"
-        assert vp.capability("minimax-h3-max")["supported_resolutions"] == []
 
     def test_a_pinned_opening_frame_is_told_to_open_in_the_prompted_scene(self):
         """
         A model that pins the photo as its first frame opens ON that photo, so
         without an explicit instruction the opening is the uploaded room and
-        the prompted scene only arrives mid-clip. Hailuo 3 Max is the renderer
-        that still pins one; the photo supplies the person, the place comes
+        the prompted scene only arrives mid-clip. HeyGen Video is the renderer
+        that pins one; the photo supplies the person, the place comes
         from text — asserted on the anchor and on both prompt paths.
         """
-        cap = vp.capability("minimax-h3-max")
+        cap = vp.capability("heygen-video-1")
         assert cap["supports_first_frame"] is True
         assert cap["identity_via_first_frame"] is True
-        assert vp.accepts_identity_reference("minimax-h3-max") is True
+        assert vp.accepts_identity_reference("heygen-video-1") is True
         assets = [{"kind": "character_reference", "label": "Founder face"}]
         anchor = gp.person_anchor_notes(assets)
         assert "only authority on the person" in anchor
@@ -222,7 +244,6 @@ class TestCapabilities:
         it silently, and a future loose one does not keep it pointlessly.
         """
         assert vp.script_is_sacred("heygen-video-1") is True
-        assert vp.script_is_sacred("minimax-h3-max") is False
 
     def test_an_removed_provider_falls_back_to_the_default(self):
         """
@@ -239,11 +260,6 @@ class TestCapabilities:
             assert key == vp.default_model_key()
             assert "unknown provider" in reason
 
-    def test_minimax_is_capped_at_15s(self):
-        cap = vp.capability("minimax-h3-max")
-        assert cap["max_duration"] == 15
-        assert cap["supports_combined_refs"] is False
-
     def test_unknown_key_falls_back_instead_of_raising(self):
         cap = vp.capability("nope")
         assert cap["key"] == vp.default_model_key()
@@ -253,7 +269,7 @@ class TestCapabilities:
         assert "aleph-2" not in keys
 
     def test_capability_record_has_the_planning_fields(self):
-        cap = vp.capability("minimax-h3-max")
+        cap = vp.capability("heygen-video-1")
         for field in (
             "id", "name", "min_duration", "max_duration", "resolution",
             "supports_references", "supports_native_audio", "vertical",
@@ -264,116 +280,54 @@ class TestCapabilities:
 
 
 
-class TestHailuo3MaxIsOptIn:
+class TestMiniMaxH3MaxIsRemoved:
     """
-    H3 Max stays on the list as an opt-in comparison model (ADR 0221). These
-    tests pin the two halves of that promise: Hailuo 3's removal and HeyGen's
-    promotion must not change H3 Max, and it must never become the model a
-    render uses unless it was asked for by name.
+    MiniMax H3 Max is out (ADR 0327, Kasra's order, Nov 24 2026: "Fully
+    remove minimax"). It was the opt-in comparison beside HeyGen Video
+    (ADR 0221); its 6,800 prompt ceiling was also the escape the old
+    prompt-length refusal offered, which is why the removal and the
+    refusal's deletion land together. These pin the removal contract:
+    the key is gone from the catalog and the eligible list, and every
+    stale reference to it — a saved row, an env override, an allowlist —
+    degrades to HeyGen rather than resurrecting it or raising. Stored
+    History rows keep the label they were rendered under; only the
+    going-forward offering changed.
     """
 
-    def test_hailuo_3_is_gone_from_the_catalog(self):
-        """
-        Kasra's order (ADR 0221): minimax/hailuo-3 leaves the model list.
-        The entry must not creep back as a side effect of editing a
-        neighbour — a render offered a removed model is spend on a model
-        the founder was told is gone.
-        """
+    def test_h3_max_is_gone_from_the_catalog(self):
+        from ai_service import VIDEO_MODELS
+
+        assert "minimax-h3-max" not in VIDEO_MODELS
+        assert "minimax/hailuo-3-max" not in [m["id"] for m in VIDEO_MODELS.values()]
+        assert "minimax-h3-max" not in vp.STUDIO_ELIGIBLE
+
+    def test_hailuo_3_stays_gone_too(self):
+        """ADR 0221's removal, still pinned: neither MiniMax key creeps back."""
         from ai_service import VIDEO_MODELS
 
         assert "minimax-h3" not in VIDEO_MODELS
         assert "minimax/hailuo-3" not in [m["id"] for m in VIDEO_MODELS.values()]
         assert "minimax-h3" not in vp.STUDIO_ELIGIBLE
 
-    def test_h3_max_is_registered_at_its_real_id(self):
-        cap = vp.capability("minimax-h3-max")
-        assert cap["id"] == "minimax/hailuo-3-max"
-        assert cap["max_duration"] == 15
-        assert cap["min_duration"] == 5
-        # The whole point of adding it: a second rendering of the same script.
-        assert cap["supports_references"] is True
-
-    def test_h3_max_is_768p_not_2k(self):
-        """
-        OpenRouter accepts only "768p" or "480p" for this model and rejects an
-        unlisted value, so 2K would 400 on every render. With Hailuo 3 gone
-        (ADR 0221) no catalog entry renders 2K at all — the field that could
-        not be copied from its entry is now moot, and this pins that too.
-        """
-        assert vp.capability("minimax-h3-max")["resolution"] == "768p"
-        assert all(
-            c["resolution"] != "2K" for c in vp.list_capabilities()
-        )
-
-    def test_h3_max_does_not_request_native_audio(self):
-        """
-        generate_audio is absent from OpenRouter's accepted fields for H3 Max,
-        so the studio must omit it rather than send it and risk a 400. If a real
-        clip comes back silent, this flag is the thing to flip.
-        """
-        assert vp.capability("minimax-h3-max")["supports_native_audio"] is False
-
-    def test_h3_max_is_offered_in_the_studio(self):
-        assert vp.is_studio_eligible("minimax-h3-max")
-        assert "minimax-h3-max" in [c["key"] for c in vp.list_capabilities()]
-
-    def test_heygen_is_the_default_and_hailuo_3_is_absent(self):
-        """
-        Kasra's ruling (ADR 0221, Nov 19 2026): when Hailuo 3 was removed he
-        named HeyGen Video as the default — "HeyGen should be the default
-        model" — knowing Hailuo 3 was the only 2K model on the list, so the
-        standing default is HeyGen at 768p. A caller that names no model
-        gets HeyGen, and the removed key is absent from the catalog and
-        from the studio's eligible list alike.
-        """
-        from ai_service import VIDEO_MODELS
-
+    def test_heygen_is_the_default_and_the_only_offer(self):
         assert vp.default_model_key() == "heygen-video-1"
         assert vp.resolve(None)[0] == "heygen-video-1"
-        assert vp.resolve("") [0] == "heygen-video-1"
-        assert "minimax-h3" not in VIDEO_MODELS
-        assert "minimax-h3" not in vp.STUDIO_ELIGIBLE
-
-    def test_named_h3_max_is_honoured(self):
-        key, _reason = vp.resolve("minimax-h3-max")
-        assert key == "minimax-h3-max"
-
-    def test_h3_max_takes_a_face_reference(self):
-        assert vp.accepts_identity_reference("minimax-h3-max")
-
-    def test_h3_max_identity_rides_as_first_frame_not_references(self):
-        """
-        The serving provider 400s input_references for this model ("does not
-        support image input references"), even though OpenRouter lists the
-        field. The capacity count records that refusal so nothing reads it as
-        permission; identity_via_first_frame records where the photo actually
-        goes — the opening frame, which OpenRouter documents as supported.
-        """
-        max_cap = vp.capability("minimax-h3-max")
-        assert max_cap["max_reference_images"] == 0
-        assert max_cap["identity_via_first_frame"] is True
-        # ...HeyGen, the default, takes the same first-frame route, and the
-        # editor keeps refusing both:
-        assert vp.capability("heygen-video-1")["identity_via_first_frame"] is True
-        assert vp.accepts_identity_reference("heygen-video-1") is True
-        assert vp.accepts_identity_reference("aleph-2") is False
-
-    def test_allowlisting_heygen_alone_still_excludes_h3_max(self, monkeypatch):
-        """
-        The env allowlist is the existing lever for restricting spend. It must
-        keep working now that there is a second model, so a deployment that only
-        trusts one provider can still pin itself to it.
-        """
-        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "heygen-video-1")
-        assert vp.is_allowed("heygen-video-1") is True
-        assert vp.is_allowed("minimax-h3-max") is False
-        assert vp.is_studio_eligible("minimax-h3-max") is False
+        assert vp.resolve("")[0] == "heygen-video-1"
         assert [c["key"] for c in vp.list_capabilities()] == ["heygen-video-1"]
 
-    def test_allowlisting_h3_max_alone_makes_it_the_default(self, monkeypatch):
-        """The documented switch for making H3 Max the production model."""
+    def test_allowlisting_h3_max_alone_does_not_resurrect_it(self, monkeypatch):
+        """An allowlist naming only the removed key has no valid entry
+        left, so it falls back to the studio's eligible list — HeyGen —
+        rather than making a removed model the default."""
         monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "minimax-h3-max")
-        assert vp.default_model_key() == "minimax-h3-max"
+        assert vp.is_allowed("minimax-h3-max") is False
+        assert vp.default_model_key() == "heygen-video-1"
+
+    def test_allowlisting_heygen_alone_still_pins_to_it(self, monkeypatch):
+        monkeypatch.setenv("VIDEO_MODEL_ALLOWLIST", "heygen-video-1")
+        assert vp.is_allowed("heygen-video-1") is True
+        assert vp.is_studio_eligible("minimax-h3-max") is False
+        assert [c["key"] for c in vp.list_capabilities()] == ["heygen-video-1"]
 
 
 class TestModelPayloads:
@@ -423,29 +377,27 @@ class TestModelPayloads:
 
         seen = self._capture(monkeypatch)
         asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
-                                             duration=10, model="minimax-h3-max"))
+                                             duration=10, model="heygen-video-1"))
         assert len(seen) == 1
-        assert seen[0]["model"] == "minimax/hailuo-3-max"
+        assert seen[0]["model"] == "heygen/heygen-video-1"
         assert seen[0]["resolution"] == "768p"
         assert seen[0]["aspect_ratio"] == "9:16"
         assert seen[0]["duration"] == 10
 
-    def test_never_sends_generate_audio(self, monkeypatch):
-        """
-        OpenRouter does not list generate_audio for this model. The studio also
-        defaults the flag off via supports_native_audio, but the payload layer
-        must not add it just because a caller passes True — an unlisted field is
-        a 400 and the founder pays nothing for the attempt, but loses the run.
-        """
+    def test_a_removed_h3_max_key_falls_back_to_heygen_inside_the_provider(self, monkeypatch):
+        """ADR 0327: a direct caller still naming the removed H3 Max —
+        a stale row, an old script — is resolved to the default before
+        anything is sent, the same last-resort guard the Hailuo 3 test
+        below pins."""
         import asyncio
 
         import ai_service
 
         seen = self._capture(monkeypatch)
         asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
-                                             duration=10, model="minimax-h3-max",
-                                             generate_audio=True))
-        assert "generate_audio" not in seen[0]
+                                             duration=10, model="minimax-h3-max"))
+        assert seen[0]["model"] == "heygen/heygen-video-1"
+        assert seen[0]["resolution"] == "768p"
 
     def test_a_removed_key_falls_back_to_heygen_inside_the_provider(self, monkeypatch):
         """
@@ -519,15 +471,15 @@ class TestModelPayloads:
         seen = self._capture(monkeypatch)
         asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
                                              duration=10, model="minimax-h3-max",
-                                             resolution="480p"))
+                                             resolution="2K"))
         assert seen[0]["resolution"] == "768p"
 
     def test_face_rides_as_first_frame_not_references(self, monkeypatch, tmp_path):
         """
-        The serving provider 400s input_references for this model, so the
-        photo rides as the opening frame — the one image field OpenRouter
-        documents as supported for it. Same face, different field; the
-        data-URI encoding is unchanged.
+        HeyGen takes the photo as the opening frame — the pinned hard
+        anchor — not as an input_references suggestion, which let the
+        face drift. Same face, different field; the data-URI encoding
+        is unchanged.
         """
         import asyncio
 
@@ -539,7 +491,7 @@ class TestModelPayloads:
             "0000000d49444154789c626001000000ffff0300000600055d3866680000000049454e44ae426082"))
         seen = self._capture(monkeypatch)
         asyncio.run(ai_service.generate_video(prompt="A founder reaches for their phone.",
-                                             duration=10, model="minimax-h3-max",
+                                             duration=10, model="heygen-video-1",
                                              reference_image_path=face))
         assert "input_references" not in seen[0]
         frames = seen[0]["frame_images"]
@@ -906,11 +858,12 @@ class TestAppearanceIsLockedAndClothingIsNot:
 
 class TestRenderPromptLengthCap:
     """
-    The provider refuses content[0].text past 7,000 characters, proven live by
-    a 7,724-char submit that 400d. The founder cannot fix that failure
-    themselves — the verbosity lives in model-generated strategy text, not in
-    anything they typed — so the builders must guarantee the cap instead of
-    letting a long strategy spend a failed submit.
+    HeyGen Video's prompt ceiling is 4,090 characters (ADR 0327: it is the
+    only model's ceiling, and the builders are built against it). The
+    founder cannot fix an over-long prompt themselves — the verbosity
+    lives in model-generated strategy text, not in anything they typed —
+    so the builders must guarantee the cap instead of letting a long
+    strategy spend a failed submit.
     """
     BIG = "w " * 3000
 
@@ -955,11 +908,9 @@ class TestRenderPromptLengthCap:
         """
         Every variable field at 6,000 chars — far past anything a strategy,
         template, profile or asset label really carries — must still assemble
-        under RENDER_PROMPT_LIMIT. The number is measured, not picked: this
-        fixture lands at 6,706 against the 6,800 ceiling (provider refuses past
-        7,000, 200 margin for measuring differences). It moved when the person
-        anchor grew its no-additions clause and wardrobe joined the lock, which
-        is why the figure is re-measured rather than carried forward.
+        under RENDER_PROMPT_LIMIT, HeyGen's 4,090 since ADR 0327. The fit is
+        structural (scaling, condensing, the tightest tier), so the saturated
+        fixture lands under the one ceiling there is.
         """
         prompt = gp.build_segment_prompt(
             strategy=self._verbose_strategy(),
@@ -1001,6 +952,7 @@ class TestRenderPromptLengthCap:
             duration=12,
             assets=self._verbose_assets(),
             plan={"hook_seconds": 3},
+            prompt_budget=6800,
         )
         assert prompt.startswith("Create ONE continuous 12-second")
         assert "The person on camera is the same individual" in prompt
@@ -1011,7 +963,7 @@ class TestRenderPromptLengthCap:
         The no-strategy fallback reads founder-written fields (script, beats)
         that are equally unbounded, so it gets the same guarantee:
         a 12-beat plan at 6,000 chars a field still assembles
-        under the ceiling (measured 6,077).
+        under the ceiling.
         """
         big = self.BIG
         prompt = gp.build_single_pass_prompt(
@@ -1100,77 +1052,6 @@ class TestProviderRefusalMessage:
         assert ai_service.describe_provider_refusal("HTTP 500 internal error") is None
         assert ai_service.describe_provider_refusal("") is None
         assert ai_service.describe_provider_refusal(None) is None
-
-
-class TestPromptCeilingRefusal:
-    """
-    The 409 a tight ceiling produces, which is the founder's only guidance once
-    the render is stopped. It used to name a lever they cannot pull ("the app's
-    own wording") and give no size and no model, so a founder was told to fix
-    something that is ours. These pin the sentence to the actions that exist.
-
-    ADR 0255 reworded it again: the fit now squeezes the app's direction
-    wording to its tightest before this guard can fire, so the refusal
-    names that cause and never advises cutting the script — the old
-    "Cut about N characters from the script" sent the founder to trim
-    the one part of the prompt the fit never touches.
-    """
-
-    def test_it_names_the_shortfall_the_ceiling_and_the_way_out(self):
-        message = gp.prompt_ceiling_refusal(
-            prompt_chars=4294, ceiling=4090, model_name="HeyGen Video",
-            alternative={"name": "MiniMax H3 Max", "prompt_char_limit": 6800},
-        )
-        assert "4294-character prompt" in message
-        assert "204 over the 4090 HeyGen Video accepts" in message
-        # The roomier model and its ceiling, so "pick another model" has a name.
-        assert "MiniMax H3 Max accepts 6800" in message
-        assert "Switch to MiniMax H3 Max on the Generate step" in message
-        # The cause, named — and the script is never the lever.
-        assert "already squeezed to its tightest" in message
-        assert "cutting the script is not the fix" in message
-        assert "Cut about" not in message
-        assert "nothing has been charged" in message
-        assert "app's own wording" not in message
-
-    def test_the_live_failure_shape_never_advises_cutting_the_script(self):
-        """Kasra's exact refusal, Nov 21 2026: 4099 over 4090 by 9, and the
-        old wording told him to cut those 9 from his script."""
-        message = gp.prompt_ceiling_refusal(
-            prompt_chars=4099, ceiling=4090, model_name="HeyGen Video",
-            alternative={"name": "MiniMax H3 Max", "prompt_char_limit": 6800},
-        )
-        assert "9 over the 4090 HeyGen Video accepts" in message
-        assert "Cut about 9 characters from the script" not in message
-        assert "Cut about" not in message
-        assert "Switch to MiniMax H3 Max on the Generate step" in message
-        assert "nothing has been charged" in message
-
-    def test_with_no_roomier_model_it_says_so(self):
-        """
-        Already on the roomiest model, "pick another model" is advice with
-        nowhere to go. The scene and direction — the mass that scales —
-        have to come down at their source, and the message says that
-        instead of pointing at a picker that cannot help.
-        """
-        message = gp.prompt_ceiling_refusal(
-            prompt_chars=6900, ceiling=6800, model_name="MiniMax H3 Max",
-            alternative=None,
-        )
-        assert "No model in this workspace accepts a longer prompt" in message
-        assert "shorten the scene and direction on the Hook + Story step" in message
-        assert "Cut about" not in message
-        assert "switch to" not in message
-        assert "nothing has been charged" in message
-
-    def test_a_smaller_alternative_is_not_offered(self):
-        """An alternative under the ceiling that just refused would re-refuse."""
-        message = gp.prompt_ceiling_refusal(
-            prompt_chars=4294, ceiling=4090, model_name="HeyGen Video",
-            alternative={"name": "Smaller", "prompt_char_limit": 3000},
-        )
-        assert "Smaller" not in message
-        assert "No model in this workspace accepts a longer prompt" in message
 
 
 class TestPromptFitGuarantee:
@@ -1274,7 +1155,7 @@ class TestPromptFitGuarantee:
             **self._kwargs(), prompt_budget=4090 - 459, script_sacred=True)
         assert len(prompt) <= 4090 - 459, (
             f"builder returned {len(prompt)} chars against a 3631 budget; "
-            "the submit guard would refuse a render the fit was meant to save"
+            "the fit was meant to save this render, not hand it back over"
         )
 
     def test_the_script_survives_the_squeeze_byte_identical(self):
@@ -1292,7 +1173,8 @@ class TestPromptFitGuarantee:
         empty = dict(profile={}, template={}, duration=10, assets={},
                      plan={"hook_seconds": 3})
         fixed_strategy = {"camera_setup": "fixed"}
-        full = gp.build_segment_prompt(strategy=fixed_strategy, **empty)
+        full = gp.build_segment_prompt(
+            strategy=fixed_strategy, prompt_budget=6800, **empty)
         condensed = gp.build_segment_prompt(
             strategy=fixed_strategy, prompt_budget=4096, **empty)
         assert len(full) == gp.FIXED_FULL_PROMPT_FLOOR
@@ -1331,6 +1213,45 @@ class TestPromptFitGuarantee:
         assert len(prompt) <= 3100, (
             f"fallback builder returned {len(prompt)} chars against a 3100 budget"
         )
+
+    def test_the_ceiling_refusal_is_gone(self):
+        """ADR 0327: the refusal Kasra hit live — a 4,108-character prompt,
+        18 over HeyGen's 4,090, answered with "Switch to MiniMax H3 Max" —
+        is deleted, not reworded. The builder function that composed it
+        no longer exists, and no capability record offers a roomier
+        ceiling to switch to."""
+        assert not hasattr(gp, "prompt_ceiling_refusal")
+        for cap in vp.list_capabilities(include_ineligible=True):
+            assert cap["prompt_char_limit"] <= 4090
+            assert "minimax" not in cap["key"]
+            assert "MiniMax" not in cap["name"]
+
+    def test_a_saturated_strategy_and_photo_fit_speaking_and_silent(self):
+        """The guarantee at its hardest: every field saturated (the
+        TestRenderPromptLengthCap fixture), a photo attached, the script
+        held sacred — at HeyGen's full 4,090 and at the silent build's
+        3,631, on both cameras. Before the tightest tier existed, the
+        fixed silent build bottomed out 26 over its budget; the tier's
+        trimmed direction phrasing is what lands it under."""
+        cap = TestRenderPromptLengthCap()
+        for camera in ("handheld", "fixed"):
+            strategy = cap._verbose_strategy()
+            strategy["camera_setup"] = camera
+            for budget in (4090, 4090 - 459):
+                prompt = gp.build_segment_prompt(
+                    strategy=strategy,
+                    profile=cap._verbose_profile(),
+                    template=cap._verbose_template(),
+                    duration=12,
+                    assets=cap._verbose_assets(),
+                    plan={"hook_seconds": 3},
+                    prompt_budget=budget,
+                    script_sacred=True,
+                )
+                assert len(prompt) <= budget, (
+                    f"{camera} at budget {budget}: {len(prompt)} chars — the "
+                    f"tightest tier did not land the fit it exists to guarantee"
+                )
 
 
 class TestRefusalNamesWhereThePhotoWent:
@@ -1702,9 +1623,10 @@ class TestFinalPhoneFraming:
 
 class TestPerProviderPromptBudget:
     """
-    RENDER_PROMPT_LIMIT was measured against Hailuo's 7,000-char refusal. A
-    second provider with a lower ceiling cannot be handed the same prompt: it
-    400s, and the founder pays for the attempt. These pin the scaling.
+    RENDER_PROMPT_LIMIT is HeyGen Video's 4,090 (ADR 0327) — the only
+    ceiling there is. A caller working to a lower budget cannot be handed
+    the same prompt: it 400s, and the founder pays for the attempt.
+    These pin the scaling.
     """
 
     # Derived, never typed in: a literal here goes stale the moment a ceiling
@@ -1769,9 +1691,11 @@ class TestPerProviderPromptBudget:
         """
         Guard the guard. The founder's real prompt was 4,689; if this fixture ever
         assembles below that, every ceiling test resting on it is vacuous and will
-        pass without exercising the scaling at all.
+        pass without exercising the scaling at all. Measured unscaled — a
+        roomy caller budget, so nothing squeezes it.
         """
-        unscaled = len(gp.build_segment_prompt(**self._verbose_kwargs()))
+        unscaled = len(gp.build_segment_prompt(
+            **self._verbose_kwargs(), prompt_budget=20000))
         assert unscaled >= 5500, (
             f"fixture assembles to {unscaled} chars, below the 4,689 that actually "
             f"failed and near the 4,775 of a fixture missing the locked-scene "
@@ -1790,7 +1714,7 @@ class TestPerProviderPromptBudget:
 
     def test_a_lower_ceiling_produces_a_shorter_prompt(self):
         kwargs = self._verbose_kwargs()
-        full = len(gp.build_segment_prompt(**kwargs))
+        full = len(gp.build_segment_prompt(**kwargs, prompt_budget=20000))
         tight = len(gp.build_segment_prompt(**kwargs, prompt_budget=self._TIGHTEST))
         assert tight < full
 
@@ -1832,9 +1756,9 @@ class TestPerProviderPromptBudget:
             limit = vp.capability(key)["prompt_char_limit"]
             prompt = gp.build_segment_prompt(**kwargs, prompt_budget=limit)
             assert len(prompt) <= limit, (
-                f"{key}: {len(prompt)} chars exceeds its {limit} ceiling. The submit "
-                f"guard will refuse this and the founder pays nothing, but the model "
-                f"is then unusable for any realistic strategy."
+                f"{key}: {len(prompt)} chars exceeds its {limit} ceiling. The "
+                f"provider would refuse this submit, and the model is then "
+                f"unusable for any realistic strategy."
             )
 
     def test_the_measured_floors_still_match_their_constants(self):
@@ -1846,7 +1770,7 @@ class TestPerProviderPromptBudget:
         """
         empty = dict(strategy={}, profile={}, template={}, duration=10,
                      assets={}, plan={"hook_seconds": 3})
-        full = gp.build_segment_prompt(**empty)
+        full = gp.build_segment_prompt(**empty, prompt_budget=6800)
         condensed = gp.build_segment_prompt(**empty, prompt_budget=4096)
         assert len(full) == gp.FULL_PROMPT_FLOOR
         assert len(condensed) == gp.CONDENSED_PROMPT_FLOOR
@@ -1983,7 +1907,7 @@ class TestPerProviderPromptBudget:
         why this is a prompt-side guarantee and not a data-side one.
         """
         long_name = "N" * 1200
-        for name in ("heygen-video-1", "minimax-h3-max"):
+        for name in ("heygen-video-1",):
             limit = vp.capability(name)["prompt_char_limit"]
             saturated = dict(self._verbose_kwargs())
             saturated["profile"] = {**saturated["profile"], "brand_name": long_name}
@@ -2042,8 +1966,9 @@ class TestPerProviderPromptBudget:
     def test_the_fallback_prompt_does_not_squeeze_at_a_normal_ceiling(self):
         """
         Fitting a tight ceiling is not a licence to shorten every render.
-        Without a budget the fallback is whole, and it must stay whole at the
-        default ceiling — the scale is clamped at 1.0 there, so nothing is cut.
+        At a roomy ceiling the fallback is whole — the scale is clamped at
+        1.0 there, so nothing is cut. (The default ceiling is HeyGen's
+        tight 4,090 since ADR 0327, so "roomy" is named explicitly.)
         """
         whole = gp.build_single_pass_prompt(
             plan={"hook_line": "A" * 150, "script": "B" * 400,
@@ -2052,6 +1977,7 @@ class TestPerProviderPromptBudget:
             profile={"brand_name": "ShiftLog"},
             template={"name": "T", "hook_seconds": 3},
             duration=15,
+            prompt_budget=20000,
         )
         assert "A" * 150 in whole
         assert "B" * 400 in whole
@@ -2081,7 +2007,7 @@ class TestPerProviderPromptBudget:
         against the full prompt for the parts it compresses.
         """
         kwargs = self._verbose_kwargs()
-        full = gp.build_segment_prompt(**kwargs)
+        full = gp.build_segment_prompt(**kwargs, prompt_budget=20000)
         condensed = gp.build_segment_prompt(**kwargs, prompt_budget=4096)
         for constraint in (
             "reference photograph",  # identity lock, appears only in the close
@@ -2107,31 +2033,16 @@ class TestPerProviderPromptBudget:
     def test_the_budget_leaves_the_condensed_path_for_tight_providers_only(self):
         kwargs = self._verbose_kwargs()
         assert gp._budget_scale(4096, True) < 1.0
-        assert gp._budget_scale(gp.RENDER_PROMPT_LIMIT, False) == 1.0
+        assert gp._budget_scale(20000, False) == 1.0
         # A ceiling below the condensed floor still cannot go to zero: a prompt of
-        # one-character stubs reads as corruption. The guard refuses it instead.
+        # one-character stubs reads as corruption, so the scale floors at
+        # MIN_SCALE and the fit walk takes the rest.
         assert gp._budget_scale(500, True) >= 0.10
 
     def test_every_studio_model_declares_a_ceiling(self):
         for key in vp.STUDIO_ELIGIBLE:
             limit = vp.capability(key).get("prompt_char_limit")
             assert isinstance(limit, int) and limit > 0, key
-
-    def test_the_h3_max_prompt_is_untouched_by_all_of_this(self):
-        """
-        The founder is happy with H3 Max's output, so every mechanism added for
-        the tight ceiling has to be invisible to it: clean endings, protected
-        values and the retry loop. All three are gated on condensing, and 6,800
-        never condenses, so its prompt must be byte-identical to what it was
-        before this work — including when a budget is passed explicitly.
-        """
-        kwargs = self._verbose_kwargs()
-        baseline = gp.build_segment_prompt(**kwargs)
-        for key in ("minimax-h3-max",):
-            limit = vp.capability(key)["prompt_char_limit"]
-            assert gp.build_segment_prompt(**kwargs, prompt_budget=limit) == baseline, (
-                f"{key} is not condensed, so nothing here should change its prompt"
-            )
 
     def test_the_protect_flag_does_not_leak_between_calls(self):
         """
@@ -2336,11 +2247,12 @@ class TestHeygenScriptSacred:
 
     def test_the_fixture_actually_strains_the_ceiling(self):
         """
-        Guard the guard: if the unbudgeted assembly fits 4,090, the tests below
-        pass without trimming anything.
+        Guard the guard: if the unscaled assembly fits 4,090, the tests below
+        pass without trimming anything. Measured at a roomy budget — the
+        default build is budgeted at the ceiling itself since ADR 0327.
         """
         kwargs, _, _, _, _ = self._strained_kwargs()
-        full = len(gp.build_segment_prompt(**kwargs))
+        full = len(gp.build_segment_prompt(**kwargs, prompt_budget=20000))
         assert full > self._HEYGEN, (
             f"fixture assembles to {full} chars, inside the heygen ceiling — "
             f"nothing below exercises the trim."
@@ -2720,9 +2632,10 @@ class TestOpeningPatternInterrupt:
         """
         Condensing must not cost the model the requirement. The condensed form
         carries every constraint of the full one; only the examples of how to
-        satisfy them are dropped.
+        satisfy them are dropped. The full form is selected with a roomy
+        budget — the default is the tight ceiling itself since ADR 0327.
         """
-        full = self._prompt()
+        full = self._prompt(20000)
         tight = self._prompt(min(vp.capability(k)["prompt_char_limit"]
                                  for k in vp.STUDIO_ELIGIBLE))
         assert gp._OPENING_INTERRUPT in full
@@ -2734,7 +2647,7 @@ class TestOpeningPatternInterrupt:
 
     def test_the_directive_precedes_the_beats_it_governs(self):
         """A requirement read after the beats is read as a footnote."""
-        full = self._prompt()
+        full = self._prompt(20000)
         assert full.index(gp._OPENING_INTERRUPT) < full.index(
             "What the person physically does in the opening"
         )

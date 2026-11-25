@@ -119,9 +119,9 @@ def _mock_submit(api, monkeypatch, response=None):
 class TestResolveHookLength:
     def test_target_above_floor_needs_no_trim(self):
         import video_providers as vp
-        # MiniMax's floor is 5s, so 5s+ is renderable as asked.
+        # HeyGen's floor is 5s, so 5s+ is renderable as asked.
         for target in (5, 6):
-            r = vp.resolve_hook_length(target, "minimax-h3-max")
+            r = vp.resolve_hook_length(target, "heygen-video-1")
             assert r["target"] == target
             assert r["render_seconds"] == target
             assert r["trim_to"] == 0
@@ -133,7 +133,7 @@ class TestResolveHookLength:
         it must be rendered at the floor and cut - never quietly upgraded.
         """
         import video_providers as vp
-        r = vp.resolve_hook_length(3, "minimax-h3-max")
+        r = vp.resolve_hook_length(3, "heygen-video-1")
         assert r["target"] == 3
         assert r["render_seconds"] == 5
         assert r["trim_to"] == 3
@@ -150,25 +150,25 @@ class TestResolveHookLength:
         for tpl in template_library.CURATED_TEMPLATES:
             declared = int(tpl["hook_seconds"])
             assert 1 <= declared <= 3, tpl["name"]
-            r = vp.resolve_hook_length(declared, "minimax-h3-max")
+            r = vp.resolve_hook_length(declared, "heygen-video-1")
             # The declared value is preserved as the TARGET; it is only the
             # render that is longer.
             assert r["target"] == declared, tpl["name"]
             assert r["trim_to"] == declared, tpl["name"]
 
-    def test_minimax_floor_is_honoured(self):
+    def test_heygen_floor_is_honoured(self):
         import video_providers as vp
-        # H3 Max's floor is 5s, so even a 4s hook is a trim there.
-        r = vp.resolve_hook_length(4, "minimax-h3-max")
+        # HeyGen's floor is 5s, so even a 4s hook is a trim there.
+        r = vp.resolve_hook_length(4, "heygen-video-1")
         assert r["render_seconds"] == 5
         assert r["trim_to"] == 4
         assert r["guarantee"] == "trimmed"
-        r5 = vp.resolve_hook_length(5, "minimax-h3-max")
+        r5 = vp.resolve_hook_length(5, "heygen-video-1")
         assert r5["render_seconds"] == 5 and r5["trim_to"] == 0
 
     def test_target_above_ceiling_is_reported_not_silently_changed(self):
         import video_providers as vp
-        r = vp.resolve_hook_length(45, "minimax-h3-max")
+        r = vp.resolve_hook_length(45, "heygen-video-1")
         assert r["render_seconds"] == 15
         assert r["guarantee"] == "clamped_down"
         assert "at most 15s" in r["note"]
@@ -176,7 +176,7 @@ class TestResolveHookLength:
     def test_unset_target_falls_back_to_the_default(self):
         import video_providers as vp
         for value in (None, "", 0):
-            r = vp.resolve_hook_length(value, "minimax-h3-max")
+            r = vp.resolve_hook_length(value, "heygen-video-1")
             assert r["render_seconds"] == vp.DEFAULT_HOOK_SECONDS
             assert r["guarantee"] == "as_rendered"
 
@@ -184,7 +184,7 @@ class TestResolveHookLength:
         """No length the product can compute may be a dead end."""
         import video_providers as vp
         for choice in (2, 3, 4, 5, 6):
-            r = vp.resolve_hook_length(choice, "minimax-h3-max")
+            r = vp.resolve_hook_length(choice, "heygen-video-1")
             assert r["render_seconds"] >= choice, choice
             assert r["guarantee"] in (
                 "as_rendered", "trimmed", "clamped_down", "trim_unavailable"
@@ -196,11 +196,11 @@ class TestResolveHookLength:
         original = vp.ffmpeg_available
         vp.ffmpeg_available = lambda: False
         try:
-            r = vp.resolve_hook_length(3, "minimax-h3-max")
+            r = vp.resolve_hook_length(3, "heygen-video-1")
             assert r["guarantee"] == "trim_unavailable"
             assert "ffmpeg" in r["note"]
             # A length that needs no trim is unaffected.
-            assert vp.resolve_hook_length(5, "minimax-h3-max")["guarantee"] == "as_rendered"
+            assert vp.resolve_hook_length(5, "heygen-video-1")["guarantee"] == "as_rendered"
         finally:
             vp.ffmpeg_available = original
 

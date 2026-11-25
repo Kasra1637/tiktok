@@ -3,11 +3,13 @@ Live render verification: one real render per model, end to end.
 This is the check no mocked test can perform. The suite proves the gates refuse
 correctly; only a real provider response proves the two-section prompt produces
 a real hook-then-middle clip, that the character reference survives as the
-presenter on BOTH models, and that H3 Max accepts what we send it (768p, no
-generate_audio) instead of 400ing after the request is committed.
+presenter, and that HeyGen Video — the only model since ADR 0327 removed
+MiniMax H3 Max — accepts what we send it (768p, generate_audio on) instead
+of 400ing after the request is committed.
 
-Runs: exactly two video renders (one per model) plus a few text calls.
-Nothing here is mocked. Run it, then WATCH both clips: the script asserts file
+Runs: exactly one video render per model named (HeyGen alone by default)
+plus a few text calls.
+Nothing here is mocked. Run it, then WATCH the clips: the script asserts file
 validity, but identity likeness, the phone-reach ending, and the absence of a
 generated demo/CTA need human eyes.
 
@@ -193,12 +195,12 @@ async def _one_render(api, photo: Path, out_dir: Path, model_key: str,
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Live two-model render verification.")
+    ap = argparse.ArgumentParser(description="Live render verification.")
     ap.add_argument("--photo", required=True, type=Path,
                     help="front-facing photo of the presenter (png/jpg)")
     ap.add_argument("--out", type=Path, default=Path("live-clips"),
                     help="where to copy the finished clips")
-    ap.add_argument("--models", default="minimax-h3,minimax-h3-max",
+    ap.add_argument("--models", default="heygen-video-1",
                     help="comma-separated model keys to verify")
     ap.add_argument("--timeout-min", type=float, default=25,
                     help="max minutes to poll per model")
@@ -243,7 +245,7 @@ def main() -> int:
         print(" 1. the presenter matches --photo (same person, same clothes ok to differ);", flush=True)
         print(" 2. exactly two sections: hook, then a middle that STOPS where you would", flush=True)
         print("    reach for your phone -- no generated demo, no generated CTA;", flush=True)
-        print(" 3. H3 Max clip is 768p-ish and H3 is 2K-ish (see ffprobe above);", flush=True)
+        print(" 3. the clip is 768p-ish (see ffprobe above);", flush=True)
         print(" 4. any storage_error above is understood before relying on the clip.", flush=True)
     sys.modules.pop("server", None)
     return 1 if failed else 0

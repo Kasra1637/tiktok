@@ -71,20 +71,28 @@ def _fixture():
 
 def test_hook_line_and_action_appear_once():
     strategy, profile, template, plan, assets = _fixture()
+    # The dedup properties are pinned on the full form, selected with a
+    # roomy budget: the default budget is HeyGen's 4,090 ceiling itself
+    # since ADR 0327, which builds this verbose fixture condensed.
     prompt = gp.build_segment_prompt(
         strategy=strategy, profile=profile, template=template,
-        duration=20, assets=assets, plan=plan,
+        duration=20, assets=assets, plan=plan, prompt_budget=20000,
     )
     assert prompt.count("Nobody warned me this would happen at 3am.") == 1
     assert prompt.count("Frame one is already moving") == 1
-    assert len(prompt) <= gp.RENDER_PROMPT_LIMIT
+    # …and the default build of the same fixture fits the ceiling.
+    fitted = gp.build_segment_prompt(
+        strategy=strategy, profile=profile, template=template,
+        duration=20, assets=assets, plan=plan,
+    )
+    assert len(fitted) <= gp.RENDER_PROMPT_LIMIT
 
 
 def test_template_camera_style_do_not_reach_render():
     strategy, profile, template, plan, assets = _fixture()
     prompt = gp.build_segment_prompt(
         strategy=strategy, profile=profile, template=template,
-        duration=20, assets=assets, plan=plan,
+        duration=20, assets=assets, plan=plan, prompt_budget=20000,
     )
     assert "Camera and pacing" not in prompt
     # scene lock carries visual style once, template copy is gone
@@ -95,7 +103,7 @@ def test_payoff_and_differentiation_reach_final_prompt():
     strategy, profile, template, plan, assets = _fixture()
     prompt = gp.build_segment_prompt(
         strategy=strategy, profile=profile, template=template,
-        duration=20, assets=assets, plan=plan,
+        duration=20, assets=assets, plan=plan, prompt_budget=20000,
     )
     assert "One prompt turns the replay into a sentence." in prompt
     assert "The sentence is written and the page closes." in prompt

@@ -240,7 +240,7 @@ class TestPromptCarriesTheLocation:
     def test_both_budget_modes_state_the_visible_first_move(self):
         empty = dict(strategy={}, profile={}, template={}, duration=10,
                      assets=[], plan={"hook_seconds": 3})
-        full = gp.build_segment_prompt(**empty)
+        full = gp.build_segment_prompt(**empty, prompt_budget=20000)
         tight = gp.build_segment_prompt(**empty, prompt_budget=4096)
         assert "first 1-2 seconds show a clearly visible movement" in full
         assert "1-2s: clearly visible movement" in tight

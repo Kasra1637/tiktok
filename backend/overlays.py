@@ -87,10 +87,10 @@ def build_upscale_command(source: Path, output_path: Path) -> list:
     founder the provider's native size — 720p for Grok,
     which is below what the platform expects.
 
-    Audio is copied when present and dropped when absent, because the providers
-    here differ: HeyGen Video returns a native audio track and H3 Max does not. A
-    graph referencing a stream that isn't there fails, so 0:a? is the only form
-    that works for both.
+    Audio is copied when present and dropped when absent, because a render
+    may arrive without an audio track (a silent render, or a past provider's
+    clip in History). A graph referencing a stream that isn't there fails,
+    so 0:a? is the only form that works for both.
     """
     graph = ";".join(canvas_fit_chain("0:v", "outv"))
 

@@ -194,7 +194,7 @@ class TestBeatTrim:
         calls = _spy_trims(api, monkeypatch)
         canonical, stored_url, storage_error, delivered = _persist(
             api, monkeypatch, tmp_path, "gen-hook-4", project["id"],
-            target=4, model="minimax-h3-max", trim_to=4, requested=4)
+            target=4, model="heygen-video-1", trim_to=4, requested=4)
         assert stored_url == "https://storage.example/gen-hook-4.mp4"
         # The cut is the requested outcome, not a deviation: no note
         # rides the storage_error slot for a beat cut (ADR 0239).
@@ -208,12 +208,14 @@ class TestBeatTrim:
         calls = _spy_trims(api, monkeypatch)
         canonical, _stored, storage_error, delivered = _persist(
             api, monkeypatch, tmp_path, "gen-hook-5", project["id"],
-            target=5, model="minimax-h3-max", trim_to=0, requested=5)
+            target=5, model="heygen-video-1", trim_to=0, requested=5)
         assert not storage_error
-        # Already at its length: the trim never runs.
+        # Already at its length: the beat trim never runs. The only cut
+        # the file takes is the model's own 0.2s head trim (ADR 0181),
+        # which lands on every HeyGen render, floor hooks included.
         assert calls == []
-        assert abs(_duration(canonical) - 5.0) < 0.06, _duration(canonical)
-        assert delivered == 5
+        assert abs(_duration(canonical) - 4.8) < 0.06, _duration(canonical)
+        assert delivered == 4
 
     def test_legacy_story_beat_is_still_cut_without_a_note(
             self, api, monkeypatch, tmp_path):
@@ -223,7 +225,7 @@ class TestBeatTrim:
         project = _story_project(api, "Beat Legacy Story")
         canonical, _stored, storage_error, delivered = _persist(
             api, monkeypatch, tmp_path, "gen-story-3", project["id"],
-            target=3, model="minimax-h3-max", trim_to=3, requested=3)
+            target=3, model="heygen-video-1", trim_to=3, requested=3)
         assert not storage_error
         assert abs(_duration(canonical) - 3.0) < 0.06, _duration(canonical)
         assert delivered == 3
@@ -235,7 +237,7 @@ class TestBeatTrim:
         project = _video_project(api, "Beat Legacy Hook")
         canonical, _stored, storage_error, delivered = _persist(
             api, monkeypatch, tmp_path, "gen-legacy-hook", project["id"],
-            target=15, model="minimax-h3-max", trim_to=3, requested=15,
+            target=15, model="heygen-video-1", trim_to=3, requested=15,
             render_seconds=15)
         assert storage_error == "Cut down to 3s."
         assert abs(_duration(canonical) - 3.0) < 0.06, _duration(canonical)
@@ -264,12 +266,14 @@ class TestBeatTrim:
         monkeypatch.setattr(api.pipeline, "replace_with_trimmed", no_trim)
         canonical, _stored, storage_error, delivered = _persist(
             api, monkeypatch, tmp_path, "gen-hook-fail", project["id"],
-            target=4, model="minimax-h3-max", trim_to=4, requested=4)
+            target=4, model="heygen-video-1", trim_to=4, requested=4)
         # The render is kept, the deviation is named for the hook, and
-        # the recorded length is the floor length the founder gets.
+        # the recorded length is what the founder gets: the full floor
+        # render less the model's 0.2s head trim (ADR 0181), a separate
+        # cut that still lands when the beat cut cannot.
         assert storage_error and "hook" in storage_error and "4s" in storage_error
-        assert abs(_duration(canonical) - 5.0) < 0.06, _duration(canonical)
-        assert delivered == 5
+        assert abs(_duration(canonical) - 4.8) < 0.06, _duration(canonical)
+        assert delivered == 4
 
     def test_failed_legacy_story_cut_still_names_the_story(
             self, api, monkeypatch, tmp_path):
@@ -281,7 +285,7 @@ class TestBeatTrim:
         monkeypatch.setattr(api.pipeline, "replace_with_trimmed", no_trim)
         canonical, _stored, storage_error, delivered = _persist(
             api, monkeypatch, tmp_path, "gen-story-fail", project["id"],
-            target=3, model="minimax-h3-max", trim_to=3, requested=3)
+            target=3, model="heygen-video-1", trim_to=3, requested=3)
         assert storage_error and "story" in storage_error and "3s" in storage_error
-        assert abs(_duration(canonical) - 5.0) < 0.06, _duration(canonical)
-        assert delivered == 5
+        assert abs(_duration(canonical) - 4.8) < 0.06, _duration(canonical)
+        assert delivered == 4

@@ -226,16 +226,18 @@ def _persist(api, monkeypatch, tmp: Path, generation_id: str,
 
 @needs_ffmpeg
 class TestHookHeadTrimPersist:
-    def test_minimax_hook_opens_past_the_dissolve(self, api, monkeypatch, tmp_path):
-        """MiniMax H3 Max has no entry in the regular head-trim table
-        at all: before ADR 0250 a 4s hook from it kept the whole
-        dissolve. Now the hook head cut takes the full 0.5s marked
-        head, and the beat tail cut still lands the pick exactly."""
-        project = _hook_cta_project(api, "Hook Head MiniMax")
+    def test_hook_head_cut_composes_with_the_beat_cut(self, api, monkeypatch, tmp_path):
+        """The hook head cut takes the full 0.5s marked head, and the
+        beat tail cut still lands the pick exactly (ADR 0250). This
+        pin rode on MiniMax H3 Max — the model with no entry in the
+        regular head-trim table — until ADR 0327 removed it; the
+        composition was always model-independent, so it now rides on
+        HeyGen Video, the model left."""
+        project = _hook_cta_project(api, "Hook Head Compose")
         canonical, stored_url, storage_error, delivered = _persist(
-            api, monkeypatch, tmp_path, "gen-hook-head-mm", project["id"],
-            target=4, model="minimax-h3-max", trim_to=4, requested=4)
-        assert stored_url == "https://storage.example/gen-hook-head-mm.mp4"
+            api, monkeypatch, tmp_path, "gen-hook-head-compose", project["id"],
+            target=4, model="heygen-video-1", trim_to=4, requested=4)
+        assert stored_url == "https://storage.example/gen-hook-head-compose.mp4"
         assert not storage_error
         assert abs(_duration(canonical) - 4.0) < 0.06, _duration(canonical)
         r, g, b = _first_frame_rgb(canonical)
@@ -264,19 +266,22 @@ class TestHookHeadTrimPersist:
         assert api._HOOK_HEAD_TRIM_SECONDS == 0.5
         assert api._MODEL_HEAD_TRIM_SECONDS == {"heygen-video-1": 0.2}
 
-    def test_five_second_hook_at_the_floor_keeps_its_exact_length(
+    def test_five_second_hook_at_the_floor_takes_only_the_models_cut(
             self, api, monkeypatch, tmp_path):
-        """A 5s pick renders at the models' 5s floor, so no tail
-        trim is recorded and there is no tail to give a head cut
-        back: the delivered length stays the pick, exactly (the
-        page's promise, ADR 0244), rather than landing at 4.5s."""
+        """A 5s pick renders at the model's 5s floor, so no tail
+        trim is recorded and there is no tail to give the 0.5s hook
+        head cut back: the composition never engages (ADR 0250).
+        What lands is only ADR 0181's regular 0.2s model cut, as on
+        every HeyGen render — the file is 4.8s, not the 4.5s the
+        hook cut would leave. (On MiniMax H3 Max, which had no
+        regular cut, the file stayed 5.0s; ADR 0327 removed it.)"""
         project = _hook_cta_project(api, "Hook Head Floor")
         canonical, _stored, storage_error, delivered = _persist(
             api, monkeypatch, tmp_path, "gen-hook-head-floor", project["id"],
-            target=5, model="minimax-h3-max", trim_to=0, requested=5)
+            target=5, model="heygen-video-1", trim_to=0, requested=5)
         assert not storage_error
-        assert abs(_duration(canonical) - 5.0) < 0.06, _duration(canonical)
-        assert delivered == 5
+        assert abs(_duration(canonical) - 4.8) < 0.06, _duration(canonical)
+        assert delivered == 4
 
     def test_a_regular_render_keeps_the_old_head(self, api, monkeypatch, tmp_path):
         """A wizard render (no hook surface) on HeyGen still takes

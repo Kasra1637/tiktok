@@ -177,53 +177,16 @@ ANGLE_MODEL = _model_from_env("AI_ANGLE_MODEL", TEXT_MODEL)
 # rather than a video model, since the opening frame is a single still image.
 
 # Video generation models.
-# The template studio's providers. HeyGen Video is the default (ADR 0221):
-# synthesized audio in a single call, 768p, up to 15s per pass. Hailuo 3 Max
-# sits alongside it as an opt-in comparison; see its entry below. Hailuo 3
-# left this list in ADR 0221 — it was the only model here that rendered 2K,
-# so the standing default's picture is 768p now. A video is ONE render
-# either way, so a request longer than the model's single-pass ceiling is
-# refused rather than truncated.
+# The template studio's provider — singular since ADR 0327: HeyGen Video
+# is the only video model the app offers. MiniMax H3 Max sat alongside it
+# as an opt-in comparison until Kasra removed it outright on Nov 24 2026
+# ("Fully remove minimax"), after its roomier prompt ceiling had been
+# offered as the escape from a HeyGen prompt-length refusal; the prompt
+# rules now fit HeyGen's 4,090 ceiling by construction instead (see
+# generation_planning). A video is ONE render either way, so a request
+# longer than the model's single-pass ceiling is refused rather than
+# truncated.
 VIDEO_MODELS = {
-    # Hailuo 3 Max: H3 post-trained by fal.ai for speed and prompt adherence,
-    # served on the same OpenRouter key and the same /videos endpoint. Kept
-    # as an opt-in alongside the default so the two can be compared on the
-    # same script; the default is HeyGen Video (DEFAULT_VIDEO_MODEL below).
-    #
-    # The one field that must NOT be copied from the H3 entry is resolution.
-    # OpenRouter lists H3 Max as "768p" | "480p" only and rejects an unlisted
-    # value, so a verbatim copy would 400 on every render. 2K is the one thing
-    # this model gives up; 768x1366 is still above TikTok's 720x1280 floor, but
-    # it is a visible downgrade once the founder attaches their demo and
-    # re-exports at 1080x1920.
-    #
-    # supports_native_audio is False because OpenRouter does NOT list
-    # generate_audio among H3 Max's accepted fields, and an unlisted field is a
-    # 400. False makes the studio omit the field entirely and let the provider
-    # apply its own default. If a real clip comes back silent, that is the flag
-    # to flip.
-    "minimax-h3-max": {
-        "id": "minimax/hailuo-3-max",
-        "name": "MiniMax H3 Max",
-        "description": (
-            "Hailuo 3 Max: Hailuo 3 post-trained by fal.ai for speed and prompt "
-            "adherence. Up to 15s, 768p (not 2K). Opt-in: the studio defaults to "
-            "HeyGen Video."
-        ),
-        "max_duration": 15,
-        "min_duration": 5,
-        # "References" here means image conditioning in general, not the
-        # input_references field specifically: the serving provider refuses
-        # input_references outright (proven live with a 400), so the studio
-        # carries the founder's photo as the opening frame instead (see
-        # video_providers.identity_via_first_frame). Flipping this to False
-        # would read as "Max cannot do identity at all", which is wrong.
-        "supports_references": True,
-        "supports_native_audio": False,  # generate_audio unlisted for this model
-        "supports_v2v_motion": False,  # not documented for H3 Max on OpenRouter
-        "resolution": "768p",
-        "supports_combined_refs": False,
-    },
 # HeyGen Video: general-purpose short-form business video (brand moments,
     # product demos) with synthesized audio in a single call — dialogue,
     # ambience and effects — from a prompt and the founder's photo as an
@@ -241,10 +204,10 @@ VIDEO_MODELS = {
     #     floor and ceiling, so no new trim edge cases.
     #   supported_frame_images  first_frame  -> listed, and sent. The
     #     founder's photo is pinned as the opening frame (video_providers:
-    #     identity_via_first_frame), the same route H3 Max takes: a soft
-    #     input_references suggestion let the face drift into a partial
-    #     crop, so the photo is a hard anchor, and the prompt tells the
-    #     model the photo supplies the person, never the place.
+    #     identity_via_first_frame): a soft input_references suggestion
+    #     let the face drift into a partial crop, so the photo is a hard
+    #     anchor, and the prompt tells the model the photo supplies the
+    #     person, never the place.
     #   generate_audio  false (accepted, defaults off), NOT null  -> the field
     #     is sendable, and the studio defaults to requesting audio whenever
     #     the provider offers it (server.py). If real clips come back silent
@@ -1402,14 +1365,13 @@ async def generate_video(
     continuity_video_url: str = None,
     resolution: str = None,
 ) -> dict:
-    """Submit a video generation job to OpenRouter using MiniMax H3.
+    """Submit a video generation job to OpenRouter.
 
-    MiniMax H3 capabilities leveraged:
-    - Omni-reference inputs: up to 9 images + 3 video clips + 3 audio files in one call
-    - Native stereo audio: generated in the same pass as video (dialogue, foley, music synced)
-    - V2V motion transfer: feed original viral video as motion/timing reference
-    - 2K resolution output
-    - Up to 15 seconds per generation
+    The catalog's one video model (HeyGen Video, ADR 0327) is resolved
+    from VIDEO_MODELS below; the request shaping here is driven by the
+    model's documented capability flags — native audio when the model
+    documents the field, the founder's photo as the pinned first frame,
+    references only in the combinations the model accepts.
 
     Args:
         prompt: Text prompt describing the video to generate.
@@ -1478,7 +1440,7 @@ async def generate_video(
     #
     # The request is also gated on the model documenting the field, not just on
     # the caller asking. OpenRouter omits generate_audio from the accepted
-    # parameters for some models (Hailuo 3 Max), and an unlisted parameter is a
+    # parameters for some models, and an unlisted parameter is a
     # 400 — so a caller asking for audio on such a model is refused its audio
     # rather than its whole render. This is what lets the studio default the
     # flag off from capability and still survive a caller that asks directly.
@@ -1495,8 +1457,8 @@ async def generate_video(
     use_v2v_mode = prefer_v2v_motion and reference_video_url and reference_image_path and reference_image_path.exists()
 
     # === Reference Strategy ===
-    # MiniMax H3 via OpenRouter cannot combine frame_images with
-    # input_references (MiniMax returns a 400). The strategy is therefore:
+    # The catalog's model cannot combine frame_images with
+    # input_references (the provider returns a 400). The strategy is therefore:
     #   - Face image → input_references (as image ref for identity guidance)
     #   - Video → input_references (as video ref for motion replication)
     #   Both coexist in input_references without conflict.
@@ -1571,8 +1533,7 @@ async def generate_video(
         })
 
     # A provider that cannot carry a first frame AND references together would
-    # reject the request outright (BytePlus returns TaskTypeConstraint, MiniMax
-    # returns a 400), so exactly one visual anchor survives. The seam frame wins
+    # reject the request outright (a 400), so exactly one visual anchor survives. The seam frame wins
     # because it carries the face AND the scene in a single image, whereas a
     # bare face reference says who the person is but not where the last shot
     # ended. This used to drop references unconditionally; it is now

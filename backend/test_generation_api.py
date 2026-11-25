@@ -322,16 +322,16 @@ class TestCameraSetup:
 
     def test_fixed_camera_renders_on_first_frame_models(self, api, monkeypatch):
         """
-        A fixed camera renders on every model left on the list — H3 Max
-        named, HeyGen named, and the default unnamed (ADR 0225). Both
-        survivors pin the founder's photo as the literal first frame;
-        the fixed prompt opens on the presenter already framed by a
-        stationary camera indoors (ADR 0219), so the pinned photo is
-        the opening frame the model animates from, the same mechanism
-        handheld renders rely on. The old 409 for this pairing is gone:
-        each submit reaches the provider and records a generation
-        snapshotted as fixed, and the prompt carries the fixed staging
-        with no set-down staging in it.
+        A fixed camera renders on the model left on the list — HeyGen
+        named, and the default unnamed (ADR 0225; the list is HeyGen
+        alone since ADR 0327). It pins the founder's photo as the
+        literal first frame; the fixed prompt opens on the presenter
+        already framed by a stationary camera indoors (ADR 0219), so
+        the pinned photo is the opening frame the model animates from,
+        the same mechanism handheld renders rely on. The old 409 for
+        this pairing is gone: each submit reaches the provider and
+        records a generation snapshotted as fixed, and the prompt
+        carries the fixed staging with no set-down staging in it.
         """
         calls = _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest, UpdateStudioProjectRequest
@@ -340,15 +340,14 @@ class TestCameraSetup:
         _run(api._execute("UPDATE studio_projects SET camera_setup = ?, strategy = ? WHERE id = ?",
             ("fixed", json.dumps(strategy), project["id"])))
         for payload in (
-            StudioGenerationRequest(model="minimax-h3-max"),
             StudioGenerationRequest(model="heygen-video-1"),
             StudioGenerationRequest(),
         ):
             result = _run(api.submit_project_generation(project["id"], payload, ANON))
             assert result["camera_setup"] == "fixed"
-        assert len(calls) == 3
+        assert len(calls) == 2
         rows = _run(api.list_generations(studio_project_id=project["id"], user_id=ANON))
-        assert len(rows["generations"]) == 3
+        assert len(rows["generations"]) == 2
         prompt = calls[0]["prompt"]
         assert "head to mid-thigh" in prompt
         assert "indoors" in prompt.lower()
@@ -935,20 +934,20 @@ class TestRetry:
         assert err.value.status_code == 400
         assert len(calls) == 1
 
-    def test_retry_refuses_a_model_that_has_left_the_allowlist(self, api, monkeypatch):
+    def test_retry_refuses_a_model_that_has_left_the_catalog(self, api, monkeypatch):
         """
         resolve() falls back to the default for a model that is no longer
-        allowed, which on the retry path meant paying for one model and getting
+        offered, which on the retry path meant paying for one model and getting
         another with no error. The refusal is what makes the retry trustworthy.
+
+        The recorded model here is minimax-h3-max: rows saved before ADR 0327
+        removed it still name it, and retrying one must refuse rather than
+        quietly render on HeyGen Video instead.
         """
-        import video_providers
         gen, calls = self._failed(api, monkeypatch, "Retry Model Drift")
-        real_allowlist = video_providers._allowlist
-
-        def empty_allowlist():
-            return [k for k in real_allowlist() if k != gen["model"]]
-
-        monkeypatch.setattr(video_providers, "_allowlist", empty_allowlist)
+        _run(api._execute(
+            "UPDATE generations SET model = 'minimax-h3-max' WHERE id = ?",
+            (gen["id"],)))
         with pytest.raises(HTTPException) as err:
             _run(api.retry_generation(gen["id"], ANON))
         assert err.value.status_code == 409
@@ -1138,12 +1137,13 @@ class TestListingAndCapabilities:
 
     def test_capability_endpoint_reports_studio_models(self, api):
         """
-        The endpoint offers exactly the generative providers that remain. The
-        default is HeyGen Video; Hailuo 3 left the list (ADR 0221).
+        The endpoint offers exactly the generative providers that remain:
+        HeyGen Video alone since ADR 0327 (MiniMax H3 Max removed;
+        Hailuo 3 left earlier, ADR 0221). HeyGen is the default.
         """
         result = _run(api.list_studio_video_models())
         keys = [m["key"] for m in result["models"]]
-        assert keys == ["minimax-h3-max", "heygen-video-1"]
+        assert keys == ["heygen-video-1"]
         assert "aleph-2" not in keys
         assert result["default"] == "heygen-video-1"
 
@@ -1331,7 +1331,7 @@ class TestModelSelectionAtTheApiBoundary:
     on its own that is not enough: the founder is charged for a real render and
     handed a clip from a model they did not pick. These tests pin the boundary
     behaviour — an unrecognised key is refused, an omitted key is the default,
-    and both generative models work by name.
+    and the one generative model works by name.
     """
 
     def test_unknown_model_is_refused_before_spending(self, api, monkeypatch):
@@ -1354,7 +1354,7 @@ class TestModelSelectionAtTheApiBoundary:
             str(err.value.detail).split("Choose one of: ", 1)[1].split(". ", 1)[0]
         )
         assert {k.strip() for k in offered.split(",")} == {
-            "minimax-h3-max", "heygen-video-1",
+            "heygen-video-1",
         }
         assert not calls, "a render was submitted for an unknown model"
 
@@ -1390,52 +1390,35 @@ class TestModelSelectionAtTheApiBoundary:
         assert gen["model"] == "heygen-video-1"
         assert len(calls) == 1
 
-    def test_h3_max_is_honoured_when_named(self, api, monkeypatch):
+    def test_the_removed_h3_max_is_refused_before_spending(self, api, monkeypatch):
         """
-        The A/B path: the same script renders on the model the founder picked,
-        so the comparison is meaningful.
-        """
-        from models import StudioGenerationRequest
-        calls = _mock_submit(api, monkeypatch)
-        project, _, _ = _ready_project(api, "Max Model", duration=10)
-        gen = _run(api.submit_project_generation(
-            project_id=project["id"],
-            payload=StudioGenerationRequest(model="minimax-h3-max"),
-            user_id=ANON))
-        assert gen["model"] == "minimax-h3-max"
-        assert len(calls) == 1
-
-    def test_h3_max_carries_identity_as_first_frame(self, api, monkeypatch):
-        """
-        Hailuo 3 Max refuses input_references outright — proven live, the
-        serving provider 400s the submit. So the same face rides as the opening
-        frame instead, the one image field OpenRouter documents as supported
-        for this model. What the founder uploaded still reaches the render;
-        only the field changes, chosen per model at submit time.
+        The existing-projects case for ADR 0327: a project (or a client)
+        saved while MiniMax H3 Max was on the list still names
+        minimax-h3-max. Submitting it must refuse loudly — a 400 naming
+        the key and the model that remains — rather than quietly
+        rendering on the default, because the founder is charged for a
+        real render and would be handed a clip from a model they did
+        not choose. Same boundary contract as the removed Hailuo 3
+        above; the read-path degradation is pinned in test_generation.py.
         """
         from models import StudioGenerationRequest
         calls = _mock_submit(api, monkeypatch)
-        project, _, _ = _ready_project(api, "Max Face", duration=10)
-        _run(api.submit_project_generation(
-            project_id=project["id"],
-            payload=StudioGenerationRequest(model="minimax-h3-max"),
-            user_id=ANON))
-        assert len(calls) == 1
-        assert not calls[0].get("input_references"), \
-            "Max must never send input_references — the provider refuses them"
-        face = calls[0].get("reference_image_path")
-        assert face is not None, "the photo must still ride along, as the first frame"
-        assert Path(str(face)).is_file()
-        # ...and the two-section prompt is identical on both models.
-        assert "The person on camera is the person in the attached character reference" in (
-            calls[0]["prompt"])
+        project, _, _ = _ready_project(api, "Stale Max Model", duration=10)
+        with pytest.raises(HTTPException) as err:
+            _run(api.submit_project_generation(
+                project_id=project["id"],
+                payload=StudioGenerationRequest(model="minimax-h3-max"),
+                user_id=ANON))
+        assert err.value.status_code == 400
+        assert "minimax-h3-max" in str(err.value.detail)
+        assert not calls, "a render was submitted for the removed model"
 
     def test_heygen_carries_identity_as_a_pinned_opening_frame(self, api, monkeypatch):
         """
         The whole-clip rule for HeyGen, after the selfie-framing fix: the
-        opening frame IS the photo, pinned as a hard anchor the same way
-        H3 Max does it, because a soft input_references suggestion let the
-        face drift into a partial crop. Identity rides as the first frame;
+        opening frame IS the photo, pinned as a hard anchor, because a
+        soft input_references suggestion let the face drift into a
+        partial crop. Identity rides as the first frame;
         every other frame comes from the plan.
         """
         from models import StudioGenerationRequest
@@ -1455,54 +1438,39 @@ class TestModelSelectionAtTheApiBoundary:
         assert "The person on camera is the person in the attached character reference" in (
             calls[0]["prompt"])
 
-    def test_a_prompt_over_the_provider_ceiling_prevents_spend(self, api, monkeypatch):
+    def test_no_ceiling_refusal_stands_between_the_builder_and_the_submit(self, api, monkeypatch):
         """
-        Each provider has its own prompt ceiling and the two limits we can
-        actually hit here -- prompt characters and encoded body bytes -- are
-        ours, not the provider's, so neither appears in anything the founder is
-        shown. When the assembled prompt still exceeds the ceiling after
-        scaling, the refusal has to happen BEFORE the submit.
-
-        Cost of getting this wrong is concrete: the founder pays for an attempt
-        that cannot succeed, and the error they see names a parameter they have
-        no way to set.
+        ADR 0327 deleted the ceiling guard. It used to 409 a prompt that
+        still landed over its ceiling after fitting — latterly suggesting
+        a switch to MiniMax H3 Max, the failure Kasra hit live at 4,108
+        characters against HeyGen's 4,090. The model is removed and the
+        refusal with it: the builder's fit (tightest tier included)
+        guarantees the assembly fits the real ceiling, so nothing here
+        refuses on length. This pins the absence: even with the recorded
+        ceiling squeezed below what the fixed instructions alone occupy
+        — a budget no fit could meet — the submit goes through with the
+        builder's tightest assembly instead of stopping the founder.
         """
         import video_providers as vp
         calls = _mock_submit(api, monkeypatch)
         from models import StudioGenerationRequest
         project, _, _ = _ready_project(api, "Over Ceiling")
 
-        # Squeeze the ceiling below what the prompt's fixed instructions alone
-        # occupy, which is the only way the scaled variables cannot save it.
-        # The submit names no model, so the ceiling squeezed is the default's
-        # — HeyGen Video's since ADR 0221.
         original = vp._CAPABILITY_NOTES["heygen-video-1"]["prompt_char_limit"]
         vp._CAPABILITY_NOTES["heygen-video-1"]["prompt_char_limit"] = 200
         try:
-            with pytest.raises(HTTPException) as err:
-                _run(api.submit_project_generation(
-                    project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
+            gen = _run(api.submit_project_generation(
+                project_id=project["id"], payload=StudioGenerationRequest(), user_id=ANON))
         finally:
             vp._CAPABILITY_NOTES["heygen-video-1"]["prompt_char_limit"] = original
 
-        assert err.value.status_code == 409
-        detail = str(err.value.detail)
-        # Names the size, the ceiling, and reassures that nothing has been charged.
-        assert "character prompt" in detail
-        assert "nothing has been charged" in detail
-        assert " over the 200 " in detail, detail
-        # The ceiling here is below what the fixed instructions alone occupy:
-        # the fit has already squeezed the app's direction wording to its
-        # tightest and the unscalable mass still does not fit. The message
-        # names that cause and the model switch — and never advises cutting
-        # the script, the one part of the prompt the fit never touches
-        # (ADR 0255; the old wording's "Cut about N characters from the
-        # script" is the failure this replaced).
-        assert "already squeezed to its tightest" in detail, detail
-        assert "cutting the script is not the fix" in detail, detail
-        assert "Cut about" not in detail, detail
-        assert "on the Generate step" in detail, detail
-        assert calls == []
+        assert gen["model"] == "heygen-video-1"
+        assert len(calls) == 1, "the submit was refused on prompt length"
+        # The prompt that went out is the builder's tightest assembly for
+        # the squeezed budget — far below the normal build, its direction
+        # wording trimmed by the tightest tier rather than the render
+        # being stopped.
+        assert len(calls[0]["prompt"]) < 4090
 
     def test_heygen_trims_direction_and_keeps_the_script(self, api, monkeypatch):
         """
