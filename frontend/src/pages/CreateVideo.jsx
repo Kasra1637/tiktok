@@ -125,10 +125,10 @@ import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Check,
    footage; inside a flow, the finish is a step, not a detour. */
 const LEGACY_STEP_KEYS = { template: "angle", hook: "review" };
 const STEPS = [
-  { key: "profile", label: "App Profile", icon: Briefcase },
-  { key: "angle", label: "Audience & template", icon: Target },
-  { key: "review", label: "Review & submit", icon: CheckCircle2 },
-  { key: "finish", label: "Demo + CTA", icon: Smartphone },
+  { key: "profile", label: "App Profile", shortLabel: "Profile", icon: Briefcase },
+  { key: "angle", label: "Audience & template", shortLabel: "Audience", icon: Target },
+  { key: "review", label: "Review & submit", shortLabel: "Review", icon: CheckCircle2 },
+  { key: "finish", label: "Demo + CTA", shortLabel: "Demo", icon: Smartphone },
 ];
 
 function humanize(value) {
@@ -3545,24 +3545,21 @@ export default function CreateVideo() {
           below sm each segment is badge and label only — its percentage
           steps aside for the live score at the end, and its state line
           steps aside for the section header's chip below, which says the
-          same words; the aria-label keeps both at every width. The
+          same words; the aria-label keeps both at every width. Below sm
+          the segment also stacks — badge over label, centered — and the
+          label is one word (Profile / Audience / Review / Demo), because
+          the full names truncated to stubs in a quarter of a phone's
+          width (ADR 0319); the full names return at sm. The
           segments wear no button chrome (ADR 0298): no border, no card,
-          no resting fill — flat tabs, the active one marked by its
-          indigo underline and label alone, so the page's filled shapes
-          belong to its actions only. The hairline track is gone
-          (ADR 0315, the founder's ruling): the only line under the
-          segments is the progress fill itself, a slim gradient
-          stretched from the left to the live score, and the active
-          segment's underline runs at half its length, from the left —
-          the colorful lines are progress and place, nothing else. */}
+          no resting fill — flat tabs, so the page's filled shapes
+          belong to its actions only. And the rail carries no line at
+          all (ADR 0322, the founder's ruling, superseding ADR 0315's
+          progress fill and half-length underline): progress reads
+          from the check badges alone as the founder advances, and
+          the active step is marked by its indigo label alone. */}
       <div data-testid="studio-progress-rail" className="space-y-2">
         <div className="flex min-w-0 items-center gap-2">
-        <nav aria-label="Progress" className="relative flex min-w-0 flex-1 items-stretch gap-1 sm:gap-1.5">
-          {/* The progress fill (ADR 0315): the rail's only line — a slim
-              gradient stretched from the left to the live score, the
-              same number the quarters and the end readout derive from,
-              so they can never disagree. */}
-          <span aria-hidden="true" className="rail-progress-fill" style={{ width: `${railPct}%` }} />
+        <nav aria-label="Progress" className="flex min-w-0 flex-1 items-stretch gap-1 sm:gap-1.5">
         {stepStates.map((s, i) => {
           const active = i === step;
           // Cumulative quarters: the segment states how much of the workflow
@@ -3593,8 +3590,8 @@ export default function CreateVideo() {
               data-state={isLocked ? "locked" : s.state}
               data-locked={isLocked ? "true" : "false"}
               data-testid={`studio-progress-segment-${s.step.key}`}
-              className={`tap-chip flex min-w-0 flex-1 items-center gap-1.5 px-2 py-2 text-left transition-colors duration-300 hover:bg-[color:var(--indigo-8)] sm:gap-2 sm:px-2.5 ${
-                isLocked ? "opacity-70" : active ? "rail-segment-active" : ""
+              className={`tap-chip flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-2 text-center transition-colors duration-300 hover:bg-[color:var(--indigo-8)] sm:flex-row sm:gap-2 sm:px-2.5 sm:text-left ${
+                isLocked ? "opacity-70" : ""
               }`}
             >
               <span
@@ -3607,7 +3604,7 @@ export default function CreateVideo() {
               >
                 {isLocked ? <Lock className="h-3 w-3" /> : s.state === "done" ? <Check className="h-3 w-3" /> : i + 1}
               </span>
-              <span className="flex min-w-0 flex-1 flex-col">
+              <span className="flex min-w-0 flex-1 flex-col items-center sm:items-stretch">
                 <span
                   className={`truncate text-xs font-semibold ${
                     active
@@ -3617,7 +3614,8 @@ export default function CreateVideo() {
                         : "text-muted-foreground"
                   }`}
                 >
-                  {s.step.label}
+                  <span className="sm:hidden">{s.step.shortLabel}</span>
+                  <span className="hidden sm:inline">{s.step.label}</span>
                 </span>
                 {/* The pick, or the state in words — never both: a done step
                     names what was chosen, the rest say what is owed. Truncated

@@ -613,6 +613,35 @@ _SELFIE_CAMERA_MOVE = (
     "frame; never tighten or crop the head."
 )
 
+# A Hook + CTA hook swaps the hold for its own move (ADR 0323, Kasra's
+# ruling): the hook starts WIDE — waist up, the place visible around
+# her — and her own hand eases the phone toward her face as she
+# delivers the line, landing at the close framing by its end. Starting
+# zoomed in is the fault the ruling names; arriving close is the
+# design. Create Video's hold above is untouched: this text replaces
+# it only on the hook surface, whose renders are handheld by rule
+# (ADR 0252), so the two framings never share a prompt.
+_HOOK_SELFIE_CAMERA_MOVE = (
+    "START WIDE, LAND CLOSE (this hook's own framing): the take opens on the "
+    "wide framing above — waist up, full head and all her hair in frame, the "
+    "place visible around her — and as she delivers the line her own hand "
+    "eases the phone naturally toward her face, landing at the close "
+    "straight-on framing by the line's end. The move in is hers alone: "
+    "unhurried, continuous, no zoom and no cut. Starting on her face "
+    "filling the frame is a failed opening; arriving close is the design. "
+    "In the same moment the actor makes one small story-specific "
+    "action{gesture}. Keep it subtle and natural, eyes on the lens. No "
+    "cut. Keep the full head, hair and chin inside frame throughout."
+)
+
+_CONDENSED_HOOK_SELFIE_CAMERA_MOVE = (
+    "Start wide (waist up, the place visible around her); as she speaks, "
+    "her own hand eases the phone toward her face, landing close by the "
+    "line's end — no zoom, no cut; never open on a face filling the "
+    "frame. Simultaneous actor gesture{gesture}; subtle, natural, eyes "
+    "on lens. Never crop the head or hair."
+)
+
 _CONDENSED_SELFIE_CAMERA_MOVE = (
     "Hold that straight-on selfie framing — keep the phone steady, no zoom. "
     "Simultaneous actor gesture{gesture}; "
@@ -680,7 +709,7 @@ _CONDENSED_SELFIE_FINAL_BEAT = (
 )
 
 
-def camera_move_section(strategy: dict, hook_seconds=None, condensed: bool = False) -> str:
+def camera_move_section(strategy: dict, hook_seconds=None, condensed: bool = False, hook_surface: bool = False) -> str:
     """Model-only orbit and gesture, not timestamped or synced to a spoken word.
 
     Timing is qualitative because generation cannot guarantee frame-exact action.
@@ -688,6 +717,12 @@ def camera_move_section(strategy: dict, hook_seconds=None, condensed: bool = Fal
     completes its eased ramp about 0.6s later. It never supplies the orbit.
     A handheld selfie has no orbit at all — the held phone cannot be the
     framing and also move to a 3/4 angle, so its wording holds straight-on.
+
+    A Hook + CTA hook (`hook_surface`, ADR 0323) is the one exception
+    to the hold: it starts wide and lands close, its own move above.
+    A fixed strategy keeps the fixed text whatever the surface — the
+    hook surface is handheld by rule, so the exception can only ever
+    meet a handheld strategy in production.
     """
     beat = (strategy or {}).get("camera_beat")
     beat = beat if isinstance(beat, dict) else {}
@@ -702,6 +737,9 @@ def camera_move_section(strategy: dict, hook_seconds=None, condensed: bool = Fal
     if gesture[:3].lower() == "as ":
         gesture = gesture[3:].lstrip(" ,—-")
     clause = f": {gesture}" if gesture else " (a slight head tilt or expression shift)"
+    if hook_surface and (strategy or {}).get("camera_setup") != "fixed":
+        template = _CONDENSED_HOOK_SELFIE_CAMERA_MOVE if condensed else _HOOK_SELFIE_CAMERA_MOVE
+        return template.format(gesture=clause)
     if (strategy or {}).get("camera_setup") != "fixed":
         template = _CONDENSED_SELFIE_CAMERA_MOVE if condensed else _SELFIE_CAMERA_MOVE
         return template.format(gesture=clause)
@@ -2250,7 +2288,10 @@ def _assemble_prompt(
     # the opening-interrupt directive sits for the same reason: the model reads a
     # standard immediately before the material it is a standard for.
     sections.append(starting_shot(strategy.get("camera_setup")))
-    sections.append(camera_move_section(strategy, hook_seconds, condensed))
+    sections.append(camera_move_section(
+        strategy, hook_seconds, condensed,
+        hook_surface=str(plan.get("surface") or "") == "hook_cta",
+    ))
     # The final moment: the phone handoff when both hands are free, the chosen
     # physical ending when the camera is the phone in their hand (ADR 0093).
     if str(strategy.get("camera_setup") or "handheld") == "fixed":

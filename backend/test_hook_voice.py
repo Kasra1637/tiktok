@@ -1079,6 +1079,13 @@ def test_the_craft_block_teaches_hook_power_from_the_scored_pairs():
     # pairs above stand as evidence for their named flaws, but the
     # model shape opens with the goal as a trying-line — Kasra's
     # mural line — not with the garden.
+    # ADR 0321 (Kasra's call, Nov 24 2026, from his own hook pair):
+    # the ending rule — a hook never closes by announcing the loss as
+    # settled fact; it ends mid-race, on the race the demo is about
+    # to win, so the demo starts on the very next beat.
+    assert "END MID-RACE" in block
+    assert "and it keeps slipping away" in block
+    assert "before it slips away" in block
     assert "I'm trying to keep count, Saturday afternoon and I keep losing count" in block
     assert "After masking all day words in the quiet garden aren't mine" not in block
 

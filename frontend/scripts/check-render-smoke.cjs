@@ -5126,18 +5126,24 @@ async function main() {
     if (pct() !== "38%") throw new Error(`the rail did not move with the step: ${JSON.stringify(pct())}`);
   });
 
-  // ADR 0283: the active segment wears the crisp underline accent and a
-  // done step's badge carries the one-shot completion pulse; both styles
-  // live in index.css, the pulse inside the reduced-motion gate.
-  await check("the rail's active step wears a crisp underline and a done badge pulses once", async (ctx) => {
+  // ADR 0283's pulse, ADR 0322's bare rail (Kasra's ruling, Nov 24
+  // 2026): the rail carries NO line at all — no progress fill under
+  // the segments, no underline under the active one. Progress reads
+  // from the check badges alone as the founder advances; the active
+  // step is marked by its indigo label, and a done step's badge
+  // still settles with the one-shot completion pulse.
+  await check("the rail carries no line and a done badge pulses once", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi({ getAppProfiles: async () => ({ profiles: [{ ...PROFILE, status: "approved" }] }) }, () =>
       mount(CreateVideo, {})(ctx)
     );
     const active = ctx.container.querySelector('[data-testid^="studio-progress-segment-"][aria-current="step"]');
     if (!active) throw new Error("the rail has no active segment");
-    if (!active.classList.contains("rail-segment-active")) {
-      throw new Error("the active rail segment carries no crisp underline accent");
+    if (active.classList.contains("rail-segment-active")) {
+      throw new Error("the active rail segment still wears a line accent (ADR 0322)");
+    }
+    if (ctx.container.querySelector(".rail-progress-fill")) {
+      throw new Error("the rail still carries its progress fill line (ADR 0322)");
     }
     const done = ctx.container.querySelector('[data-testid="studio-progress-segment-profile"]');
     if (!done || done.getAttribute("data-state") !== "done") {
@@ -5147,11 +5153,8 @@ async function main() {
       throw new Error("the done step's badge carries no completion pulse");
     }
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-    if (!css.includes(".rail-segment-active") || !css.includes("background-size: 50% 2px")) {
-      throw new Error("index.css carries no half-length underline for the active rail segment (ADR 0315)");
-    }
-    if (!css.includes(".rail-progress-fill")) {
-      throw new Error("index.css carries no progress fill for the rail (ADR 0315)");
+    if (css.includes(".rail-segment-active") || css.includes(".rail-progress-fill")) {
+      throw new Error("index.css still carries a rail line rule (ADR 0322)");
     }
     if (!css.includes("@keyframes rail-done-pulse") || !css.includes(".rail-done-badge")) {
       throw new Error("index.css carries no completion pulse for the rail's done badge");
@@ -5178,6 +5181,22 @@ async function main() {
       const state = seg.querySelector('span.truncate[aria-hidden="true"]');
       if (!state || !state.classList.contains("hidden") || !state.classList.contains("sm:block")) {
         throw new Error("a rail segment's state line does not step aside on phones");
+      }
+      // ADR 0319: on phones the label is one word that fits whole; the
+      // full name waits for sm. The founder's screenshot showed the
+      // full names truncated to stubs ("Ap\u2026", "Au\u2026").
+      const short = [...seg.querySelectorAll("span")].find((el) => el.classList.contains("sm:hidden"));
+      const full = [...seg.querySelectorAll("span")].find(
+        (el) => el.classList.contains("hidden") && el.classList.contains("sm:inline")
+      );
+      if (!short || !/^(Profile|Audience|Review|Demo)$/.test(short.textContent.trim())) {
+        throw new Error("a rail segment carries no one-word label for phones (ADR 0319)");
+      }
+      if (!full || full.textContent.trim().length <= short.textContent.trim().length) {
+        throw new Error("a rail segment's full label does not wait for wider screens (ADR 0319)");
+      }
+      if (!seg.classList.contains("flex-col") || !seg.classList.contains("sm:flex-row")) {
+        throw new Error("a rail segment does not stack badge over label on phones (ADR 0319)");
       }
     }
     const canvas = ctx.container.querySelector('[data-testid="wizard-canvas"]');
@@ -8762,7 +8781,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const pill = ctx.container.querySelector('[data-testid="studio-progress-segment-profile"]');
     if (!pill) throw new Error("the progress bar carries no profile step");
     const text = (pill.textContent || "").trim();
-    if (!text.startsWith("App Profile")) {
+    // ADR 0319: the segment carries two label spans — the one-word
+    // phone label and the full label. The full label is the lead.
+    const fullLabel = [...pill.querySelectorAll("span")].find(
+      (el) => el.classList.contains("hidden") && el.classList.contains("sm:inline")
+    );
+    if (!fullLabel || fullLabel.textContent.trim() !== "App Profile") {
       throw new Error(`the profile segment does not lead with its label: ${JSON.stringify(text)}`);
     }
     if (text.includes(PROFILE.brand_name)) {
@@ -15202,6 +15226,13 @@ async function runHookCtaChecks() {
             throw new Error(`the ${testid} pick did not render in the Hook card`);
           }
         }
+        // ADR 0320 (Kasra's ruling, Nov 24 2026): the Buffet stands
+        // in the Focus header only once a hook exists to steer, or
+        // early when the menu itself is stale. This profile's menu
+        // is fresh and no hook exists yet, so it must not stand.
+        if (card.querySelector('[data-testid="hook-picks-focus-refresh"]')) {
+          throw new Error("the Buffet stands before any hook on a fresh menu (ADR 0320)");
+        }
         await chooseOption(ctx, card.querySelector('[data-testid="hook-picks-focus"]'), OUTCOME);
         await clickEl(ctx, card.querySelector('[data-testid="hook-picks-tone-warm"]'));
         await clickEl(ctx, card.querySelector('[data-testid="hook-picks-shape-question"]'));
@@ -15223,6 +15254,13 @@ async function runHookCtaChecks() {
         const savedBefore = events.slice(0, generateAt).filter((e) => e.patch).map((e) => e.patch);
         if (!savedBefore.some((p) => p.hook_shape === "question")) {
           throw new Error("the hook was written before its picks had saved");
+        }
+        // ADR 0320: with a hook on file, the Buffet takes its place
+        // in the Focus header — the steering moment has arrived.
+        await act(async () => {});
+        const cardAfter = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
+        if (!cardAfter || !cardAfter.querySelector('[data-testid="hook-picks-focus-refresh"]')) {
+          throw new Error("the Buffet did not take its place once a hook exists (ADR 0320)");
         }
       }
     );

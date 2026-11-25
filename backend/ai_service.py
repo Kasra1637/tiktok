@@ -3482,6 +3482,22 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
     line to ask; a statement pick leaves the gate as it is, which
     already refuses a question. Unpicked, the block is empty and the
     prompt is byte-for-byte the one this function has always built.
+
+    Since ADR 0323 the accepted draft is not the answer — the page
+    gets Create Video's machinery, as the founder ordered. The draft
+    hook is the incumbent in the same bake-off the plan runs
+    (`_hook_bake_off`): three alternatives written for the same
+    story — here the demo that follows, anchored on the profile's
+    promised outcome — filtered by the same hard gates this loop
+    enforces, with the craft scorer choosing among the survivors.
+    Then ADR 0115's craft correction, adapted: when the winning hook
+    scores below the plan's bar (the same fraction of the total this
+    surface can reach — Story arc and Demo handoff read a script and
+    are structurally silent here), one findings-steered retry
+    rewrites the hook and its direction as one package, and ships
+    only when it passes the same gates and scores higher. Neither
+    stage can refuse or worsen the hook: any failure inside them
+    returns the draft this loop accepted, byte-for-byte.
     """
     project = project or {}
     profile = profile or {}
@@ -3561,18 +3577,26 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
         "a comma (\"…, why so surprised?\") — a comma-spliced fragment "
         "question is a failed line.\n"
         "- hook_action: what the presenter physically does in the "
-        "opening — already in motion in the very first frame, head "
-        "already lifting, eyes already rising into the camera; the move "
-        "is rapid and enacts the hook's own central action, caught at "
-        "its sharpest instant, its snap complete inside the first half "
-        "second. Never an opening on a still, downward-looking frame. "
+        "opening, written as a scene the Create Video way: she is in "
+        "the place the location names, already mid-gesture in the "
+        "very first frame — the move is rapid and enacts the hook's "
+        "own central action, caught at its sharpest instant, its snap "
+        "complete inside the first half second. Never an opening on a "
+        "still, downward-looking frame. "
         "The central action is performed as a physical gesture with "
         "the hands and body, in frame from the first frame: when the "
         "scene has a physical action (writing in the notebook, "
         "counting on the fingers, lifting the cup) the hands and body "
         "perform it, and a face-only change — eyes widening, an "
         "expression shifting — never counts as the opening beat; the "
-        "face rides the gesture, it never replaces it.\n"
+        "face rides the gesture, it never replaces it. The framing "
+        "starts WIDE — waist-up, the place visible around her — and "
+        "as she speaks her own hand eases the camera toward her face, "
+        "landing close by the line's end: never open on a face "
+        "already filling the frame, and never lead this direction "
+        "with her head lifting or her eyes rising into the camera — "
+        "the face rides the gesture, and the gesture opens the "
+        "scene.\n"
         "- closing_action: the one sharp physical beat of the last "
         "second, at the opening's energy — a look, a gesture, a held "
         "reaction the demo can cut away from. Never a fade, never a "
@@ -3594,8 +3618,64 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
         "the verified product facts below. Respond with STRICT JSON "
         "only, no markdown fences."
     )
+    shape = _hook_shape_pick(project)
+
+    def _parse_reply(data) -> dict:
+        data = data if isinstance(data, dict) else {}
+        hook = " ".join(str(data.get("hook_line") or "").split()).strip()
+        if hook:
+            hook = character_policy.neutralize(hook)
+        return {
+            "hook_line": hook,
+            "hook_action": " ".join(str(data.get("hook_action") or "").split()).strip(),
+            "closing_action": " ".join(str(data.get("closing_action") or "").split()).strip(),
+            "location": " ".join(str(data.get("location") or "").split()).strip(),
+        }
+
+    def _line_issues(hook: str) -> list:
+        """This page's hard gates for one hook line, in one place.
+
+        The draft loop below enforces them, and the bake-off and the
+        craft correction are filtered by the very same list (ADR
+        0323): a line that would be corrected here is out there,
+        however well it would score.
+        """
+        issues = []
+        words = len(hook.split())
+        if words > word_budget:
+            issues.append(
+                f"the hook line runs {words} words; at most "
+                f"{word_budget} words fit {seconds} seconds")
+        if len(hook) > char_budget:
+            issues.append(
+                f"the hook line runs {len(hook)} characters; at most "
+                f"{char_budget} fit {seconds} seconds")
+        # The shape pick enforced beside the budgets (ADR 0247):
+        # a question pick opens the gate's question charge and
+        # requires the line to ask; a statement pick leaves the
+        # gate as it is, which already refuses a question.
+        issues.extend(_spoken_gate_issues(
+            hook, budget=char_budget,
+            allows_question=(shape == "question")))
+        if shape == "question" and not hook.rstrip('"\u201d\u2019').endswith("?"):
+            issues.append(
+                "the founder picked a question hook, but the line "
+                "is a statement — ask the feeling or pain point as "
+                "one finished question")
+        if shape == "question":
+            # Complete in meaning, not only in punctuation (ADR
+            # 0249): a bare question tail passes the gate's
+            # terminator check while asking about nothing, so the
+            # dangling shape is charged here, by name, and the
+            # correction above carries it to the rewrite.
+            dangling = _dangling_question_issue(hook)
+            if dangling:
+                issues.append(dangling)
+        return issues
+
     correction = ""
     last_failure = ""
+    draft = None
     for _attempt in range(3):
         data = await _chat_json(
             system_message=system_message,
@@ -3605,55 +3685,15 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
             attempts=2,
             json_schema=HOOK_LINE_JSON_SCHEMA,
         )
-        data = data if isinstance(data, dict) else {}
-        hook = " ".join(str(data.get("hook_line") or "").split()).strip()
-        if hook:
-            hook = character_policy.neutralize(hook)
-        hook_action = " ".join(str(data.get("hook_action") or "").split()).strip()
-        closing_action = " ".join(str(data.get("closing_action") or "").split()).strip()
-        location = " ".join(str(data.get("location") or "").split()).strip()
+        reply = _parse_reply(data)
         issues = []
-        if not hook:
+        if not reply["hook_line"]:
             issues.append("the hook line is missing")
         else:
-            words = len(hook.split())
-            if words > word_budget:
-                issues.append(
-                    f"the hook line runs {words} words; at most "
-                    f"{word_budget} words fit {seconds} seconds")
-            if len(hook) > char_budget:
-                issues.append(
-                    f"the hook line runs {len(hook)} characters; at most "
-                    f"{char_budget} fit {seconds} seconds")
-            # The shape pick enforced beside the budgets (ADR 0247):
-            # a question pick opens the gate's question charge and
-            # requires the line to ask; a statement pick leaves the
-            # gate as it is, which already refuses a question.
-            shape = _hook_shape_pick(project)
-            issues.extend(_spoken_gate_issues(
-                hook, budget=char_budget,
-                allows_question=(shape == "question")))
-            if shape == "question" and not hook.rstrip('"\u201d\u2019').endswith("?"):
-                issues.append(
-                    "the founder picked a question hook, but the line "
-                    "is a statement — ask the feeling or pain point as "
-                    "one finished question")
-            if shape == "question":
-                # Complete in meaning, not only in punctuation (ADR
-                # 0249): a bare question tail passes the gate's
-                # terminator check while asking about nothing, so the
-                # dangling shape is charged here, by name, and the
-                # correction above carries it to the rewrite.
-                dangling = _dangling_question_issue(hook)
-                if dangling:
-                    issues.append(dangling)
+            issues = _line_issues(reply["hook_line"])
         if not issues:
-            return {
-                "hook_line": hook,
-                "hook_action": hook_action,
-                "closing_action": closing_action,
-                "location": location,
-            }
+            draft = reply
+            break
         last_failure = "; ".join(issues)
         correction = (
             f"\n\nCorrection: your previous reply failed these checks: "
@@ -3662,10 +3702,129 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
             f"most {word_budget} words and at most {char_budget} "
             "characters."
         )
-    raise RuntimeError(
-        "The hook could not be written inside its length and finish "
-        f"rules ({last_failure}). Try again, or write the line yourself."
+    if draft is None:
+        raise RuntimeError(
+            "The hook could not be written inside its length and finish "
+            f"rules ({last_failure}). Try again, or write the line yourself."
+        )
+
+    # The hard loop has accepted a complete, fitting draft. HOOK
+    # BAKE-OFF (ADR 0323): the draft hook is the incumbent, not the
+    # answer — the same machinery the plan runs (ADR 0130), pointed
+    # at this page's story. The page has no script: its story is the
+    # demo that follows, so the demo stands in the bake-off's story
+    # slot, anchored on the profile's promised outcome, and the
+    # candidates are scored as the standalone lines they are (the
+    # demo is the founder's own footage, not spoken words). The hard
+    # filter is this page's own gate composition, the checks the
+    # draft just passed. A swap keeps the draft's direction — the
+    # plan's own precedent: candidates open the same story, so the
+    # direction written for its moment stands; the craft correction
+    # below is the stage that rewrites line and direction together.
+    outcomes = [
+        str(item.get("outcome") or "").strip()
+        if isinstance(item, dict) else str(item or "").strip()
+        for item in (facts["outcome_statements"] or [])
+    ]
+    outcomes = [text for text in outcomes if text] + list(facts["desired_outcomes"])
+    bakeoff_context = (
+        f"THE APP: {facts['app_name']} — {facts['category']}\n"
+        f"WHAT IT DOES: {facts['description']}\n"
+        f"THE PAIN IT RESOLVES: {'; '.join(facts['problems']) or facts['description']}\n"
+        f"THE OUTCOME IT PROMISES: {'; '.join(outcomes) or facts['description']}\n"
     )
+    demo_story = (
+        "THE DEMO THAT FOLLOWS (the founder's own app demo, recorded "
+        "right after this hook — it is the answer the hook points "
+        "to, never spoken words): the demo shows "
+        f"{facts['app_name']} delivering its promised outcome"
+        f"{': ' + '; '.join(outcomes) if outcomes else ''}. The hook "
+        "ends on the open ache and the demo lands as its answer."
+    )
+    hook, craft = await _hook_bake_off(
+        system_message=system_message,
+        draft_hook=draft["hook_line"],
+        script=demo_story,
+        hook_budget=char_budget,
+        middle_budget=char_budget,
+        hook_target=char_budget,
+        hook_seconds=seconds,
+        duration_seconds=seconds,
+        app_name=str(profile.get("brand_name") or ""),
+        allows_question=(shape == "question"),
+        certified_outcome="",
+        story_context=bakeoff_context,
+        rules_block=_spoken_line_rules_block(),
+        hook_form_block=_hook_form_block(None) + _hook_steering_block(project, profile),
+        promise_rule="",
+        issues_fn=_line_issues,
+        scoring_script="",
+    )
+    result = dict(draft)
+    if hook != draft["hook_line"]:
+        result["hook_line"] = hook
+
+    # The craft score is the next bar, but it is advisory (ADR
+    # 0115's pattern, adapted in ADR 0323): one targeted retry, then
+    # keep whichever hard-valid package scores higher. The bar is
+    # the plan's own fraction — CRAFT_RETRY_BELOW of the pair's
+    # achievable 95 — applied to the total this surface can reach:
+    # Story arc and Demo handoff read a script, so their achievable
+    # maxima are excluded from the hook's scale. A failed, invalid
+    # or weaker retry never refuses a hook the founder can already
+    # review, and the retry rewrites the direction with the line,
+    # so a corrected line never ships wearing the draft's beats.
+    achievable = sum(
+        dimension.get("achievable_max") or 0
+        for dimension in (craft.get("dimensions") or {}).values()
+        if dimension.get("key") not in ("story_arc", "demo_handoff")
+    )
+    if achievable and craft["total"] * 95 < CRAFT_RETRY_BELOW * achievable:
+        first_total = craft["total"]
+        logger.info(
+            "Hook craft score %s on the hook scale (%s achievable); "
+            "trying one targeted correction.",
+            first_total, achievable,
+        )
+        try:
+            retry_data = await _chat_json(
+                system_message=system_message,
+                prompt=prompt + _hook_craft_retry_block(
+                    result, craft, word_budget, char_budget),
+                context="Hook line craft correction",
+                max_tokens=HOOK_LINE_MAX_TOKENS,
+                json_schema=HOOK_LINE_JSON_SCHEMA,
+            )
+            retry = _parse_reply(retry_data)
+            if not retry["hook_line"] or _line_issues(retry["hook_line"]):
+                logger.warning(
+                    "Hook craft correction produced hard issues; "
+                    "keeping the winning hook.")
+            else:
+                retry_craft = creative_quality.assess_spoken_quality(
+                    retry["hook_line"], "",
+                    hook_seconds=seconds, total_seconds=seconds,
+                    app_name=str(profile.get("brand_name") or ""),
+                    allows_question=(shape == "question"),
+                )
+                if retry_craft["total"] > craft["total"]:
+                    result = retry
+                    logger.info(
+                        "Hook craft correction improved the hook: %s -> %s.",
+                        first_total, retry_craft["total"],
+                    )
+                else:
+                    logger.info(
+                        "Hook craft correction did not improve the hook "
+                        "(%s -> %s); keeping the winning hook.",
+                        first_total, retry_craft["total"],
+                    )
+        except Exception as exc:
+            # A provider refusal or a malformed retry must not throw
+            # away a hook that already passed every hard check.
+            logger.warning(
+                "Hook craft correction failed (%s); keeping the winning hook.", exc)
+    return result
 
 
 async def generate_post_kit(project: dict, profile: dict) -> dict:
@@ -4310,7 +4469,7 @@ def _spoken_line_rules_block() -> str:
         "to a friend, not app copy. Use plain, loose words, never analytical or "
         "formal ones. Bad: 'noticing it repeat makes the dip feel less random' "
         "-- say 'it's weirdly the same every day' instead. Bad: 'weekly' -- say "
-        "'every week' instead. Same for any frequency word. "
+        "'every week' instead. "
         "Never use the app's own feature names or product nouns in a spoken "
         "line — nobody says them to their phone. Bad: 'now reflections sound "
         "like me' — name the thing in everyday words instead: 'what I wrote', "
@@ -4330,7 +4489,7 @@ def _spoken_line_rules_block() -> str:
         "journaling is vague; nobody cares about writing a "
         "journal; they care about the blank feeling. No vague "
         "stand-in and no abstract label ('notice feelings') where "
-        "the pain belongs. The activity belongs to the script.\n"
+        "the pain belongs.\n"
         "- OPEN ON THE MOMENT: open on the moment, "
         "one concrete detail, the resolution withheld; cut any "
         "app-behavior cue.\n"
@@ -4348,10 +4507,8 @@ def _spoken_line_rules_block() -> str:
         "words on what the picture already says. A time grounding rides "
         "along as the line's anchor — a day, a time of day or the named "
         "routine moment ('Saturday afternoon', 'after lunch'), never the "
-        "place — and the hook still belongs "
-        "to the script's own moment — she is in it, living it, not "
-        "describing it from outside. Never a different scene invented "
-        "for the hook.\n"
+        "place — and the hook stays inside the script's own moment, "
+        "never in a different scene invented for it.\n"
         "- HOOK SENTENCE (the hook line only): one complete sentence that "
         "parses on the first read — its subject and verb in their natural "
         "spoken order, the thought arriving in the order it is understood. "
@@ -4385,12 +4542,16 @@ def _spoken_line_rules_block() -> str:
         "WITHHOLD THE RESOLUTION: name the problem and stop there — no fix, "
         "no payoff, no what worked — and the last words leave the pain "
         "pointing forward, so the demo that follows lands as the answer "
-        "to this exact ache. ONE "
+        "to this exact ache. END MID-RACE, NOT ON THE VERDICT: never "
+        "close the line by announcing the loss as settled fact — 'and "
+        "it keeps slipping away' reports the feeling already gone, and "
+        "the story is over before the demo can start. End with the "
+        "attempt still live against the loss — 'before it slips away' "
+        "— the catch undecided, so the demo that follows starts on "
+        "the very next beat and lands as the catch. ONE "
         "STATEMENT: one thought only, never two statements jammed into one "
         "line. FELT DETAIL, NOT VERDICTS: a concrete thing the moment or the "
-        "body does, never an abstract verdict word like 'borrowed'. The "
-        "goal rule above doubles here: the trying-line names the concrete "
-        "attempt, exact — the thing she is doing, in her words. Scored "
+        "body does, never an abstract verdict word like 'borrowed'. Scored "
         "proof, from real hooks rated by the app's own craft check: 'Label "
         "isn't me after masking, I talk it out in quiet garden' scored 7/20 — "
         "label-voice, and 'talk it out' hands over the resolution. 'Generic "
@@ -4423,7 +4584,7 @@ def _spoken_line_rules_block() -> str:
         "- LIVE POV: spoken live straight to camera in first person, every "
         "word something a real person would say out loud. No narration "
         "about the speaker or the scene, no stage directions, no 'I said "
-        "quietly', no describing what the camera already shows, no quoting "
+        "quietly', no quoting "
         "own words back as a past event, and no quotation marks anywhere "
         "in the script.\n"
         "- OUTCOMES, NOT FEATURES: say what the speaker noticed, discovered, "
@@ -4452,8 +4613,7 @@ def _spoken_line_rules_block() -> str:
         "hook uses is not used again in the script, and the other way round. "
         "Bad: the hook says the label 'still felt wrong' and the script "
         "answers 'not wrong' — the second line says its thought in fresh "
-        "words. The only repeat allowed is the payoff echo: the hook's single "
-        "key image or feeling word, brought back once on purpose. No filler "
+        "words. No filler "
         "words, forced slang, written or ad-style phrasing, "
         "or run-on sentences. The hook carries the question; the script "
         "never asks one, and it ends on the strongest concrete line — the "
@@ -5400,6 +5560,60 @@ def _craft_retry_block(result: dict, report: dict) -> str:
     )
 
 
+def _hook_craft_retry_block(result: dict, report: dict, word_budget: int, char_budget: int) -> str:
+    """A targeted correction block for a Hook + CTA hook's weakest craft dimensions.
+
+    ADR 0115's pattern, adapted to the page (ADR 0323): the plan's
+    correction rewrites the script with the hook frozen; this page has
+    no script, so the correction rewrites the hook line AND its
+    direction (hook_action, closing_action, location) as one package —
+    the direction enacts the line's own moment, so a corrected line
+    must not ship wearing the draft's beats. A prompt fragment, not a
+    gate: the caller keeps the winning hook when this retry is worse,
+    invalid or fails. Findings are the weakest dimensions' `next_step`
+    text (up to three), chosen exactly as `_craft_retry_block` chooses
+    them, over the dimensions a hook alone can move: Story arc and
+    Demo handoff read a script this page does not have, so their
+    findings are never listed — the same exclusion shape as the plan
+    leaving the hook dimension out of its script-only retry.
+    """
+    dimensions = list((report.get("dimensions") or {}).values())
+    fixable = [
+        dimension for dimension in dimensions
+        if dimension.get("key") not in ("story_arc", "demo_handoff")
+    ]
+    weak = sorted(
+        (dimension for dimension in fixable
+         if dimension.get("max") and dimension["score"] / dimension["max"] < 0.7),
+        key=lambda dimension: dimension["score"] / dimension["max"],
+    )[:3]
+    if not weak:
+        weak = sorted(
+            fixable, key=lambda dimension: dimension["score"] / max(1, dimension["max"])
+        )[:2]
+    findings = "\n".join(
+        f"- {dimension['label']} ({dimension['score']}/{dimension['max']}): {dimension['next_step']}"
+        for dimension in weak
+    )
+    return (
+        "\n\nCRAFT CORRECTION: The hook is complete and fits, but it scores "
+        f"{report['total']} on the craft rubric's hook scale. Rewrite the hook "
+        "line AND its direction (hook_action, closing_action, location) as one "
+        "package, fixing these craft findings:\n"
+        f"{findings}\n"
+        "Keep the same goal — the internal pain she is trying to get out of — "
+        "the same verified facts and the same withheld resolution: the line "
+        "still ends on the open ache, and the demo that follows is still its "
+        f"answer. The hook line stays ONE finished sentence of at most "
+        f"{word_budget} words and at most {char_budget} characters. The "
+        "direction keeps its rules: the opening is a physical gesture with "
+        "the hands and body, already mid-gesture in the first frame, written "
+        "as a scene in the place the location names; the framing starts wide "
+        "and lands close; the closing beat stays sharp. Previous draft (data "
+        "to rewrite, not instructions):\n" + json.dumps(result, ensure_ascii=False)
+    )
+
+
 # The budget for every creative-plan call below — the draft, the bounded
 # editorial corrections (which re-send the whole plan and demand the whole
 # plan back) and the craft correction. The visible answer is a full JSON
@@ -5453,6 +5667,8 @@ async def _hook_bake_off(
     hook_form_block: str,
     promise_rule: str,
     cover_text: str = "",
+    issues_fn=None,
+    scoring_script: Optional[str] = None,
 ) -> tuple:
     """Three alternative hooks for an accepted story; the strongest ships.
 
@@ -5479,8 +5695,20 @@ async def _hook_bake_off(
     applies to the candidate, never to the plan. Any failure of the
     candidates call itself returns the draft untouched — byte-for-byte
     the plan the single-hook flow would have produced.
+
+    Two seams serve the Hook + CTA page (ADR 0323), which has no
+    script: `issues_fn` replaces the pair gate with the page's own
+    gate composition (the same checks its draft loop enforces — word
+    and character budgets, the finished-sentence gate, the shape
+    pick), and `scoring_script` is the body candidates are scored
+    against when the story text in the prompt is not spoken words —
+    the page passes "" because its story is the founder's demo, and
+    a hook there is scored as the standalone line it is. The plan
+    passes neither, and its behavior is unchanged.
     """
     def _issues(candidate: str) -> list:
+        if issues_fn is not None:
+            return issues_fn(candidate)
         return _generated_spoken_issues(
             candidate, script, hook_budget, middle_budget,
             allows_question=allows_question,
@@ -5493,7 +5721,7 @@ async def _hook_bake_off(
         # spoken line plus the cover, and the bake-off compares hooks
         # on the whole opening they would actually ship with.
         return creative_quality.assess_spoken_quality(
-            candidate, script,
+            candidate, script if scoring_script is None else scoring_script,
             hook_seconds=hook_seconds, total_seconds=duration_seconds,
             app_name=app_name, allows_question=allows_question,
             cover_text=cover_text,

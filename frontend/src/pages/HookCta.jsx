@@ -26,7 +26,7 @@ import { PresenterPhotoControl } from "../components/studio/SelectionPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
 import HookRenderPanel from "../components/studio/HookRenderPanel";
 import VoiceModeControl from "../components/studio/VoiceModeControl";
-import HookPicksControl, { profileOutcomeLines } from "../components/studio/HookPicksControl";
+import HookPicksControl, { profileOutcomeLines, profileOutcomeMenuStale } from "../components/studio/HookPicksControl";
 import PostKitSection from "../components/PostKitSection";
 import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { useWizardDirections } from "./useWizardDirections";
@@ -425,6 +425,7 @@ export default function HookCta() {
     };
   }, [profileId]);
   const focusOptions = profileOutcomeLines(profileDetail);
+  const focusMenuStale = profileOutcomeMenuStale(profileDetail);
 
   // The Focus refresh (ADR 0288): one click writes a fresh outcome
   // layer onto the profile from its stored facts and the returned
@@ -741,6 +742,8 @@ export default function HookCta() {
                   onToneChange={(value) => changePick("tone", value, { omitDefault: true, fallback: "" })}
                   shape={editValue("hook_shape", "auto")}
                   onShapeChange={(value) => changePick("hook_shape", value, { omitDefault: true, fallback: "auto" })}
+                  hasHook={hasHook}
+                  focusStale={focusMenuStale}
                   stale={picksStale && hasHook}
                 />
               </div>

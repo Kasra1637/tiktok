@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import HookPicksControl, { profileOutcomeLines } from "./HookPicksControl";
+import HookPicksControl, { profileOutcomeLines, profileOutcomeMenuStale } from "./HookPicksControl";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -96,7 +96,45 @@ describe("profileOutcomeLines", () => {
   });
 });
 
+describe("profileOutcomeMenuStale (ADR 0320)", () => {
+  test("a stored fragment makes the menu stale", () => {
+    expect(profileOutcomeMenuStale({ desired_outcomes: ["and growth over time"] })).toBe(true);
+    expect(
+      profileOutcomeMenuStale({
+        outcome_statements: [{ outcome: "triggers", from_feature: "Patterns" }],
+      })
+    ).toBe(true);
+  });
+
+  test("whole stored lines and empty profiles are not stale", () => {
+    expect(profileOutcomeMenuStale({ desired_outcomes: OUTCOMES })).toBe(false);
+    expect(profileOutcomeMenuStale(null)).toBe(false);
+    expect(profileOutcomeMenuStale({})).toBe(false);
+  });
+});
+
 describe("HookPicksControl", () => {
+  test("the Buffet is staged: absent before a hook on a fresh menu (ADR 0320)", async () => {
+    const view = await mount({ onRefreshFocus: jest.fn() });
+    expect(view.q("hook-picks-focus-refresh")).toBeNull();
+    expect(view.q("hook-picks-focus-stale-note")).toBeNull();
+    await view.unmount();
+  });
+
+  test("the Buffet stands once a hook exists to steer (ADR 0320)", async () => {
+    const view = await mount({ onRefreshFocus: jest.fn(), hasHook: true });
+    expect(view.q("hook-picks-focus-refresh")).not.toBeNull();
+    expect(view.q("hook-picks-focus-stale-note")).toBeNull();
+    await view.unmount();
+  });
+
+  test("the Buffet stands early on a stale menu, with its reason (ADR 0320)", async () => {
+    const view = await mount({ onRefreshFocus: jest.fn(), focusStale: true });
+    expect(view.q("hook-picks-focus-refresh")).not.toBeNull();
+    expect(view.q("hook-picks-focus-stale-note")).not.toBeNull();
+    await view.unmount();
+  });
+
   test("renders the three picks, each on the app's choice by default", async () => {
     const view = await mount();
     const focus = view.q("hook-picks-focus");

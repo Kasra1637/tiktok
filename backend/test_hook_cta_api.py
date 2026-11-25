@@ -340,6 +340,40 @@ def _stub_chat(monkeypatch, replies):
     return calls
 
 
+def _draft_calls(calls):
+    """The hook's own draft-loop calls (context "Hook line").
+
+    Since ADR 0323 the generation continues past the accepted draft —
+    the bake-off's candidates call and the craft correction are
+    separate calls with their own contexts — so the draft loop's
+    bounded-correction counts are read on its own calls, and the new
+    stages are counted in their own tests below.
+    """
+    return [c for c in calls if c.get("context") == "Hook line"]
+
+
+def _stub_chat_by_context(monkeypatch, replies_by_context):
+    """Script _chat_json by call context (ADR 0323's stages).
+
+    A reply value may be a dict (returned), an Exception (raised) or
+    a callable taking the call kwargs. Unscripted contexts return {}.
+    """
+    import ai_service
+    calls = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        reply = replies_by_context.get(kwargs.get("context"), {})
+        if isinstance(reply, Exception):
+            raise reply
+        if callable(reply):
+            return reply(kwargs)
+        return reply
+
+    monkeypatch.setattr(ai_service, "_chat_json", fake_chat)
+    return calls
+
+
 def _hook_project(**overrides):
     project = {
         "id": "hook-cta-1",
@@ -379,7 +413,7 @@ class TestGenerateHookLine:
             _hook_reply(hook_line=long_hook), _hook_reply()])
         out = _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
         assert out["hook_line"] == HOOK
-        assert len(calls) == 2
+        assert len(_draft_calls(calls)) == 2
         assert "correction" in str(calls[1]).lower() or "12 words" in str(calls[1])
 
     def test_a_reply_corrected_twice_still_lands(self, monkeypatch):
@@ -395,7 +429,7 @@ class TestGenerateHookLine:
             _hook_reply()])
         out = _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
         assert out["hook_line"] == HOOK
-        assert len(calls) == 3
+        assert len(_draft_calls(calls)) == 3
 
     def test_a_persistently_over_budget_reply_is_refused(self, monkeypatch):
         import ai_service
@@ -424,6 +458,181 @@ class TestGenerateHookLine:
         out = _run(ai_service.generate_hook_line(
             _hook_project(duration_seconds=4), PROFILE_FACTS))
         assert out["hook_line"] == nine
+
+
+# ------------------------------------------- ADR 0323: the plan's machinery
+
+# Craft totals against an empty script (the demo is not spoken words),
+# measured on the shipped scorer: the stub draft HOOK scores 55, the
+# strong line 60, the low line 48. The question line scores 58 — above
+# the draft — but breaks the statement default, so the gate, not the
+# score, must decide wherever it appears.
+STRONG_HOOK = "I'm trying to name why my chest tightens every single night."
+LOW_HOOK = "I'm trying to stop replaying today before it steals tonight too."
+GATED_QUESTION_HOOK = "Why does my chest tighten every single night before bed?"
+
+
+class TestGenerateHookLineBakeOff:
+    """The hook bake-off comes to Hook + CTA (ADR 0323, Kasra's order
+    to match Create Video's framework): after the draft passes the
+    page's hard gates, three alternatives are written for the same
+    story — here the demo that follows — the same gates filter them,
+    and the craft scorer picks the strongest survivor. The draft is
+    the incumbent: a candidate ships only when it scores strictly
+    higher, so the bake-off can never make the hook worse."""
+
+    def test_a_stronger_clean_candidate_replaces_the_draft_hook(self, monkeypatch):
+        import ai_service
+        _stub_chat_by_context(monkeypatch, {
+            "Hook line": _hook_reply(),
+            "Creative plan hook candidates": {"hooks": [LOW_HOOK, STRONG_HOOK]},
+        })
+        out = _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
+        assert out["hook_line"] == STRONG_HOOK
+        # The direction was written for the story's moment, which the
+        # candidates share (the plan's own precedent: its direction
+        # survives a hook swap the same way).
+        assert out["hook_action"].startswith("Jerks upright")
+        assert out["location"] == "A quiet bedroom in the evening"
+
+    def test_a_gated_candidate_never_wins_even_when_it_outscores_the_draft(self, monkeypatch):
+        import ai_service
+        calls = _stub_chat_by_context(monkeypatch, {
+            "Hook line": _hook_reply(),
+            "Creative plan hook candidates": {"hooks": [GATED_QUESTION_HOOK]},
+        })
+        out = _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
+        assert out["hook_line"] == HOOK
+        # Every candidate broke a gate, so the best of them got the
+        # bake-off's one bounded correction — unscripted here, it
+        # returns nothing usable and the draft stands.
+        corrections = [c for c in calls if c.get("context") == "Creative plan hook correction"]
+        assert len(corrections) == 1
+
+    def test_all_broken_candidates_get_one_correction_and_a_clean_fix_ships(self, monkeypatch):
+        import ai_service
+        _stub_chat_by_context(monkeypatch, {
+            "Hook line": _hook_reply(),
+            "Creative plan hook candidates": {"hooks": [GATED_QUESTION_HOOK]},
+            "Creative plan hook correction": {"hook_line": STRONG_HOOK},
+        })
+        out = _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
+        assert out["hook_line"] == STRONG_HOOK
+
+    def test_a_failed_candidates_call_keeps_the_draft_byte_for_byte(self, monkeypatch):
+        import ai_service
+        _stub_chat_by_context(monkeypatch, {
+            "Hook line": _hook_reply(),
+            "Creative plan hook candidates": RuntimeError("provider down"),
+        })
+        out = _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
+        assert out == _hook_reply()
+
+    def test_the_candidates_prompt_carries_the_demo_as_the_story(self, monkeypatch):
+        import ai_service
+        calls = _stub_chat_by_context(monkeypatch, {
+            "Hook line": _hook_reply(),
+            "Creative plan hook candidates": {"hooks": []},
+        })
+        _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
+        candidates = [c for c in calls if c.get("context") == "Creative plan hook candidates"]
+        assert len(candidates) == 1
+        prompt = candidates[0]["prompt"]
+        assert "HOOK BAKE-OFF" in prompt
+        # The demo stands in as the hook's story: the candidates open
+        # for the demo that answers them, anchored on the profile's
+        # promised outcome.
+        assert "THE DEMO THAT FOLLOWS" in prompt
+        assert "Clearing the day's thoughts out loud" in prompt
+
+
+class TestGenerateHookLineCraftPass:
+    """The craft correction comes to Hook + CTA (ADR 0323, ADR 0115's
+    pattern adapted to the hook package): when the winning hook
+    scores below the plan's bar — the same fraction of the total this
+    surface can reach, the two script dimensions being structurally
+    silent here — ONE correction, steered by the weakest dimensions'
+    findings, rewrites the hook line and its direction as one
+    package. It ships only when it passes the same hard gates and
+    scores strictly higher; it never refuses the hook."""
+
+    CORRECTED_ACTION = "Counts the tightness out on her fingers, palm pressed to her chest."
+
+    def _script(self, monkeypatch, craft_reply):
+        return _stub_chat_by_context(monkeypatch, {
+            "Hook line": _hook_reply(),
+            "Creative plan hook candidates": {"hooks": []},
+            "Hook line craft correction": craft_reply,
+        })
+
+    def test_a_weak_hook_gets_one_findings_steered_correction(self, monkeypatch):
+        import ai_service
+        calls = self._script(monkeypatch, _hook_reply(
+            hook_line=STRONG_HOOK, hook_action=self.CORRECTED_ACTION))
+        out = _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
+        assert out["hook_line"] == STRONG_HOOK
+        # The package ships whole: the direction was rewritten for
+        # the corrected line, not left describing the draft's moment.
+        assert out["hook_action"] == self.CORRECTED_ACTION
+        corrections = [c for c in calls if c.get("context") == "Hook line craft correction"]
+        assert len(corrections) == 1
+        prompt = corrections[0]["prompt"]
+        assert "CRAFT CORRECTION" in prompt
+        # The findings are the weakest dimensions' own next steps —
+        # the hook dimension's lift is the ADR 0316 instruction.
+        assert "Open on the moment, one concrete detail" in prompt
+
+    def test_a_correction_that_scores_no_higher_keeps_the_draft(self, monkeypatch):
+        import ai_service
+        self._script(monkeypatch, _hook_reply(
+            hook_line=LOW_HOOK, hook_action=self.CORRECTED_ACTION))
+        out = _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
+        assert out == _hook_reply()
+
+    def test_a_correction_that_breaks_a_gate_keeps_the_draft(self, monkeypatch):
+        import ai_service
+        self._script(monkeypatch, _hook_reply(hook_line=GATED_QUESTION_HOOK))
+        out = _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
+        assert out == _hook_reply()
+
+    def test_a_failed_craft_call_keeps_the_draft(self, monkeypatch):
+        import ai_service
+        self._script(monkeypatch, RuntimeError("provider down"))
+        out = _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
+        assert out == _hook_reply()
+
+    def test_a_strong_hook_gets_no_craft_call(self, monkeypatch):
+        import ai_service
+        calls = _stub_chat_by_context(monkeypatch, {
+            "Hook line": _hook_reply(hook_line=STRONG_HOOK),
+            "Creative plan hook candidates": {"hooks": []},
+        })
+        out = _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
+        assert out["hook_line"] == STRONG_HOOK
+        assert not [c for c in calls if c.get("context") == "Hook line craft correction"]
+
+
+class TestHookDirectionWording:
+    """The hook's opening direction is written the Create Video way
+    (ADR 0323): anchored in the scene — the place, the gesture already
+    mid-motion — never led by the head and eyes, which pushed the
+    camera in and overrode the render's wide framing. The gesture
+    rule and the start-wide framing ride the same bullet."""
+
+    def test_the_hook_action_is_a_scene_not_a_face(self, monkeypatch):
+        import ai_service
+        calls = _stub_chat(monkeypatch, [_hook_reply()])
+        _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
+        prompt = calls[0]["prompt"]
+        assert "head already lifting" not in prompt
+        assert "eyes already rising" not in prompt
+        assert "already mid-gesture" in prompt
+        assert "starts WIDE" in prompt
+        assert "landing close" in prompt or "landing at the close" in prompt
+        # The gesture rule stands: a face-only change never counts,
+        # and the face rides the gesture.
+        assert "never counts as the opening beat" in prompt
+        assert "the face rides the gesture" in prompt
 
 
 # -------------------------------------------------------------- generate
@@ -820,7 +1029,7 @@ class TestGenerateHookLineSteering:
         calls = _stub_chat(monkeypatch, [_hook_reply()])
         out = _run(ai_service.generate_hook_line(_hook_project(), STEERING_PROFILE))
         assert out["hook_line"] == HOOK
-        assert len(calls) == 1
+        assert len(_draft_calls(calls)) == 1
         prompt = calls[0]["prompt"]
         assert "FOUNDER'S STEERING" not in prompt
         assert "HOOK RULES (this hook, on top of the craft above):" in prompt
@@ -867,7 +1076,7 @@ class TestGenerateHookLineSteering:
         out = _run(ai_service.generate_hook_line(
             _hook_project(hook_shape="question"), STEERING_PROFILE))
         assert out["hook_line"] == QUESTION_HOOK
-        assert len(calls) == 1
+        assert len(_draft_calls(calls)) == 1
 
     def test_a_question_pick_corrects_a_statement_reply(self, monkeypatch):
         import ai_service
@@ -876,7 +1085,7 @@ class TestGenerateHookLineSteering:
         out = _run(ai_service.generate_hook_line(
             _hook_project(hook_shape="question"), STEERING_PROFILE))
         assert out["hook_line"] == QUESTION_HOOK
-        assert len(calls) == 2
+        assert len(_draft_calls(calls)) == 2
         assert "question" in str(calls[1]["prompt"]).lower()
 
     def test_a_question_pick_refuses_a_persistent_statement(self, monkeypatch):
@@ -903,7 +1112,7 @@ class TestGenerateHookLineSteering:
         out = _run(ai_service.generate_hook_line(
             _hook_project(hook_shape="question"), STEERING_PROFILE))
         assert out["hook_line"] == QUESTION_HOOK
-        assert len(calls) == 2
+        assert len(_draft_calls(calls)) == 2
 
 
 class TestHookRewriteSteering:
@@ -1019,7 +1228,7 @@ class TestGenerateHookLineCompleteThought:
             _hook_reply(hook_line=COMPLETE_QUESTION)])
         out = _run(ai_service.generate_hook_line(self._project(), MOOD_PROFILE))
         assert out["hook_line"] == COMPLETE_QUESTION
-        assert len(calls) == 2
+        assert len(_draft_calls(calls)) == 2
         # The correction names the defect, so the rewrite knows what
         # to fix rather than merely that something failed.
         assert "dangles" in str(calls[1]["prompt"])
@@ -1038,7 +1247,7 @@ class TestGenerateHookLineCompleteThought:
             _hook_reply(hook_line=COMPLETE_QUESTION)])
         out = _run(ai_service.generate_hook_line(self._project(), MOOD_PROFILE))
         assert out["hook_line"] == COMPLETE_QUESTION
-        assert len(calls) == 1
+        assert len(_draft_calls(calls)) == 1
 
     def test_the_dangling_check_spares_whole_questions(self):
         import ai_service
