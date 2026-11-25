@@ -1,3 +1,4 @@
+import { Button } from "../ui/button";
 
 /**
  * One profile-aware set of option buttons for a direction field (the
@@ -26,15 +27,15 @@ export function DirectionSelect({
   refresh = null,
 }) {
   // Three options stand side by side (ADR 0330, as corrected at
-  // Kasra's live review): the buttons wear the Voice pick's own
-  // design — the rounded pills with the indigo selection, moving
-  // with the render panels' resolution buttons' own motion (the
-  // 300ms ease and the 1px hover lift) — spaced
-  // by the row's gap, never stuck together, and "New options" above
-  // brings the next set when none of the three fits. A saved pick
-  // outside the shown three still applies: it takes the last seat,
-  // so what applies is always on a lit button. The notes beside the
-  // control say so, exactly as they did for the dropdown.
+  // Kasra's live review), wearing the resolution treatment (ADR
+  // 0331): the shared Button in a thumb-pair row, brand and
+  // thumb-selected on the pick, exactly as the render panels'
+  // 480p / 768p row stands — spaced by the row's gap, never stuck
+  // together, and "New options" above brings the next set when
+  // none of the three fits. A saved pick outside the shown three
+  // still applies: it takes the last seat, so what applies is
+  // always on a lit button. The notes beside the control say so,
+  // exactly as they did for the dropdown.
   const all = options || [];
   let shown = all.slice(0, 3);
   if (value && all.includes(value) && !shown.includes(value)) {
@@ -57,7 +58,7 @@ export function DirectionSelect({
         )}
       </div>
       <div
-        className="flex flex-wrap gap-2"
+        className="thumb-pair"
         role="group"
         aria-labelledby={`${id}-label`}
         data-testid={testId}
@@ -69,21 +70,19 @@ export function DirectionSelect({
           shown.map((option) => {
             const picked = value === option;
             return (
-              <button
+              <Button
                 key={option}
                 type="button"
+                size="sm"
+                variant={picked ? "brand" : "secondary"}
                 aria-pressed={picked}
                 data-value={option}
                 disabled={disabled}
                 onClick={() => onPick(option)}
-                className={`rounded-full border px-3 py-1 text-xs font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-300 ease-out hover:-translate-y-[1px] active:translate-y-0 motion-reduce:hover:-translate-y-0 ${
-                  picked
-                    ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-[color:var(--brand-indigo)]"
-                    : "border-[color:var(--hairline)] text-muted-foreground"
-                }`}
+                className={`tap-chip ${picked ? "thumb-selected" : ""}`}
               >
                 {option}
-              </button>
+              </Button>
             );
           })
         )}

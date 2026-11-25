@@ -124,26 +124,33 @@ const SHAPE_OPTIONS = [
   { value: "statement", label: "Statement" },
 ];
 
+// The small option sets wear the resolution treatment (ADR 0331,
+// Kasra's ruling at the Nov 25 2026 live review): the shared Button
+// in a thumb-pair row — brand and thumb-selected on the pick,
+// secondary otherwise — exactly as the render panels' 480p / 768p
+// row stands, so selection, style, and hover motion read the same
+// on every small choice in the app.
 export function PickPills({ options, current, onChange, disabled, testId, ariaLabel }) {
   return (
-    <div className="flex flex-wrap gap-2" role="group" aria-label={ariaLabel}>
-      {options.map((option) => (
-        <button
-          key={option.value || "auto"}
-          type="button"
-          aria-pressed={current === option.value}
-          disabled={disabled}
-          onClick={() => onChange?.(option.value)}
-          data-testid={`${testId}-${option.value || "auto"}`}
-          className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-            current === option.value
-              ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-[color:var(--brand-indigo)]"
-              : "border-[color:var(--hairline)] text-muted-foreground"
-          }`}
-        >
-          {option.label}
-        </button>
-      ))}
+    <div className="thumb-pair flex flex-wrap gap-2" role="group" aria-label={ariaLabel}>
+      {options.map((option) => {
+        const picked = current === option.value;
+        return (
+          <Button
+            key={option.value || "auto"}
+            type="button"
+            size="sm"
+            variant={picked ? "brand" : "secondary"}
+            aria-pressed={picked}
+            disabled={disabled}
+            onClick={() => onChange?.(option.value)}
+            data-testid={`${testId}-${option.value || "auto"}`}
+            className={`tap-chip ${picked ? "thumb-selected" : ""}`}
+          >
+            {option.label}
+          </Button>
+        );
+      })}
     </div>
   );
 }

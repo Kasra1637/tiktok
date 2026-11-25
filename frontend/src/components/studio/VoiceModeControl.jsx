@@ -1,4 +1,5 @@
 import { Mic } from "lucide-react";
+import { Button } from "../ui/button";
 import { GroupLabel } from "../SectionCard";
 
 /**
@@ -44,24 +45,28 @@ export default function VoiceModeControl({
   return (
     <div className="space-y-2">
       <GroupLabel icon={Mic}>Voice</GroupLabel>
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Presenter voice">
-        {OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={current === option.value}
-            disabled={disabled}
-            onClick={() => onChange?.(option.value)}
-            data-testid={`${testId}-${option.value}`}
-            className={`rounded-full border px-3 py-1 text-xs font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-300 ease-out hover:-translate-y-[1px] active:translate-y-0 motion-reduce:hover:-translate-y-0 ${
-              current === option.value
-                ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-[color:var(--brand-indigo)]"
-                : "border-[color:var(--hairline)] text-muted-foreground"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
+      {/* The pick wears the resolution treatment (ADR 0331): the
+          shared Button in a thumb-pair row, brand and
+          thumb-selected on the pick, as the 480p / 768p row stands. */}
+      <div className="thumb-pair flex flex-wrap gap-2" role="group" aria-label="Presenter voice">
+        {OPTIONS.map((option) => {
+          const picked = current === option.value;
+          return (
+            <Button
+              key={option.value}
+              type="button"
+              size="sm"
+              variant={picked ? "brand" : "secondary"}
+              aria-pressed={picked}
+              disabled={disabled}
+              onClick={() => onChange?.(option.value)}
+              data-testid={`${testId}-${option.value}`}
+              className={`tap-chip ${picked ? "thumb-selected" : ""}`}
+            >
+              {option.label}
+            </Button>
+          );
+        })}
       </div>
       {current === "talking" ? (
         <p className="text-sm text-muted-foreground">
