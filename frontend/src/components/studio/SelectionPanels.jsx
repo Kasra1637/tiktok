@@ -586,31 +586,21 @@ export function AngleSelector({
                 picked ? "bg-[color:var(--indigo-6)]" : ""
               }`}
             >
-              {/* One check per row, always: muted until picked, indigo once
-                  open. The per-kind glyphs are gone — twelve icons made the
-                  list something you decode rather than scan. */}
-              <Check
-                aria-hidden="true"
-                data-testid="angle-row-check"
-                className={`h-4 w-4 shrink-0 ${
-                  picked ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground"
-                }`}
-              />
-              <span className="min-w-0 truncate text-sm font-semibold">
-                {sentenceCase(a.label).replace(/\.\s*$/, "")}
-              </span>
-              {/* The fittest score rides on the closed row, so the list can be
-                  compared without opening any angle — and picking re-shows
-                  the same pill on the now-open row rather than a second
-                  titled badge, which read one number as two findings. It
-                  sits beside the title it scores (ADR 0328), not at the
-                  row's far right: only the pop-out icon stands there. */}
+              {/* The fit pill leads the row (Kasra's ruling, Nov 25
+                  2026): the check mark that used to open every row is
+                  gone, and the score stands in its seat, so the list
+                  is scanned by score first and name second. The
+                  picked row still reads by its indigo wash and
+                  border; only the pop-out icon stands at the right. */}
               <span className="shrink-0">
                 <FitBadge
                   score={angleFit.score}
                   basis={angleFitBasis}
                   testId={`angle-row-fit-${a.id}`}
                 />
+              </span>
+              <span className="min-w-0 truncate text-sm font-semibold">
+                {sentenceCase(a.label).replace(/\.\s*$/, "")}
               </span>
               <Maximize2
                 aria-hidden="true"

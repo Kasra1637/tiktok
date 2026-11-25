@@ -9,6 +9,20 @@ import { Button } from "../ui/button";
  * picking only fills the draft — saving still validates like any edit
  * and the strategy still needs a rebuild, exactly as with typed notes.
  */
+// Kasra's cap (ADR 0332): a direction button's text never runs
+// past 25 characters, so the row stays a row of buttons instead
+// of a wall of prose. The full option still applies underneath —
+// the pick stores the whole string; only the label is trimmed,
+// at a word boundary, with the full text on the button's title.
+const DIRECTION_BUTTON_MAX = 25;
+function directionButtonLabel(option) {
+  const text = String(option);
+  if (text.length <= DIRECTION_BUTTON_MAX) return text;
+  const cut = text.slice(0, DIRECTION_BUTTON_MAX - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 8 ? cut.slice(0, lastSpace) : cut).trimEnd()}\u2026`;
+}
+
 export function DirectionSelect({
   id,
   testId,
@@ -80,8 +94,9 @@ export function DirectionSelect({
                 disabled={disabled}
                 onClick={() => onPick(option)}
                 className={`tap-chip ${picked ? "thumb-selected" : ""}`}
+                title={option}
               >
-                {option}
+                {directionButtonLabel(option)}
               </Button>
             );
           })

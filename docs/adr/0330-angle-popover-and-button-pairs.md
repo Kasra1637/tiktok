@@ -65,6 +65,15 @@ carry too, so the direction area moves as one family); a saved
 pick outside the shown three takes the last seat. The camera setup row keeps the thumb-pair design, and its
 row gains the same spacing through the shared .thumb-pair rule.
 
+## Addendum (Nov 25 2026, later): the check leaves the angle rows
+
+At the same live review Kasra loved the round and ordered one
+removal: the check mark at the head of every angle row is gone,
+and the fit pill stands in its seat, opening the row — the list
+is scanned by score first, then by name. The picked row still
+reads by its indigo wash and border, and the pop-out icon alone
+stands at the row's right edge.
+
 ## Consequences
 
 - The angle step's tallest state is now the popover, not a card: the

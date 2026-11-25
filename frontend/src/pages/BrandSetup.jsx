@@ -300,33 +300,6 @@ export default function BrandSetup() {
     testId: `listen-brand-${key}`,
     getBlocks: () => [{ label, values: [form[key]] }],
   });
-  const listenBasics = () => [
-    { label: "App name", values: [form.brand_name] },
-    { label: "Description", values: [form.brand_description] },
-    { label: "App category", values: [form.app_category] },
-    { label: "Niche", values: [form.niche] },
-    { label: "Platforms", values: spokenList("platforms") },
-    { label: "Tone and voice", values: [form.tone_voice] },
-  ];
-  const listenDoes = () => [
-    { label: "Core features", values: spokenList("core_features") },
-    { label: "Primary use cases", values: spokenList("primary_use_cases") },
-    { label: "Problems solved", values: spokenList("problems_solved") },
-    { label: "Desired outcomes", values: spokenList("desired_outcomes") },
-    { label: "Feature-to-outcome statements", values: [form.outcome_statements] },
-  ];
-  const listenDirection = () => [
-    { label: "When is the app reached for", values: spokenList("usage_moments") },
-    { label: "The proof moment", values: [form.proof_moment] },
-    { label: "Never show in the video", values: spokenList("must_not_show") },
-    { label: "Why they would not try or download", values: [form.viewer_objections] },
-  ];
-  const listenAudience = () => [
-    { label: "Target audience", values: [form.target_audience] },
-    { label: "Ideal Customer", values: [form.ideal_customer_profile] },
-    { label: "Audience segments", values: spokenList("icp_segments") },
-    { label: "What Sets You Apart", values: [form.differentiation] },
-  ];
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -1069,7 +1042,7 @@ export default function BrandSetup() {
           <>
             <div className="space-y-4">
               {/* ── Basics ── */}
-              <SectionGroup id="basics" label="Basics" icon={Package} summary={basicsSummary} open={openGroup === "basics"} onToggle={toggleGroup} listen={{ id: "brand-basics", label: "Basics", getBlocks: listenBasics }}>
+              <SectionGroup id="basics" label="Basics" icon={Package} summary={basicsSummary} open={openGroup === "basics"} onToggle={toggleGroup}>
               <div className="space-y-2">
                 <Field label="App name" listen={listenParagraph("brand_name", "App name")}>
                   <Input
@@ -1131,7 +1104,7 @@ export default function BrandSetup() {
               </SectionGroup>
 
               {/* ── What the app does ── */}
-              <SectionGroup id="does" label="What the app does" icon={Layers} summary={doesSummary} open={openGroup === "does"} onToggle={toggleGroup} listen={{ id: "brand-does", label: "What the app does", getBlocks: listenDoes }}>
+              <SectionGroup id="does" label="What the app does" icon={Layers} summary={doesSummary} open={openGroup === "does"} onToggle={toggleGroup}>
               <div className="space-y-2">
                 <Field label="Core features" hint="Comma-separated — only features the app really has." listen={listenField("core_features", "Core features")}>
                   <Input
@@ -1206,7 +1179,7 @@ export default function BrandSetup() {
               </SectionGroup>
 
               {/* ── Video direction ── */}
-              <SectionGroup id="direction" label="Video direction" icon={Compass} summary={directionSummary} open={openGroup === "direction"} onToggle={toggleGroup} listen={{ id: "brand-direction", label: "Video direction", getBlocks: listenDirection }}>
+              <SectionGroup id="direction" label="Video direction" icon={Compass} summary={directionSummary} open={openGroup === "direction"} onToggle={toggleGroup}>
               <div className="space-y-2">
                 {/* These two exist because the strategy asks for a scene and a
                     demonstration, and no profile field supplied either. The model
@@ -1296,7 +1269,7 @@ export default function BrandSetup() {
               </SectionGroup>
 
               {/* ── Audience ── */}
-              <SectionGroup id="audience" label="Audience" icon={Users} summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup} listen={{ id: "brand-audience", label: "Audience", getBlocks: listenAudience }}>
+              <SectionGroup id="audience" label="Audience" icon={Users} summary={audienceSummary} open={openGroup === "audience"} onToggle={toggleGroup}>
               <div className="space-y-2">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Field label="Target audience" listen={listenParagraph("target_audience", "Target audience")}>

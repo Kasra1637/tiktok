@@ -1286,7 +1286,7 @@ async function main() {
     }
   });
 
-  await check("the angle cards pull their right edge in: two-up grid, fit pill beside the title", async (ctx) => {
+  await check("the angle cards pull their right edge in: two-up grid, fit pill opens the row", async (ctx) => {
     // ADR 0328 (Kasra's report, Nov 24 2026): on a wide step the angle
     // rows stretched the panel's full width while their content stood
     // at the left — title, then a dead stretch, then the fit pill and
@@ -1325,11 +1325,11 @@ async function main() {
       if (row.getAttribute("aria-haspopup") !== "dialog") {
         throw new Error("the angle row does not say it opens a pop-up");
       }
-      if (!(title.compareDocumentPosition(fit) & Node.DOCUMENT_POSITION_FOLLOWING)) {
-        throw new Error("the fit pill does not follow the title");
+      if (!(fit.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+        throw new Error("the fit pill does not open the row ahead of the title");
       }
-      if (!(fit.compareDocumentPosition(icon) & Node.DOCUMENT_POSITION_FOLLOWING)) {
-        throw new Error("the pop-out icon does not close the row after the fit pill");
+      if (!(title.compareDocumentPosition(icon) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+        throw new Error("the pop-out icon does not close the row after the title");
       }
       if (!(icon.getAttribute("class") || "").includes("ml-auto")) {
         throw new Error("the pop-out icon is not the row's right-edge affordance");
@@ -7954,6 +7954,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         if (JSON.stringify(pairValues()) !== JSON.stringify(ALL_LOCATIONS.slice(0, 3))) {
           throw new Error(`a handheld camera was not offered every location: ${JSON.stringify(pairValues())}`);
         }
+        // Kasra's cap (ADR 0332): no direction button's text runs
+        // past 25 characters, however long the offered place is.
+        const pairLabels = [...ctx.container.querySelectorAll('[data-testid="review-location-direction"] button')].map((b) => b.textContent.trim());
+        if (pairLabels.some((t) => t.length > 25)) {
+          throw new Error(`a direction button's text runs past 25 characters: ${JSON.stringify(pairLabels)}`);
+        }
         await pickPairButton(ctx, "camera-setup", "fixed");
         await act(async () => {});
         if (JSON.stringify(pairValues()) !== JSON.stringify(INDOOR_LOCATIONS)) {
@@ -9186,8 +9192,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (row.querySelector('[data-testid^="angle-evidence-"]')) {
             throw new Error(`the verdict chip came back onto angle ${id}`);
           }
-          if (!row.querySelector('[data-testid="angle-row-check"]')) {
-            throw new Error(`angle ${id} lost its check mark`);
+          if (row.querySelector('[data-testid="angle-row-check"]')) {
+            throw new Error(`angle ${id} still carries a check mark (Kasra's ruling, Nov 25 2026)`);
           }
         }
       } finally {
@@ -9196,10 +9202,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     });
   });
 
-  // Every angle row opens with the same check mark at the bar's 16px icon
-  // size — muted until picked, indigo once open. One glyph for every row:
-  // twelve kind icons made the list something you decode rather than scan.
-  await check("angle rows carry the check mark", async (ctx) => {
+  // No angle row carries a check mark (Kasra's ruling, Nov 25
+  // 2026): the fit pill opens every row in the seat the check used
+  // to hold, and the picked row reads by its wash and border.
+  await check("angle rows open with the fit pill and carry no check mark", async (ctx) => {
     await withApi({ getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }) }, async () => {
       global.__SMOKE_PARAMS = "";
       try {
@@ -9209,36 +9215,24 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         const rows = [...ctx.container.querySelectorAll('[data-testid^="angle-option-"]')];
         if (rows.length !== 2) throw new Error(`expected two angle rows, saw ${rows.length}`);
         for (const row of rows) {
-          const icon = row.querySelector('[data-testid="angle-row-check"]');
-          if (!icon) throw new Error("an angle row shows no check mark");
-          if (icon.tagName !== "svg") throw new Error("the check mark is not an svg glyph");
-          const cls = icon.getAttribute("class") || "";
-          if (!/\bh-4\b/.test(cls) || !/\bw-4\b/.test(cls)) {
-            throw new Error(`the check mark is off the 16px token: ${cls}`);
+          if (row.querySelector('[data-testid="angle-row-check"]')) {
+            throw new Error("an angle row still shows a check mark");
+          }
+          const first = row.firstElementChild;
+          if (!first || !first.querySelector('[data-testid^="angle-row-fit-"]')) {
+            throw new Error("the fit pill does not open the angle row");
           }
         }
-        // Nothing is picked on open (Part 3), so both checks start muted.
-        // Picking a1 turns its check indigo while a2's stays muted; moving
-        // the pick flips them.
-        const checkOf = (id) => ctx.container.querySelector(`[data-testid="angle-option-${id}"] [data-testid="angle-row-check"]`);
-        if (!checkOf("a1") || /brand-indigo/.test(checkOf("a1").getAttribute("class") || "")) {
-          throw new Error("an unpicked row shows the picked check");
-        }
+        // The picked state reads on the row itself: picking a1
+        // presses it while a2 stays unpressed.
         await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
-        if (!/brand-indigo/.test(checkOf("a1").getAttribute("class") || "")) {
-          throw new Error("the picked row's check is not indigo");
+        const a1 = ctx.container.querySelector('[data-testid="angle-option-a1"]');
+        const a2 = ctx.container.querySelector('[data-testid="angle-option-a2"]');
+        if (a1.getAttribute("aria-pressed") !== "true") {
+          throw new Error("the picked row does not read as pressed");
         }
-        if (!checkOf("a2") || /brand-indigo/.test(checkOf("a2").getAttribute("class") || "")) {
-          throw new Error("an unpicked row shows the picked check");
-        }
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a2"]'), "no angle row to pick");
-        const picked = ctx.container.querySelector('[data-testid="angle-option-a2"] [data-testid="angle-row-check"]');
-        const other = ctx.container.querySelector('[data-testid="angle-option-a1"] [data-testid="angle-row-check"]');
-        if (!picked || !/brand-indigo/.test(picked.getAttribute("class") || "")) {
-          throw new Error("the picked row's check did not turn indigo");
-        }
-        if (!other || /brand-indigo/.test(other.getAttribute("class") || "")) {
-          throw new Error("the unpicked row's check is not muted");
+        if (a2.getAttribute("aria-pressed") === "true") {
+          throw new Error("an unpicked row reads as pressed");
         }
       } finally {
         global.__SMOKE_PARAMS = "";
@@ -9929,8 +9923,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           const goals = [...ctx.container.querySelectorAll('[data-testid^="recommended-goal-"]')];
           if (goals.length !== 3) throw new Error(`expected three goal cards after regen, saw ${goals.length}`);
           const glyphs = [...ctx.container.querySelectorAll('[data-testid="angle-row-check"]')];
-          if (glyphs.length !== 4) {
-            throw new Error(`the four fresh rows lost their check marks: saw ${glyphs.length}`);
+          if (glyphs.length !== 0) {
+            throw new Error(`the fresh rows still carry check marks: saw ${glyphs.length}`);
+          }
+          const fits = rows.reduce((n, r) => n + r.querySelectorAll('[data-testid^="angle-row-fit-"]').length, 0);
+          if (fits !== 4) {
+            throw new Error(`the four fresh rows do not each open with their fit pill: saw ${fits}`);
           }
         } finally {
           global.__SMOKE_PARAMS = "";
@@ -12668,8 +12666,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   });
 
   // The editor page is where founders stare at the same heavy text. Every
-  // labelled field and every group bar there carries a listen control; if a
-  // later refactor drops them the editor goes quiet again.
+  // labelled field there carries a listen control; if a later refactor
+  // drops them the editor goes quiet again. The group bars carry no
+  // speaker (Kasra's ruling, Nov 25 2026): the four section bars —
+  // Basics, What the app does, Video direction, Audience — stand
+  // with their chevron only.
   await check("the App Profile editor puts a speaker on every text-heavy field", async () => {
     const src = fs.readFileSync(path.join(SRC, "pages", "BrandSetup.jsx"), "utf8");
     const fieldSpeakers = [...src.matchAll(/listen=\{listen(?:Field|Paragraph)\(/g)].length;
@@ -12677,8 +12678,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       throw new Error(`expected 15+ field speakers on BrandSetup, found ${fieldSpeakers}`);
     }
     for (const group of ["brand-basics", "brand-does", "brand-direction", "brand-audience"]) {
-      if (!src.includes(`id: "${group}"`)) {
-        throw new Error(`BrandSetup lost the ${group} group speaker`);
+      if (src.includes(`id: "${group}"`)) {
+        throw new Error(`BrandSetup still carries the ${group} group speaker`);
       }
     }
   });

@@ -12,7 +12,7 @@ import { AppSelect } from "./AppSelect";
     the app's own listbox (ADR 0162, `AppSelect`): a native select's
     open menu belongs to the browser and ignores all of this. */
 export const PILL_SELECT_CLASS =
-  "pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-3 text-sm font-semibold text-foreground hover:border-[color:var(--hairline-strong)]";
+  "pill-studio tap-chip filter-control focus-ring h-10 rounded-full border border-[color:var(--hairline)] bg-secondary/30 px-4 text-sm font-semibold text-foreground hover:border-[color:var(--hairline-strong)]";
 
 /**
  * Which app a page is showing. One picker for every sidebar page, so the
