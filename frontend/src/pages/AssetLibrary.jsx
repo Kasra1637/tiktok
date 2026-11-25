@@ -143,7 +143,7 @@ function AttachedReference({ attachment, onDetach, busy }) {
       <span className="shrink-0 text-sm text-muted-foreground">Used for the whole video</span>
       {onDetach && (
         <Button
-          variant="ghost"
+          variant="secondary"
           size="sm"
           disabled={busy}
           onClick={() => onDetach({ id: attachment.asset_id, label: name, kind: attachment.kind })}
@@ -204,26 +204,26 @@ function AssetRow({
               {asset.label || asset.name || humanize(asset.kind)}
             </span>
             {asset.status === "archived" && (
-              <Badge variant="outline" className="text-xs">Archived</Badge>
+              <Badge variant="secondary" className="text-xs">Archived</Badge>
             )}
             {!asset.rights_confirmed && (
-              <Badge variant="outline" className="text-xs">Rights unconfirmed</Badge>
+              <Badge variant="secondary" className="text-xs">Rights unconfirmed</Badge>
             )}
             {/* Pre-flight face check, counted at upload time. A photo with no
                 detectable face — or several competing ones — is what the
                 video provider's privacy filter refuses at generation time. */}
             {asset.face_count === 0 && (
-              <Badge variant="outline" className="text-xs">No face detected — may be refused</Badge>
+              <Badge variant="secondary" className="text-xs">No face detected — may be refused</Badge>
             )}
             {Number(asset.face_count) >= 2 && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="secondary" className="text-xs">
                 Faces detected: {asset.face_count} — may be flagged
               </Badge>
             )}
             {/* The embedded row states it beside Remove instead, so the
                 same attached photo never claims it twice. */}
             {attachable && attached && !embedded && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="secondary" className="text-xs">
                 <Check className="mr-1 h-3 w-3" /> Attached
               </Badge>
             )}
@@ -286,7 +286,7 @@ function AssetRow({
                 <Check className="h-3.5 w-3.5 text-green-500" aria-hidden="true" /> Attached
               </span>
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="sm"
                 disabled={busy}
                 busy={busy}
@@ -312,7 +312,7 @@ function AssetRow({
               each reads as its own labeled action. */}
           <span className="ml-auto flex items-center gap-1 pl-2">
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               disabled={busy}
               busy={busy}
@@ -327,7 +327,7 @@ function AssetRow({
               {asset.status === "archived" ? "Restore" : "Archive"}
             </Button>
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               disabled={busy}
               busy={busy}
@@ -953,7 +953,7 @@ export default function AssetLibrary({
                 <span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                   {profiles.length === 1 && <span>Assets for {profileLabel(activeProfile)}</span>}
                   {activeProfile.status === "approved" ? (
-                    <Badge variant="outline" className="text-xs">Approved</Badge>
+                    <Badge variant="secondary" className="text-xs">Approved</Badge>
                   ) : (
                     <Badge variant="secondary" className="text-xs">Needs approval</Badge>
                   )}
@@ -1083,7 +1083,7 @@ export default function AssetLibrary({
           <div className="border-t border-[color:var(--hairline)] pt-4">
             {!showAllPhotos ? (
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="sm"
                 onClick={() => setShowAllPhotos(true)}
               >
@@ -1124,7 +1124,7 @@ export default function AssetLibrary({
             {assets.length} asset{assets.length === 1 ? "" : "s"}
           </span>
           <Button
-            variant="ghost"
+            variant="secondary"
             size="sm"
             onClick={() => setIncludeArchived((v) => !v)}
             aria-pressed={includeArchived}

@@ -22,11 +22,15 @@ const buttonVariants = cva(
          * across the page. */
         destructive:
           "btn-bevel-neutral border border-[color:var(--hairline-strong)] bg-secondary/70 text-destructive-text hover:border-destructive/45 hover:bg-destructive/10 hover:text-destructive-text",
-        outline:
-          "btn-bevel-neutral border border-[color:var(--hairline-strong)] bg-secondary/30 text-foreground hover:border-[color:var(--indigo-35)] hover:bg-[color:var(--indigo-8)] hover:text-foreground",
+        /* One secondary style for the whole app (ADR 0336, Kasra's
+           ruling): the pill matched to the sidebar's Show me around
+           button — full-round radius, hairline border, the 30%
+           secondary fill — carried by .btn-secondary-pill in
+           index.css. The outline and ghost variants competed with
+           it as second and third secondary looks; both are retired
+           and every call site wears this one. */
         secondary:
-          "btn-bevel-neutral border border-[color:var(--hairline)] bg-secondary/70 text-secondary-foreground hover:border-[color:var(--indigo-35)] hover:bg-secondary hover:text-foreground",
-        ghost: "hover:bg-[color:var(--indigo-8)] hover:text-foreground hover:-translate-y-0 after:hidden",
+          "btn-secondary-pill pill-studio text-foreground",
         link: "text-[color:var(--brand-indigo)] underline-offset-4 hover:underline hover:-translate-y-0 after:hidden",
         /* Brand variants — indigo is the studio's action colour; coral was
            retired from button surfaces (ADR 0010). `brand` is now the dark

@@ -260,7 +260,7 @@ function SectionRow({ section, cameraSetup }) {
     <li className="max-w-3xl space-y-3 border-l-2 border-[color:var(--indigo-35)] pl-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-display text-base font-semibold capitalize">{section.role}</span>
-        <Badge variant="outline" className="text-xs">{section.seconds}s</Badge>
+        <Badge variant="secondary" className="text-xs">{section.seconds}s</Badge>
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">{sectionCopy(section.role, cameraSetup)}</p>
       {goal && <p className="text-base leading-relaxed [overflow-wrap:anywhere]">{goal}</p>}
@@ -569,7 +569,7 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <GroupLabel icon={Sparkles}>The strategy behind the piece</GroupLabel>
         {strategy && (
-          <Badge variant="outline" className="text-xs">strategy v{project.strategy_version}</Badge>
+          <Badge variant="secondary" className="text-xs">strategy v{project.strategy_version}</Badge>
         )}
       </div>
 

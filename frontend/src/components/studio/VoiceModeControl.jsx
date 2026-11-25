@@ -61,7 +61,7 @@ export default function VoiceModeControl({
               disabled={disabled}
               onClick={() => onChange?.(option.value)}
               data-testid={`${testId}-${option.value}`}
-              className={`tap-chip ${picked ? "thumb-selected" : ""}`}
+              className={`tap-chip option-btn ${picked ? "thumb-selected" : ""}`}
             >
               {option.label}
             </Button>

@@ -487,7 +487,7 @@ export default function Landing() {
             </AuthedOnly>
             <Button
               size="lg"
-              variant="outline"
+              variant="secondary"
               asChild
               className="w-full px-8 sm:w-auto"
             >

@@ -81,7 +81,7 @@ export function TrimTimeline({ clips, onTrim, disabled }) {
               {formatTime(edge === "start" ? run.start : run.end)}
             </span>
           </label>)}
-          {trimmed && <Button type="button" className="tap-chip ml-auto" size="sm" variant="ghost" disabled={disabled} onClick={() => onTrim(clip.id, 0, null)}>Reset</Button>}
+          {trimmed && <Button type="button" className="tap-chip ml-auto" size="sm" variant="secondary" disabled={disabled} onClick={() => onTrim(clip.id, 0, null)}>Reset</Button>}
         </div>
       </div>;
     })}

@@ -133,7 +133,7 @@ export function LazyHeroVideo({ poster, sources, ariaLabel, className, showPlayC
         <div className="absolute bottom-2 right-2 z-10">
           <Button
             type="button"
-            variant="ghost"
+            variant="secondary"
             size="icon"
             className="tap-chip focus-ring h-9 w-9 rounded-full border border-white/25 bg-black/65 p-0 text-white backdrop-blur-sm hover:bg-black/80 hover:text-white"
             onClick={togglePlayback}

@@ -1,5 +1,5 @@
-import { Focus, HelpCircle, MessagesSquare, RefreshCw } from "lucide-react";
-import { AppSelect } from "../AppSelect";
+import { useEffect, useState } from "react";
+import { Check, Focus, HelpCircle, Maximize2, MessagesSquare, RefreshCw, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { CONTROL_CLASS } from "../formControls";
 import { GroupLabel } from "../SectionCard";
@@ -145,7 +145,7 @@ export function PickPills({ options, current, onChange, disabled, testId, ariaLa
             disabled={disabled}
             onClick={() => onChange?.(option.value)}
             data-testid={`${testId}-${option.value || "auto"}`}
-            className={`tap-chip ${picked ? "thumb-selected" : ""}`}
+            className={`tap-chip option-btn ${picked ? "thumb-selected" : ""}`}
           >
             {option.label}
           </Button>
@@ -178,6 +178,25 @@ export default function HookPicksControl({
   // A saved focus the profile no longer carries steers nothing on
   // the backend; here it reads as what it now is — the app's choice.
   const focusValue = focusOptions.includes(focus) ? focus : "";
+  // The Focus pick opens in a centered pop-up (ADR 0334, Kasra's
+  // ruling, Nov 25 2026): the old dropdown stretched the full width
+  // of its section for one line of text, and its options are whole
+  // sentences a founder reads before choosing — the same
+  // read-then-pick shape as the angle spec sheet (ADR 0330). The
+  // trigger on the page hugs its text instead of spanning the row.
+  const [focusOpen, setFocusOpen] = useState(false);
+  useEffect(() => {
+    if (!focusOpen) return undefined;
+    const onKey = (event) => {
+      if (event.key === "Escape") setFocusOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focusOpen]);
+  const focusRows = [
+    { value: "", label: "Let the app choose" },
+    ...focusOptions.map((line) => ({ value: line, label: line })),
+  ];
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -227,19 +246,81 @@ export default function HookPicksControl({
             </Button>
           )}
         </div>
-        <AppSelect
-          id="hook-cta-hook-focus"
-          testId={`${testId}-focus`}
-          block
-          value={focusValue}
-          onChange={(value) => onFocusChange?.(value)}
-          disabled={disabled}
-          className={CONTROL_CLASS}
-          options={[
-            { value: "", label: "Let the app choose" },
-            ...focusOptions.map((line) => ({ value: line, label: line })),
-          ]}
-        />
+        <div>
+          <button
+            type="button"
+            data-testid={`${testId}-focus`}
+            aria-haspopup="dialog"
+            aria-expanded={focusOpen}
+            disabled={disabled}
+            onClick={() => setFocusOpen((open) => !open)}
+            className={`${CONTROL_CLASS.replace("w-full", "w-auto max-w-full")} inline-flex items-center gap-2 text-left`}
+          >
+            <span className="min-w-0 truncate">{focusValue || "Let the app choose"}</span>
+            <Maximize2 className="h-4 w-4 shrink-0 opacity-70" aria-hidden="true" />
+          </button>
+          {focusOpen && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Focus"
+            >
+              <button
+                type="button"
+                aria-label="Close"
+                className="absolute inset-0 h-full w-full cursor-default pop-scrim"
+                onClick={() => setFocusOpen(false)}
+              />
+              <div
+                className="surface-card relative max-h-[85vh] w-full max-w-2xl overflow-y-auto p-5"
+                data-testid={`${testId}-focus-popup`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-base font-semibold">Focus</span>
+                  <button
+                    type="button"
+                    aria-label="Close"
+                    onClick={() => setFocusOpen(false)}
+                    className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-[color:var(--indigo-6)] hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="mt-3 space-y-1" role="listbox" aria-label="Focus options">
+                  {focusRows.map((row) => {
+                    const picked = focusValue === row.value;
+                    return (
+                      <button
+                        key={row.value || "app-choice"}
+                        type="button"
+                        role="option"
+                        aria-selected={picked}
+                        data-value={row.value}
+                        onClick={() => {
+                          onFocusChange?.(row.value);
+                          setFocusOpen(false);
+                        }}
+                        className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                          picked
+                            ? "bg-[color:var(--indigo-15)] font-semibold text-foreground"
+                            : "text-muted-foreground hover:bg-[color:var(--indigo-6)] hover:text-foreground"
+                        }`}
+                      >
+                        {picked ? (
+                          <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        ) : (
+                          <span className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        )}
+                        <span>{row.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         <p className="text-sm text-muted-foreground">
           The outcome the hook leads with — one of your app&rsquo;s own outcomes.
         </p>

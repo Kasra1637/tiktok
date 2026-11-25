@@ -2459,7 +2459,7 @@ export default function CreateVideo() {
               summary={
                 <>
                   <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
-                  <Badge variant="outline" className="text-xs">Optional</Badge>
+                  <Badge variant="secondary" className="text-xs">Optional</Badge>
                 </>
               }
             >
@@ -2492,7 +2492,7 @@ export default function CreateVideo() {
                         variant={picked ? "brand" : "secondary"}
                         aria-pressed={picked}
                         data-value={option.value}
-                        className={`tap-chip ${picked ? "thumb-selected" : ""}`}
+                        className={`tap-chip option-btn ${picked ? "thumb-selected" : ""}`}
                         disabled={busy}
                         onClick={() => {
                           dispatchDraft({ type: "edit-field", field: "camera_setup", value: option.value, omitDefault: true, fallback: "handheld" });
@@ -2652,7 +2652,7 @@ export default function CreateVideo() {
                 {profileId && objective && (
                   <div className="pt-1">
                     <Button
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
                       className="gap-1.5"
                       onClick={() => runTailoring(true)}
@@ -3233,7 +3233,7 @@ export default function CreateVideo() {
               >
                 <summary className="flex cursor-pointer flex-wrap items-center gap-2">
                   <GroupLabel icon={ListChecks}>Shot timeline</GroupLabel>
-                  <Badge variant="outline" className="text-xs">read-only</Badge>
+                  <Badge variant="secondary" className="text-xs">read-only</Badge>
                 </summary>
                 <div className="mt-2 space-y-2 text-base">
                   {editValue("beat_timeline", []).map((b, i) => (
@@ -3687,7 +3687,7 @@ export default function CreateVideo() {
           <AlertDescription className="flex w-full flex-wrap items-center justify-between gap-2">
             <span>Plan loaded — change one thing, or generate again.</span>
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               onClick={() => setPlanBannerDismissed(true)}
               aria-label="Dismiss plan notice"
@@ -3838,7 +3838,7 @@ export default function CreateVideo() {
         <div className="flex items-center justify-center gap-2 rounded-full border border-[color:var(--hairline)] bg-background/90 px-2 py-1.5 shadow-lg backdrop-blur">
           {!isLastStep && (
           <Button
-            variant="ghost"
+            variant="secondary"
             size="icon"
             onClick={() => setStep(Math.max(0, step - 1))}
             disabled={step === 0}

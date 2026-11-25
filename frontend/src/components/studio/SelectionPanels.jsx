@@ -158,7 +158,7 @@ export function RecommendationCard({ r, selected, onSelect, index = 0 }) {
           {r.template.name}
         </span>
         <span className="mt-1 flex flex-wrap items-center gap-2" data-slot="badges">
-          <Badge variant="outline" className="text-xs">
+          <Badge variant="secondary" className="text-xs">
             {r.suggested_duration}s
           </Badge>
           {Number.isFinite(score) && (
@@ -468,7 +468,7 @@ export function AngleSelector({
           cannot discard founder work. */}
       <div className="pt-1">
         <Button
-          variant="ghost"
+          variant="secondary"
           size="sm"
           className="gap-1.5"
           onClick={onRegenerate}
@@ -632,7 +632,7 @@ export function AngleSelector({
         >
           <div
             aria-hidden="true"
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 pop-scrim"
             onClick={() => setPopoverId(null)}
           />
           <div
@@ -1021,7 +1021,7 @@ export function AngleGoalPicker({
                   keep their Generate action as the gate button below. */}
               {onRegenerate && revealed && featured.length > 0 && (
                 <Button
-                  variant="ghost"
+                  variant="secondary"
                   size="sm"
                   className="gap-1.5 shrink-0"
                   onClick={onRegenerate}

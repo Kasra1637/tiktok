@@ -2010,7 +2010,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                   {sourceFileName}
                 </span>
                 <Button
-                  variant="ghost"
+                  variant="secondary"
                   size="sm"
                   className="h-10"
                   onClick={clearSource}
@@ -2237,7 +2237,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             )}
             {(appendUrl || !!appendImages?.length) && (
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="sm"
                 className="h-10"
                 onClick={removeAppend}
@@ -2261,13 +2261,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                 <div key={entry.id} className="space-y-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-2" data-testid={`append-image-row-${entry.id}`}>
                   <div className="flex items-center gap-1">
                     <span className="min-w-0 flex-1 truncate text-sm" title={entry.name}>{index + 1}. {entry.name}</span>
-                    <Button variant="ghost" size="sm" className="h-8 w-8" disabled={index === 0} onClick={() => moveAppendImage(entry.id, -1)} data-testid={`append-image-up-${entry.id}`} title="Move earlier" aria-label={`Move ${entry.name} earlier`}>
+                    <Button variant="secondary" size="sm" className="h-8 w-8" disabled={index === 0} onClick={() => moveAppendImage(entry.id, -1)} data-testid={`append-image-up-${entry.id}`} title="Move earlier" aria-label={`Move ${entry.name} earlier`}>
                       <ChevronUp className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-8 w-8" disabled={index === appendImages.length - 1} onClick={() => moveAppendImage(entry.id, 1)} data-testid={`append-image-down-${entry.id}`} title="Move later" aria-label={`Move ${entry.name} later`}>
+                    <Button variant="secondary" size="sm" className="h-8 w-8" disabled={index === appendImages.length - 1} onClick={() => moveAppendImage(entry.id, 1)} data-testid={`append-image-down-${entry.id}`} title="Move later" aria-label={`Move ${entry.name} later`}>
                       <ChevronDown className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-8 w-8" onClick={() => removeAppendImage(entry.id)} data-testid={`append-image-remove-${entry.id}`} title="Remove this image" aria-label={`Remove ${entry.name}`}>
+                    <Button variant="secondary" size="sm" className="h-8 w-8" onClick={() => removeAppendImage(entry.id)} data-testid={`append-image-remove-${entry.id}`} title="Remove this image" aria-label={`Remove ${entry.name}`}>
                       <X className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -2609,7 +2609,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               </p>
               <ControlSlider label="Starts at" value={storyStart} min={storyWindow.min} max={Math.max(storyWindow.min, storyEnd - 0.1)} step={0.1} onChange={(start) => setStoryTiming({ start, end: storyEnd })} testId="story-start-slider" format={(v) => `${v.toFixed(1)}s`} />
               <ControlSlider label="Ends at" value={storyEnd} min={Math.min(storyWindow.max, storyStart + 0.1)} max={storyWindow.max} step={0.1} onChange={(end) => setStoryTiming({ start: storyStart, end })} testId="story-end-slider" format={(v) => `${v.toFixed(1)}s`} />
-              <Button variant="outline" size="sm" disabled={!storyEnabled || !storyText.trim()} onClick={() => handleSeek(storyStart + Math.min(0.4, (storyEnd - storyStart) / 2))} data-testid="story-preview-button">Preview Story text</Button>
+              <Button variant="secondary" size="sm" disabled={!storyEnabled || !storyText.trim()} onClick={() => handleSeek(storyStart + Math.min(0.4, (storyEnd - storyStart) / 2))} data-testid="story-preview-button">Preview Story text</Button>
             </>
           ) : (
             <p role="status" className="text-sm text-muted-foreground" data-testid="story-no-room">
@@ -3279,7 +3279,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                       + Lock
                     </Button>
                     {zoomKeyframes.length > 0 && (
-                      <Button type="button" variant="ghost" size="sm" onClick={handleClearZoomKeyframes}>
+                      <Button type="button" variant="secondary" size="sm" onClick={handleClearZoomKeyframes}>
                         Clear
                       </Button>
                     )}

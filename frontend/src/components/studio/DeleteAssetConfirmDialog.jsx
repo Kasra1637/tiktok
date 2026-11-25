@@ -52,7 +52,7 @@ export function DeleteAssetConfirmDialog({ confirm, onCancel, onConfirm }) {
 
         <DialogFooter>
           <Button
-            variant="ghost"
+            variant="secondary"
             autoFocus
             onClick={onCancel}
             data-testid="delete-asset-cancel"

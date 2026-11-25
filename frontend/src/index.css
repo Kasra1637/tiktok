@@ -2332,6 +2332,32 @@ h1,
         var(--shadow-sm);
 }
 
+/* ---------- Pop-up scrim (ADR 0335) ----------
+   While any pop-up stands, the rest of the screen wears the
+   Show me around dim: the same 55% black the tour's backdrop
+   and spotlight ring use, so the pop-up alone holds the eye.
+   Every pop-up backdrop in the app wears this one class — the
+   angle pop-up, the Focus pop-up, and the shared dialog
+   overlay behind every confirm dialog. */
+.pop-scrim {
+    background-color: rgba(0, 0, 0, 0.55);
+}
+
+/* ---------- The one secondary button (ADR 0336) ----------
+   Every secondary action in the app wears this one treatment,
+   matched to the sidebar's Show me around button: a full-round
+   pill over a hairline border and the 30% secondary fill, with
+   pill-studio carrying its shadow and motion. Un-layered, so
+   the pill radius beats the shared Button sizes' corners. */
+.btn-secondary-pill {
+    border-radius: 9999px;
+    border: 1px solid var(--hairline);
+    background-color: hsl(var(--secondary) / 0.3);
+}
+.btn-secondary-pill:hover:not(:disabled) {
+    border-color: var(--indigo-35);
+}
+
 /* ---------- Thumb-pair rows ----------
    The pair rows (the camera setup, the render panels' resolution)
    lay their buttons out with air between them — a flex row with
@@ -2365,10 +2391,35 @@ h1,
     box-shadow: inset 0 1px 0 0 rgba(129, 140, 248, 0.28),
         0 0 0 1px rgba(129, 140, 248, 0.25),
         var(--shadow-sm);
+    /* The pill radius too (ADR 0336): the picked member of a pair
+       shares the unified secondary's shape, so a pair never mixes
+       a pill with a rounded rectangle. */
+    border-radius: 9999px;
 }
 .thumb-pair .thumb-selected:hover:not(:disabled) {
     border-color: var(--indigo-45);
     background-color: var(--indigo-15);
+}
+
+/* Softer unpicked options (ADR 0334, Kasra's live review, Nov 25
+   2026): a whole row of picks at the full secondary weight read
+   heavy on screen, so an unpicked option button — the .option-btn
+   family: hook length, tone, shape, voice, camera setup, location,
+   wardrobe, and the resolution rows — stands light: a hairline
+   border over the surface, muted text, no bevel shadow, and a
+   gentle indigo wash on hover. The pick keeps the full brand and
+   thumb-selected treatment above, so the choice still stands out
+   at a glance. */
+.option-btn:not(.thumb-selected) {
+    background-color: transparent;
+    border-color: var(--hairline);
+    color: hsl(var(--muted-foreground));
+    box-shadow: none;
+}
+.option-btn:not(.thumb-selected):hover:not(:disabled) {
+    background-color: var(--indigo-6);
+    border-color: var(--indigo-25);
+    color: hsl(var(--foreground));
 }
 .thumb-pair > button:focus-visible {
     outline: none;

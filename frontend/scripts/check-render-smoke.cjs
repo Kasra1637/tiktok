@@ -1381,6 +1381,12 @@ async function main() {
       ) {
         throw new Error("the angle details do not stand in the centered top layer (ADR 0330)");
       }
+      // The rest of the screen wears the Show me around dim while
+      // the pop-up stands (ADR 0335): the backdrop is the shared
+      // .pop-scrim, the tour's own 55% black.
+      if (!layer.firstElementChild || !layer.firstElementChild.className.includes("pop-scrim")) {
+        throw new Error("the angle pop-up does not dim the screen with the tour's scrim (ADR 0335)");
+      }
       await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-popover-close-a2"]'), "no popover close button");
       if (ctx.container.querySelector('[data-testid="angle-popover-a2"]')) {
         throw new Error("the popover did not close");
@@ -7959,6 +7965,28 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         const pairLabels = [...ctx.container.querySelectorAll('[data-testid="review-location-direction"] button')].map((b) => b.textContent.trim());
         if (pairLabels.some((t) => t.length > 25)) {
           throw new Error(`a direction button's text runs past 25 characters: ${JSON.stringify(pairLabels)}`);
+        }
+        // ADR 0334 (Kasra's ruling, Nov 25 2026): the trimmed label
+        // never wears dots — a label ending in an ellipsis read as
+        // a broken, half-shown word on his screen.
+        if (pairLabels.some((t) => t.includes("…") || t.includes("..."))) {
+          throw new Error(`a direction button's text ends in dots: ${JSON.stringify(pairLabels)}`);
+        }
+        // ADR 0334: "New options" stands beside the field's title,
+        // in the title's own row, right after it — the Focus row's
+        // arrangement — never pushed to the row's far end.
+        const locationGroup = ctx.container.querySelector('[data-testid="review-location-direction"]');
+        const locationRoot = locationGroup ? locationGroup.parentElement : null;
+        const locationRefresh = ctx.container.querySelector('[data-testid="review-location-refresh"]');
+        if (!locationRefresh) {
+          throw new Error("the Location New options link did not render");
+        }
+        const locationLabel = locationRoot
+          ? [...locationRoot.querySelectorAll("span")].find((s) => s.textContent.trim() === "Location")
+          : null;
+        if (!locationLabel || locationRefresh.parentElement !== locationLabel.parentElement
+          || !(locationLabel.compareDocumentPosition(locationRefresh) & 4)) {
+          throw new Error("the Location New options link does not stand beside the Location title (ADR 0334)");
         }
         await pickPairButton(ctx, "camera-setup", "fixed");
         await act(async () => {});
@@ -15408,6 +15436,99 @@ async function runHookCtaChecks() {
     );
   });
 
+  await check("the Focus pick opens in a centered pop-up, never a dropdown (ADR 0334)", async (ctx) => {
+    // Kasra's ruling (Nov 25 2026): the Focus dropdown stretched
+    // the full width of its section for one line of text, and its
+    // options are whole sentences read before choosing — so the
+    // pick wears the angle treatment (ADR 0330): a trigger showing
+    // the current choice with the pop-out icon, and the choices in
+    // a centered overlay, in full. Picking closes the pop-up.
+    const OUTCOME = "Clearing the day's thoughts out loud";
+    const fullProfile = {
+      ...PROFILE,
+      outcome_statements: [{ outcome: OUTCOME, from_feature: "Voice entries" }],
+      desired_outcomes: ["Fall asleep without replaying the day"],
+    };
+    await inHookCta(
+      ctx,
+      {
+        getAppProfiles: async () => ({ profiles: [fullProfile] }),
+        getAppProfile: async () => fullProfile,
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1" }),
+        updateStudioProject: async (_id, patch) => hookRow({ id: "hook-cta-1", ...patch }),
+      },
+      "",
+      async () => {
+        const card = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
+        if (!card) throw new Error("the Hook card did not render");
+        const trigger = card.querySelector('[data-testid="hook-picks-focus"]');
+        if (!trigger) throw new Error("the Focus trigger did not render");
+        if (trigger.getAttribute("aria-haspopup") === "listbox") {
+          throw new Error("the Focus pick is still a dropdown (ADR 0334)");
+        }
+        if (card.querySelector('[data-testid="hook-picks-focus-popup"]')) {
+          throw new Error("the Focus pop-up stands open before the trigger is touched");
+        }
+        await clickEl(ctx, trigger);
+        const popup = card.querySelector('[data-testid="hook-picks-focus-popup"]');
+        if (!popup) throw new Error("the Focus trigger did not open the pop-up");
+        const layer = popup.closest(".fixed");
+        if (!layer || !layer.classList.contains("inset-0") || !layer.classList.contains("z-50")) {
+          throw new Error("the Focus pop-up is not the centered overlay layer");
+        }
+        // The Focus pop-up dims the screen with the same shared
+        // scrim as every pop-up (ADR 0335).
+        const focusBackdrop = layer.querySelector('button[aria-label="Close"]');
+        if (!focusBackdrop || !focusBackdrop.className.includes("pop-scrim")) {
+          throw new Error("the Focus pop-up does not dim the screen with the tour's scrim (ADR 0335)");
+        }
+        const rows = [...popup.querySelectorAll('[role="option"]')];
+        if (!rows.some((o) => o.dataset.value === OUTCOME)) {
+          throw new Error("the Focus pop-up does not offer the profile's outcome lines in full");
+        }
+        await clickEl(ctx, rows.find((o) => o.dataset.value === OUTCOME));
+        if (card.querySelector('[data-testid="hook-picks-focus-popup"]')) {
+          throw new Error("the Focus pop-up stayed open after the pick");
+        }
+      }
+    );
+  });
+
+  await check("every pop-up wears the tour's dim, and one secondary button serves the app (ADRs 0335/0336)", async () => {
+    // Source pins, in the suite's css-reading precedent: the shared
+    // dialog overlay (every confirm dialog) dims with .pop-scrim;
+    // the scrim is the tour's 55% black; the shared Button carries
+    // exactly one secondary treatment — the Show me around pill —
+    // and the retired outline/ghost variants stay retired.
+    const fs = require("fs");
+    const path = require("path");
+    const read = (rel) => fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
+    const css = read("src/index.css");
+    if (!css.includes(".pop-scrim") || !css.includes("rgba(0, 0, 0, 0.55)")) {
+      throw new Error("the shared pop-up scrim is not the tour's 55% black (ADR 0335)");
+    }
+    if (!css.includes(".btn-secondary-pill") || !css.includes("border-radius: 9999px")) {
+      throw new Error("the unified secondary pill is missing from the stylesheet (ADR 0336)");
+    }
+    const dialog = read("src/components/ui/dialog.jsx");
+    if (!dialog.includes("pop-scrim")) {
+      throw new Error("the shared dialog overlay does not wear the pop-up scrim (ADR 0335)");
+    }
+    const button = read("src/components/ui/button.jsx");
+    if (button.includes("outline:") || button.includes("ghost:")) {
+      throw new Error("a retired secondary variant is back in the shared Button (ADR 0336)");
+    }
+    if (!button.includes("btn-secondary-pill")) {
+      throw new Error("the shared Button's secondary is not the unified pill (ADR 0336)");
+    }
+    // A picked member of a pair (thumb-selected) takes the same
+    // pill radius, so a pair never mixes shapes.
+    const pickedRule = css.split(".thumb-selected {")[1].split("}")[0];
+    if (!pickedRule.includes("border-radius: 9999px")) {
+      throw new Error("a picked pick-family member does not take the pill radius (ADR 0336)");
+    }
+  });
+
   await check("the Focus refresh replaces the outcome layer and offers the fresh lines at once", async (ctx) => {
     // ADR 0288 (Kasra's order, Nov 23 2026): the button beside the
     // Focus pick refreshes the profile's outcome layer from its
@@ -15969,7 +16090,7 @@ async function runIconChecks() {
     if (!/· 30s/.test(etaBtn.textContent || "") || /(\.\.\.|…)/.test(etaBtn.textContent || "")) throw new Error("busy Button countdown does not start at a dotless 30s");
     if (!etaBtn.querySelector('[data-testid="busy-eta"]')) throw new Error("busy Button countdown does not render inside the button");
     if (etaBtn.getAttribute("data-generating") !== "true") throw new Error("busy Button with a generation wait does not mark its generating state");
-    if (!etaBtn.className.includes("bg-secondary/70") || !etaBtn.className.includes("btn-bevel-neutral") || etaBtn.className.includes("btn-bevel-accent")) throw new Error("busy Button with a generation wait does not wear the Use this photo dark surface");
+    if (!etaBtn.className.includes("btn-secondary-pill") || !etaBtn.className.includes("pill-studio") || etaBtn.className.includes("btn-bevel-accent")) throw new Error("busy Button with a generation wait does not wear the secondary surface (ADR 0336: the unified Show me around pill)");
     await act(async () => { await new Promise((r) => setTimeout(r, 1500)); });
     if (!/· 2[89]s/.test(etaBtn.textContent || "")) throw new Error("busy Button countdown did not tick down after a second");
     await mount(Button, { variant: "accent", etaSeconds: 30, children: "Generate angles" })(ctx);

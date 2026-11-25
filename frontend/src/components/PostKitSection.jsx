@@ -84,7 +84,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated, t
         <div className="flex flex-wrap items-center gap-2">
           {canRegenerate && (
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               onClick={handleRegenerate}
               disabled={regenBusy}
@@ -172,7 +172,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated, t
 
 function CopyButton({ testId, copied, onCopy, label = "Copy" }) {
   return (
-    <Button variant="ghost" size="sm" onClick={onCopy} data-testid={testId}>
+    <Button variant="secondary" size="sm" onClick={onCopy} data-testid={testId}>
       {copied ? (
         <Check className="h-3.5 w-3.5" aria-hidden="true" />
       ) : (

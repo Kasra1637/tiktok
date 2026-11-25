@@ -86,7 +86,7 @@ export function MarketingHeader({ navLabel, links }) {
         <div className="ml-3 flex shrink-0 items-center gap-2 lg:ml-5">
           <UnauthedOnly>
             <SignInTrigger>
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+              <Button variant="secondary" size="sm" className="text-muted-foreground hover:text-foreground">
                 Sign In
               </Button>
             </SignInTrigger>
@@ -147,7 +147,7 @@ export function FinalCta({ testId, secondary = false }) {
                 <Button
                   asChild
                   size="lg"
-                  variant="outline"
+                  variant="secondary"
                   className="w-full gap-2.5 px-8 sm:w-auto"
                 >
                   <Link to="/demo-cta"><Film className="h-4 w-4" /> Style your own footage</Link>

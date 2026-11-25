@@ -57,7 +57,7 @@ export function PlanRegenConfirmDialog({ confirm, onCancel, onConfirm }) {
 
         <DialogFooter>
           <Button
-            variant="ghost"
+            variant="secondary"
             autoFocus
             onClick={onCancel}
             data-testid="regenerate-plan-cancel"

@@ -713,7 +713,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                 Its first click only opens the confirmation dialog — nothing
                 is removed until the founder confirms. */}
             <Button
-              variant="ghost"
+              variant="secondary"
               size="icon"
               className={`shrink-0 text-muted-foreground hover:text-destructive-text${compact ? " h-11 w-11" : " h-9 w-9"}`}
               disabled={busy}
@@ -1117,7 +1117,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
 
           <DialogFooter>
             <Button
-              variant="ghost"
+              variant="secondary"
               autoFocus
               onClick={() => setConfirmDelete(false)}
               disabled={deleting}

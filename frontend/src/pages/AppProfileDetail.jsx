@@ -536,7 +536,7 @@ export default function AppProfileDetail() {
   const listenContext = () => [...listenMoments(), ...listenObjections()];
 return (
     <PageFrame className="page-content-enter space-y-6">
-      <Button variant="ghost" size="sm" asChild className="-ml-2">
+      <Button variant="secondary" size="sm" asChild className="-ml-2">
         {/* Was "All profiles" -> /app-profiles. There is no list page any
             more, and the editor is where an app is created, approved and
             switched between, so that is the honest way back. */}
@@ -643,7 +643,7 @@ return (
                 results. Type-to-confirm because the blast radius is every
                 finished video, not one regenerable row. */}
             <Button
-              variant="ghost"
+              variant="secondary"
               size="icon"
               onClick={openConfirm}
               aria-label="Delete app profile"
@@ -907,7 +907,7 @@ return (
 
           <DialogFooter>
             <Button
-              variant="ghost"
+              variant="secondary"
               onClick={() => setConfirmOpen(false)}
               disabled={deletingProfile}
             >

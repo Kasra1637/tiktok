@@ -386,7 +386,7 @@ export default function TourOverlay() {
               {!isFirst && (
                 <Button
                   size="sm"
-                  variant="ghost"
+                  variant="secondary"
                   onClick={back}
                   className="h-7 px-2 gap-1 text-xs"
                   data-testid="onboarding-tour-back-button"

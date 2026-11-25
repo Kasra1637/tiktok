@@ -356,3 +356,6 @@ come from the architecture map and code, not an old record's UI description.
 | [0331](0331-option-buttons-wear-the-resolution-treatment.md) | Every small option button — hook length, tone, shape, location, wardrobe, voice — wears the render panels' resolution treatment |
 | [0332](0332-option-buttons-stay-short-and-breathe.md) | Option buttons stay short and breathe: direction labels capped at 25 characters, thumb-pair rows and the app pill get unified padding |
 | [0333](0333-profile-group-bars-lose-their-speakers.md) | The Profile editor group bars lose their speakers |
+| [0334](0334-softer-picks-full-labels-and-the-focus-pop-up.md) | Unpicked options stand light, direction labels never wear dots, New options stands beside the title, and the Focus pick opens in a centered pop-up |
+| [0335](0335-pop-ups-dim-the-screen-like-the-tour.md) | Every pop-up dims the rest of the screen with the tour's own 55% black (.pop-scrim) |
+| [0336](0336-one-secondary-button.md) | One secondary button for the whole app: the Show me around pill; outline and ghost are retired |

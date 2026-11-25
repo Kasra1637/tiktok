@@ -931,7 +931,7 @@ const handleGenerate = async () => {
                       type="button"
                       variant={picked ? "brand" : "secondary"}
                       size="sm"
-                      className={`tap-chip${picked ? " thumb-selected" : ""}`}
+                      className={`tap-chip option-btn${picked ? " thumb-selected" : ""}`}
                       aria-pressed={picked}
                       data-testid={`gen-resolution-${r}`}
                       disabled={inFlight}
@@ -1103,14 +1103,14 @@ const handleGenerate = async () => {
       {generation && (
         <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3 text-base">
           <div className="flex flex-wrap items-center gap-2">
-            {generation.model && <Badge variant="outline" className="text-xs">{generation.model}</Badge>}
+            {generation.model && <Badge variant="secondary" className="text-xs">{generation.model}</Badge>}
             {generation.duration && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="secondary" className="text-xs">
                 <Clock className="mr-1 h-2.5 w-2.5" />{generation.duration}s
               </Badge>
             )}
             {generation.attempt > 1 && (
-              <Badge variant="outline" className="text-xs">attempt {generation.attempt}</Badge>
+              <Badge variant="secondary" className="text-xs">attempt {generation.attempt}</Badge>
             )}
           </div>
 

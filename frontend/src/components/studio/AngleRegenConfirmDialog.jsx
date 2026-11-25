@@ -52,7 +52,7 @@ export function AngleRegenConfirmDialog({ confirm, onCancel, onConfirm }) {
 
         <DialogFooter>
           <Button
-            variant="ghost"
+            variant="secondary"
             autoFocus
             onClick={onCancel}
             data-testid="regenerate-angles-cancel"

@@ -69,7 +69,7 @@ export default function CoverTextEditor({
       </p>
       <div className="space-y-3">
         {!live && (
-          <Button type="button" variant="outline" size="sm" onClick={suggest}
+          <Button type="button" variant="secondary" size="sm" onClick={suggest}
             disabled={busy || disabled || !projectId}
             busy={busy}
             data-testid="cover-text-suggest-button">
@@ -86,7 +86,7 @@ export default function CoverTextEditor({
                 onClick={() => { onChange(live.text); setSuggestion(null); }}>
                 Use this cover
               </Button>
-              <Button type="button" variant="ghost" size="sm" data-testid="cover-text-dismiss"
+              <Button type="button" variant="secondary" size="sm" data-testid="cover-text-dismiss"
                 onClick={() => setSuggestion(null)}>
                 Keep mine
               </Button>

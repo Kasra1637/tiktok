@@ -43,7 +43,7 @@ export default function LineRewriteAction({
   return (
     <div className="space-y-3">
       {!live && (
-        <Button type="button" variant="outline" size="sm" onClick={suggest}
+        <Button type="button" variant="secondary" size="sm" onClick={suggest}
           disabled={busy || disabled || !projectId || !String(line || "").trim()}
           busy={busy}
           data-testid={`${testIdPrefix}-button`}>
@@ -64,7 +64,7 @@ export default function LineRewriteAction({
               onClick={() => { onAccept(live); setSuggestion(null); }}>
               {acceptLabel}
             </Button>
-            <Button type="button" variant="ghost" size="sm" data-testid={`${testIdPrefix}-dismiss`}
+            <Button type="button" variant="secondary" size="sm" data-testid={`${testIdPrefix}-dismiss`}
               onClick={() => setSuggestion(null)}>
               Keep mine
             </Button>

@@ -44,7 +44,7 @@ export function GenerateAnotherConfirmDialog({ confirm, onCancel, onConfirm }) {
 
         <DialogFooter>
           <Button
-            variant="ghost"
+            variant="secondary"
             autoFocus
             onClick={onCancel}
             data-testid="generate-another-cancel"

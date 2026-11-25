@@ -54,7 +54,7 @@ export function StrategyRebuildConfirmDialog({ confirm, onCancel, onConfirm }) {
 
         <DialogFooter>
           <Button
-            variant="ghost"
+            variant="secondary"
             autoFocus
             onClick={onCancel}
             data-testid="rebuild-strategy-cancel"

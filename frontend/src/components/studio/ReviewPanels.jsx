@@ -14,13 +14,17 @@ import { Button } from "../ui/button";
 // of a wall of prose. The full option still applies underneath —
 // the pick stores the whole string; only the label is trimmed,
 // at a word boundary, with the full text on the button's title.
+// ADR 0334 (Kasra's ruling, Nov 25 2026): the trim never wears an
+// ellipsis — a label ending in dots read as a broken, half-shown
+// word on screen, so the label simply ends at the last whole word
+// inside the cap, clean.
 const DIRECTION_BUTTON_MAX = 25;
 function directionButtonLabel(option) {
   const text = String(option);
   if (text.length <= DIRECTION_BUTTON_MAX) return text;
-  const cut = text.slice(0, DIRECTION_BUTTON_MAX - 1);
+  const cut = text.slice(0, DIRECTION_BUTTON_MAX);
   const lastSpace = cut.lastIndexOf(" ");
-  return `${(lastSpace > 8 ? cut.slice(0, lastSpace) : cut).trimEnd()}\u2026`;
+  return (lastSpace > 8 ? cut.slice(0, lastSpace) : cut).trimEnd();
 }
 
 export function DirectionSelect({
@@ -57,7 +61,7 @@ export function DirectionSelect({
   }
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
         <span id={`${id}-label`} className="text-sm font-semibold">{label}</span>
         {refresh && (
           <button
@@ -93,7 +97,7 @@ export function DirectionSelect({
                 data-value={option}
                 disabled={disabled}
                 onClick={() => onPick(option)}
-                className={`tap-chip ${picked ? "thumb-selected" : ""}`}
+                className={`tap-chip option-btn ${picked ? "thumb-selected" : ""}`}
                 title={option}
               >
                 {directionButtonLabel(option)}

@@ -202,7 +202,7 @@ export function HistoryFeedback({ row, signalRefs, onUpdated }) {
                 </Badge>
               )}
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="sm"
                 disabled={savingLink}
                 onClick={clearLink}
