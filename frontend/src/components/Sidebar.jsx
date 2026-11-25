@@ -7,7 +7,7 @@ import {
   Sparkles,
   LayoutDashboard,
   Clapperboard,
-  Smartphone,
+  Zap,
   Images,
   Briefcase,
   History as HistoryIcon,
@@ -17,7 +17,6 @@ import {
   X,
   HelpCircle,
   CornerDownRight,
-  ChevronDown,
 } from "lucide-react";
 import { draftHref, readRecentDraft, subscribeRecentDraft } from "../lib/recentDraft";
 
@@ -27,29 +26,38 @@ import { draftHref, readRecentDraft, subscribeRecentDraft } from "../lib/recentD
  * Ordering follows the working sequence, with one exception at the top:
  * Dashboard leads because it is the home a signed-in user lands on
  * (ADR 0208) — a routing page whose state-aware next action sends a
- * profile-less user to App Profile before anything else, so App Profile
+ * profile-less user to Profile before anything else, so Profile
  * no longer has to lead the list to protect that first step. After it the
- * working sequence stands: App Profile, because everything else is made
- * from it and Create Video refuses to run without an approved one.
- * Create Video makes the hook video, Demo + CTA turns the finished hook into an export, History
+ * working sequence stands: Profile, because everything else is made
+ * from it and Create refuses to run without an approved one.
+ * Create makes the hook video, HookSnap makes the short hook that
+ * flows straight into a demo, History
  * records those renders and exports, and Analytics reads the
- * founder's own logged results. Hook + CTA — the short hook that
- * flows straight into a demo — has no sidebar link of its own
- * (ADR 0248): Kasra asked for fewer links here. Its way in is the
- * Create Video entry itself — the classic-flow link, whose
- * chevron opens the other ways to make a video as a pop-up
- * (ADRs 0251/0259) — and the Dashboard's destination
- * card; its route is unchanged. The retired
+ * founder's own logged results. Demo + CTA — the finishing step that
+ * turns a finished hook into an export — has no sidebar link of its
+ * own (ADR 0324): it is reached inside the flows, and its route is
+ * unchanged. The retired
  * Discover / Saved Hooks / Research Archive / Trend Research pages are gone, so
  * there is no Research group and no Insight link. Analytics is last, not an
  * Insight group.
  *
- * App Profile follows Dashboard rather than leading, and it is named
- * for what the page actually holds. "Your app" described one app, while the page
- * is the list of every app profile you have researched, approved and edited, and
- * the product's own vocabulary everywhere else — the tour, the detail page, the
- * database column — already says App Profile. A nav label that disagreed with
- * the page it opens was the remaining inconsistency.
+ * Every label is one word (ADR 0324): Dashboard, Profile, Create,
+ * HookSnap, History, Assets, Analytics. "App Profile" and "Create
+ * Video" named their pages in two words while the rest of the list
+ * read in one, and "Hook + CTA" — the page's name since ADR 0244 —
+ * listed its parts instead of its promise: HookSnap is Kasra's name
+ * for how the page feels next to Create, a short hook plus your
+ * demo, done fast. The three page headers carry the same one-word
+ * names, so a label and the page it opens never disagree. Body copy
+ * still says App Profile where it names the thing itself; the label
+ * is the short signpost, not a new term.
+ *
+ * HookSnap's own entry supersedes its earlier placements: the page
+ * had no sidebar link at all (ADR 0248), then rode on the Create
+ * entry's chevron pop-up (ADRs 0251/0259; the pop-up's Demo + CTA
+ * entry was removed by ADR 0273). Standing in the list on its own,
+ * it left the pop-up holding nothing, so the pop-up is gone
+ * (ADR 0324) and Create is a plain link like every other entry.
  *
  * This was two labelled groups — "Create" and "Insight" — and both headings
  * are gone. "Insight" sat above exactly one link, so it read as a section with
@@ -67,20 +75,22 @@ import { draftHref, readRecentDraft, subscribeRecentDraft } from "../lib/recentD
  * selectors for `document.querySelector`.
  */
 const NAV_ITEMS = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testId: "dashboard-nav-link", hint: "Start here — pick your next step" },
-  { to: "/brand", label: "App Profile", icon: Briefcase, testId: "brand-nav-link", hint: "Research, review, approve" },
-  { to: "/create", label: "Create Video", icon: Clapperboard, testId: "create-nav-link", hint: "Plan, review, render" },
-  { to: "/demo-cta", label: "Demo + CTA", icon: Smartphone, testId: "demo-cta-nav-link", hint: "Style clips, join, export" },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testId: "dashboard-nav-link", hint: "Your work at a glance" },
+  { to: "/brand", label: "Profile", icon: Briefcase, testId: "brand-nav-link", hint: "Your unique facts, audience, and basics" },
+  { to: "/create", label: "Create", icon: Clapperboard, testId: "create-nav-link", hint: "Full plan, script, render" },
+  /* HookSnap stands where the Demo + CTA link stood (ADR 0324): the
+     fast page gets the sidebar slot, the finishing step keeps none. */
+  { to: "/hook-cta", label: "HookSnap", icon: Zap, testId: "hooksnap-nav-link", hint: "Hook plus demo, done fast" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "history-nav-link", hint: "Renders, exports, results" },
   /* Assets sits with the working pages, directly above Analytics: it holds
      the presenter photos the renders above are generated from, and the
      clips and images founders add in Demo + CTA (ADR 0274). "Assets" is
      Kasra's name for the stored files and the place they live. */
-  { to: "/assets", label: "Assets", icon: Images, testId: "assets-nav-link", hint: "Photos and clips by app" },
+  { to: "/assets", label: "Assets", icon: Images, testId: "assets-nav-link", hint: "Your photos and clips, all here" },
   /* Results, last: it is the one page that only means something once the pages
      above it have produced something. Leading with it would open on an empty
      ledger for anyone still setting up. */
-  { to: "/analytics", label: "Analytics", icon: TrendingUp, testId: "analytics-nav-link", hint: "Results, verdicts, learnings" },
+  { to: "/analytics", label: "Analytics", icon: TrendingUp, testId: "analytics-nav-link", hint: "Views, verdicts, lessons" },
 ];
 
 /**
@@ -150,172 +160,18 @@ function NavItem({ item, collapsed, active, onNavigate, testId }) {
 }
 
 /**
- * The Create Video entry is the classic-flow link, with the other
- * ways riding on its chevron (ADR 0259, refining ADR 0251).
- *
- * ADR 0251 made the whole entry a pop-up trigger offering three
- * ways, its own Create Video way among them. Kasra's ruling
- * (Nov 21 2026): the pop-up holds only the OTHER ways — Hook +
- * CTA and Demo + CTA — each reading like a normal sidebar link,
- * one bold title with one short explainer under it, the shape the
- * History link reads in. A pop-up that also lists the page its own
- * entry opens is one entry too many, so the entry itself is the
- * /create link again — NavItem's row, keeping the canonical
- * create-nav-link testid the tours anchor to — and a separate
- * chevron hit-area on the same row toggles the pop-up. ADR 0273
- * (Nov 22 2026) then removed the Demo + CTA entry on Kasra's
- * order — it is a finishing step, reached inside the flows — so
- * the pop-up now holds exactly one way: Hook + CTA, to its page.
- * The Dashboard keeps its own Hook + CTA card — only the entry's
- * arrangement is refined, nothing else in 0251 moves.
- *
- * The entry stands active on the Hook + CTA page too — the
- * pop-up's ways are one family under this entry — while
- * aria-current names only the page the link itself opens. The
- * panel wears the app-drawn menu's language (the .app-select-menu
- * surface and option rows) and keeps its contract: Escape closes,
- * a press outside closes, choosing a way closes the panel and the
- * mobile drawer alike, and navigating anywhere closes it too.
- *
- * Collapsed, the icon rail has no room for a panel or a chevron,
- * so there the entry stays the plain link it has always been in
- * the rail.
+ * The Create entry is a plain nav link (ADR 0324). It once carried
+ * a chevron pop-up holding the other ways to make a video (ADRs
+ * 0251/0259); its last remaining way, the page now named HookSnap,
+ * stands in the list on its own, so the pop-up held nothing and
+ * was removed whole — component, toggle and menu alike.
  */
-function CreateFlowMenu({ item, collapsed, active, onNavigate, testIdPrefix }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-  const { pathname } = useLocation();
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKeyDown = (event) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    const onPointerDown = (event) => {
-      if (wrapRef.current && !wrapRef.current.contains(event.target)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("pointerdown", onPointerDown);
-    };
-  }, [open ]);
-
-  // Navigating anywhere closes the panel: the entry is a link
-  // again (ADR 0259), so a route change can now happen — through
-  // the entry itself — while the panel stands open.
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-
-  if (collapsed) {
-    return (
-      <NavItem
-        item={item}
-        collapsed={collapsed}
-        active={active}
-        onNavigate={onNavigate}
-        testId={`${testIdPrefix}${item.testId}`}
-      />
-    );
-  }
-
-  const Icon = item.icon;
-  const onCreate = pathname === "/create" || pathname.startsWith("/create/");
-  const pick = () => {
-    setOpen(false);
-    if (onNavigate) onNavigate();
-  };
-  const optionClass = "app-select-option w-full";
-
-  return (
-    <div ref={wrapRef} className="relative">
-      <div
-        className={`group relative flex items-center rounded-xl transition-[background-color,color,box-shadow] duration-200 ${
-          active
-            ? "bg-[color:var(--indigo-10)] text-foreground shadow-[inset_0_1px_0_0_rgba(129,140,248,0.2),var(--shadow-xs)]"
-            : "text-muted-foreground hover:bg-[color:var(--indigo-6)] hover:text-foreground"
-        }`}
-      >
-        {/* Active rail — a 3px indigo bar pinned to the panel edge. */}
-        <span
-          aria-hidden="true"
-          className={`absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full bg-[color:var(--brand-indigo)] transition-all duration-200 ${
-            active ? "h-5 w-[3px] opacity-100 shadow-[0_0_10px_var(--brand-indigo)]" : "h-2 w-[3px] opacity-0"
-          } -left-3`}
-        />
-        <Link
-          to="/create"
-          onClick={onNavigate}
-          data-testid={`${testIdPrefix}${item.testId}`}
-          aria-current={onCreate ? "page" : undefined}
-          className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 outline-none"
-        >
-          <Icon
-            className={`h-[18px] w-[18px] shrink-0 transition-[color,transform] duration-200 group-hover:scale-105 ${
-              active ? "text-[color:var(--brand-indigo)]" : "text-muted-foreground group-hover:text-foreground"
-            }`}
-          />
-          <span className="flex min-w-0 flex-col">
-            <span className={`truncate text-sm leading-tight ${active ? "font-semibold" : "font-normal"}`}>
-              {item.label}
-            </span>
-            {/* Full --muted-foreground, no opacity modifier: at 12px the /70
-                variant fell below the WCAG AA 4.5:1 threshold on this bg. */}
-            <span className="truncate text-xs leading-tight text-muted-foreground">{item.hint}</span>
-          </span>
-        </Link>
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          data-testid={`${testIdPrefix}create-flow-toggle`}
-          aria-label="Show other ways to create a video"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          className="mr-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-[color:var(--indigo-8)] hover:text-foreground"
-        >
-          <ChevronDown
-            aria-hidden="true"
-            className={`h-4 w-4 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          />
-        </button>
-      </div>
-      {open && (
-        <div
-          role="menu"
-          aria-label="Other ways to create a video"
-          data-testid={`${testIdPrefix}create-flow-menu`}
-          className="app-select-menu"
-          style={{ width: "100%" }}
-        >
-          <Link
-            role="menuitem"
-            data-testid={`${testIdPrefix}create-flow-option-hook-cta`}
-            to="/hook-cta"
-            onClick={pick}
-            className={optionClass}
-          >
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate text-sm font-semibold leading-tight">Hook + CTA</span>
-              <span className="truncate text-xs leading-tight text-muted-foreground">
-                Short hook, then your demo
-              </span>
-            </span>
-          </Link>
-        </div>
-      )}
-    </div>
-  );
-}
 
 /**
  * The one line in the frame that remembers work.
  *
  * A nav item is a destination; this is a place the founder already is. It
- * sits directly under Create Video because that is where a draft lives, names
+ * sits directly under Create because that is where a draft lives, names
  * the app so the line is recognizable, and renders nothing when there is
  * nothing to continue — an empty wizard is not a draft. Collapsed, the rail
  * has no room for a label and the glyph alone would be a mystery, so it hides
@@ -355,23 +211,13 @@ function NavList({ collapsed, onNavigate, testIdPrefix = "" }) {
     <nav className={`flex flex-col gap-1.5 ${collapsed ? "items-center px-4" : "px-4"}`} aria-label="Main">
       {NAV_ITEMS.map((item) => (
         <Fragment key={item.to}>
-          {item.to === "/create" ? (
-            <CreateFlowMenu
-              item={item}
-              collapsed={collapsed}
-              active={isActive(item.to) || isActive("/hook-cta")}
-              onNavigate={onNavigate}
-              testIdPrefix={testIdPrefix}
-            />
-          ) : (
-            <NavItem
-              item={item}
-              collapsed={collapsed}
-              active={isActive(item.to)}
-              onNavigate={onNavigate}
-              testId={`${testIdPrefix}${item.testId}`}
-            />
-          )}
+          <NavItem
+            item={item}
+            collapsed={collapsed}
+            active={isActive(item.to)}
+            onNavigate={onNavigate}
+            testId={`${testIdPrefix}${item.testId}`}
+          />
           {item.to === "/create" ? (
             <DraftShortcut collapsed={collapsed} testIdPrefix={testIdPrefix} />
           ) : null}

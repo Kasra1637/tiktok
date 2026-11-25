@@ -135,6 +135,27 @@ describe("HookPicksControl", () => {
     await view.unmount();
   });
 
+  test("the link surface offers New options from the start (ADR 0325)", async () => {
+    const onRefreshFocus = jest.fn();
+    const view = await mount({ onRefreshFocus, focusRefreshAsLink: true });
+    const refresh = view.q("hook-picks-focus-refresh");
+    expect(refresh).not.toBeNull();
+    expect(refresh.textContent).toContain("New options");
+    expect(refresh.textContent).not.toContain("Buffet");
+    await act(async () => { refresh.click(); });
+    expect(onRefreshFocus).toHaveBeenCalledTimes(1);
+    await view.unmount();
+  });
+
+  test("the link surface names New options in its stale note (ADR 0325)", async () => {
+    const view = await mount({ onRefreshFocus: jest.fn(), focusStale: true, focusRefreshAsLink: true });
+    const note = view.q("hook-picks-focus-stale-note");
+    expect(note).not.toBeNull();
+    expect(note.textContent).toContain("New options");
+    expect(note.textContent).not.toContain("Buffet");
+    await view.unmount();
+  });
+
   test("renders the three picks, each on the app's choice by default", async () => {
     const view = await mount();
     const focus = view.q("hook-picks-focus");

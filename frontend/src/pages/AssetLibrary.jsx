@@ -608,7 +608,19 @@ export default function AssetLibrary({
       const data = await api.getAssets(activeProfileId, {
         include_archived: includeArchived || undefined,
       });
-      setAssets(data.assets || []);
+      // ADR 0326: embedded, this list IS the presenter photo section,
+      // and that section is for faces only — the uploads split by job.
+      // Every upload is typed server-side by kind (ADR 0274) and only
+      // the character reference is a presenter photo, so screenshots
+      // and screen recordings never enter the section at all; they
+      // live in the standalone library and the Demo + CTA area. The
+      // standalone page keeps the full collection, unfiltered.
+      const rows = data.assets || [];
+      setAssets(
+        embedded
+          ? rows.filter((a) => a.kind === "character_reference")
+          : rows
+      );
     } catch (err) {
       // A profile that no longer exists, or belongs to someone else, arrives as
       // a 404 with a bare "App Profile not found". On the standalone page the

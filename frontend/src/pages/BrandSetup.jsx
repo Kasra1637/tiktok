@@ -753,7 +753,7 @@ export default function BrandSetup() {
     <PageFrame className="space-y-6">
       <PageHeader
         icon={Briefcase}
-        title="App Profile"
+        title="Profile"
         description="Lock in your product facts once — every video starts from here."
         actions={
           <div className="flex flex-wrap items-center gap-2">

@@ -7,7 +7,6 @@ import {
   Clapperboard,
   Compass,
   Film,
-  PenLine,
   Share2,
   Sparkles,
   Zap,
@@ -546,7 +545,7 @@ export default function HookCta() {
     <PageFrame className="space-y-6">
       <PageHeader
         icon={Zap}
-        title="Hook + CTA"
+        title="HookSnap"
         description="A short hook that flows straight into your demo and call to action."
         data-testid="hook-cta-header"
       />
@@ -558,7 +557,7 @@ export default function HookCta() {
       )}
 
       {loadState === "loading" && (
-        <div className="surface" role="status" aria-label="Loading Hook + CTA" data-testid="hook-cta-loading">
+        <div className="surface" role="status" aria-label="Loading HookSnap" data-testid="hook-cta-loading">
           <div className="space-y-3">
             <Skeleton className="h-4 w-1/3" />
             <Skeleton className="h-10 w-full rounded-xl" />
@@ -571,7 +570,7 @@ export default function HookCta() {
       {loadState === "failed" && (
         <div className="surface space-y-4" data-testid="hook-cta-load-failed">
           <p role="alert" className="text-sm text-destructive-text">
-            {loadError || "Hook + CTA could not load."}
+            {loadError || "HookSnap could not load."}
           </p>
           <Button variant="secondary" onClick={loadPage}>
             Try again
@@ -690,22 +689,11 @@ export default function HookCta() {
                   </p>
                 )}
               </div>
-
-              <div className="space-y-4">
-                <PresenterPhotoControl
-                  project={project}
-                  profileId={profileId}
-                  busy={false}
-                  onEnsureProject={async () => project}
-                  onProjectChanged={(updated) => dispatch({ type: "project-received", project: updated || project })}
-                  onRefreshProject={refreshProject}
-                />
-              </div>
             </SectionCard>
           )}
 
           {project && (
-            <SectionCard title="The hook" icon={PenLine} data-testid="hook-cta-hook-card">
+            <SectionCard title="The hook" icon={Zap} data-testid="hook-cta-hook-card">
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground" data-subtitle="">
                   One line, written from your app and the direction you set.
@@ -736,6 +724,7 @@ export default function HookCta() {
                   focus={editValue("hook_focus", "")}
                   onFocusChange={(value) => changePick("hook_focus", value, { omitDefault: true, fallback: "" })}
                   onRefreshFocus={refreshFocusOutcomes}
+                  focusRefreshAsLink
                   focusRefreshing={focusRefreshing}
                   focusRefreshError={focusRefreshError}
                   tone={editValue("tone", "")}
@@ -916,6 +905,23 @@ export default function HookCta() {
                 )}
               </div>
             </SectionCard>
+          )}
+
+          {/* ADR 0326: the presenter photo section stands at the very
+              bottom of the page — the same end-of-flow spot it holds in
+              the Create wizard — moved out of the Place and wardrobe
+              card. Its list is faces only: the embedded library keeps
+              character_reference assets (see AssetLibrary). The control
+              keeps its own panel and label, as in the wizard. */}
+          {project && (
+            <PresenterPhotoControl
+              project={project}
+              profileId={profileId}
+              busy={false}
+              onEnsureProject={async () => project}
+              onProjectChanged={(updated) => dispatch({ type: "project-received", project: updated || project })}
+              onRefreshProject={refreshProject}
+            />
           )}
 
         </>

@@ -46,12 +46,12 @@ import { CREATE_ACTION, pickDashboardAction } from "../lib/dashboardNextAction";
 // card here and its link there can never describe the same place two
 // ways; the sidebar stays the owner of that vocabulary.
 const DESTINATIONS = [
-  { to: "/create", label: "Create Video", icon: Clapperboard, testId: "dashboard-card-create", hint: "Plan, review, render" },
-  { to: "/hook-cta", label: "Hook + CTA", icon: Zap, testId: "dashboard-card-hook-cta", hint: "A short hook, finished with your demo" },
+  { to: "/create", label: "Create", icon: Clapperboard, testId: "dashboard-card-create", hint: "Full plan, script, render" },
+  { to: "/hook-cta", label: "HookSnap", icon: Zap, testId: "dashboard-card-hook-cta", hint: "Hook plus demo, done fast" },
   { to: "/history", label: "History", icon: HistoryIcon, testId: "dashboard-card-history", hint: "Renders, exports, results" },
   { to: "/assets", label: "Asset Library", icon: Images, testId: "dashboard-card-assets", hint: "Presenter photos by app" },
-  { to: "/analytics", label: "Analytics", icon: TrendingUp, testId: "dashboard-card-analytics", hint: "Results, verdicts, learnings" },
-  { to: "/brand", label: "App Profile", icon: Briefcase, testId: "dashboard-card-brand", hint: "Research, review, approve" },
+  { to: "/analytics", label: "Analytics", icon: TrendingUp, testId: "dashboard-card-analytics", hint: "Views, verdicts, lessons" },
+  { to: "/brand", label: "Profile", icon: Briefcase, testId: "dashboard-card-brand", hint: "Your unique facts, audience, and basics" },
 ];
 
 // The hero's glyph is the destination's own icon, so the next action

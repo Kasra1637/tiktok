@@ -5604,8 +5604,8 @@ async function main() {
     // and every step's content. The title lives inside a masthead, so the task
     // is a sibling of that block rather than a descendant of the h1.
     const title = ctx.container.querySelector("h1");
-    if (!title || title.textContent.trim() !== "Create Video") {
-      throw new Error("the Create Video title is gone");
+    if (!title || title.textContent.trim() !== "Create") {
+      throw new Error("the Create title is gone");
     }
     const headerBlock = title.closest("div[class*='flex']")?.parentElement || title.parentElement;
     const documentOrder = Array.from(ctx.container.querySelectorAll("*"));
@@ -13490,7 +13490,7 @@ async function runSidebarNavChecks() {
         throw new Error(
           `the first sidebar link is ${items[0].label} (${items[0].to}), expected ` +
             "Dashboard (/dashboard). It is the page a signed-in user lands on, " +
-            "and its hero routes a profile-less user to App Profile first, so " +
+            "and its hero routes a profile-less user to Profile first, so " +
             "leading with anything else strands the home link below the work."
         );
       }
@@ -13500,7 +13500,7 @@ async function runSidebarNavChecks() {
         "/dashboard",
         "/brand",
         "/create",
-        "/demo-cta",
+        "/hook-cta",
         "/history",
         "/assets",
         "/analytics",
@@ -13535,14 +13535,14 @@ async function runSidebarNavChecks() {
       if (stale.length) {
         throw new Error(
           `the old "Your app" label is back in: ${stale.join(", ")}. The page is ` +
-            "called App Profile everywhere else in the product."
+            "called Profile everywhere else in the product."
         );
       }
       // The route and testid must not move with the label: the onboarding tour
       // and every existing deep link depend on them.
-      if (!/to: "\/brand", label: "App Profile", icon: Briefcase, testId: "brand-nav-link"/.test(src)) {
+      if (!/to: "\/brand", label: "Profile", icon: Briefcase, testId: "brand-nav-link"/.test(src)) {
         throw new Error(
-          "the App Profile link changed its route or testId. brand-nav-link is " +
+          "the Profile link changed its route or testId. brand-nav-link is " +
             "referenced by convention and /brand by every existing deep link."
         );
       }
@@ -13564,108 +13564,78 @@ async function runSidebarNavChecks() {
             "and \"Assets\" is the name Kasra picked for the stored files (ADR 0274)."
         );
       }
-      // Hook + CTA has NO sidebar link of its own (ADR 0248, its
-      // placement refined by ADRs 0251/0259): Kasra asked for fewer
-      // sidebar links, so the page is reached from the Create Video
-      // entry's pop-up and the Dashboard's destination card — the
-      // pop-up pinned in the check below — while its route stands
-      // unchanged (the Hook + CTA checks pin it). A link of its own
-      // creeping back here re-adds the clutter the removal took out.
-      if (src.includes("hook-cta-nav-link") || /to: "\/hook-cta"/.test(block)) {
+      // HookSnap HAS a sidebar link of its own (ADR 0324, superseding
+      // ADR 0248's removal and the pop-up placement of ADRs
+      // 0251/0259): Kasra gave the page its own one-word name and its
+      // own entry, standing where the Demo + CTA link stood, while
+      // its route stands unchanged. The Demo + CTA sidebar link is
+      // gone in the same move — the finishing step is reached inside
+      // the flows, never from the sidebar.
+      if (!/to: "\/hook-cta", label: "HookSnap", icon: Zap, testId: "hooksnap-nav-link"/.test(src)) {
         throw new Error(
-          "a Hook + CTA link of its own is back in the sidebar. ADR 0248 " +
-            "removed it: the page is reached from the Create Video entry's " +
-            "pop-up and the Dashboard card, not from a sidebar link."
+          "the HookSnap link changed its label, route, icon or testId. " +
+            "hooksnap-nav-link is the canonical selector for the sidebar's " +
+            "HookSnap link and /hook-cta its route (ADR 0324)."
+        );
+      }
+      if (/to: "\/demo-cta"/.test(block) || src.includes("demo-cta-nav-link")) {
+        throw new Error(
+          "a Demo + CTA link is back in the sidebar. ADR 0324 removed it: " +
+            "HookSnap stands in its place, and the finishing step is reached " +
+            "inside the create flows."
         );
       }
     }
   );
 
   await check(
-    "the Create Video sidebar entry links to Create Video and its chevron opens the one other way",
+    "the Create sidebar entry is a plain link and HookSnap stands on its own",
     async () => {
-      // ADR 0259 (refining 0251): the pop-up holds only the OTHER
-      // ways — Hook + CTA and Demo + CTA — each reading like a
-      // sidebar link: one bold title, one short explainer under
-      // it. The pop-up's own Create Video entry is gone because the
-      // sidebar entry itself is the classic-flow link again:
-      // clicking the row navigates to /create, and a separate
-      // chevron hit-area on the same row toggles the pop-up.
-      // ADR 0273 (Nov 22 2026): Kasra removed the Demo + CTA entry
-      // — a finishing step, reached inside the flows — so the
-      // pop-up now holds exactly one way, Hook + CTA, and builds
-      // no finishing-step link at all.
+      // ADR 0324 (superseding ADRs 0251/0259/0273): the Create
+      // entry's pop-up is gone entirely. It held exactly one way —
+      // Hook + CTA — and Kasra gave that page its own one-word name
+      // (HookSnap) and its own sidebar entry, so there is nothing
+      // left for a pop-up to hold. The Create entry is a plain nav
+      // link again, the same shape as every other entry, keeping
+      // the canonical create-nav-link testid the tours anchor to.
       // Source-level like the nav check above: the sidebar is not
       // mounted in this harness.
       const src = fs.readFileSync(
         path.join(__dirname, "..", "src", "components", "Sidebar.jsx"),
         "utf8"
       );
-      if (!src.includes("create-flow-menu")) {
-        throw new Error("the sidebar carries no Create Video pop-up (create-flow-menu)");
-      }
-      if (src.includes("create-flow-option-create")) {
-        throw new Error(
-          "the pop-up still offers Create Video itself. ADR 0259 removed " +
-            "that entry: the sidebar entry is the /create link, and the " +
-            "pop-up holds only the two other ways."
-        );
-      }
-      for (const testId of ["create-flow-option-hook-cta"]) {
-        if (!src.includes(testId)) {
-          throw new Error(`the pop-up is missing its ${testId} option`);
-        }
-      }
-      if (src.includes("create-flow-option-demo-cta")) {
-        throw new Error(
-          "the pop-up still offers Demo + CTA. ADR 0273 removed that entry: " +
-            "the pop-up holds only Hook + CTA, and Demo + CTA is reached " +
-            "inside the create flows."
-        );
-      }
-      for (const wording of ["Short hook, then your demo"]) {
-        if (!src.includes(wording)) {
-          throw new Error(`the pop-up lost its sidebar-link explainer: ${wording}`);
-        }
-      }
       for (const stale of [
-        "Create Video — hook + story",
-        "Hook + CTA — a short hook, finished with your demo",
-        "Demo + CTA — add your demo and closing message",
-        "Your demo and closing message",
+        "create-flow-menu",
+        "create-flow-toggle",
+        "create-flow-option",
+        "CreateFlowMenu",
+        "Show other ways to create a video",
+        "Short hook, then your demo",
       ]) {
         if (src.includes(stale)) {
-          throw new Error(`the pop-up still carries the old switcher wording: ${stale}`);
+          throw new Error(
+            `the sidebar still carries the removed Create pop-up: ${stale}. ` +
+              "ADR 0324 removed the pop-up entirely — HookSnap has its own " +
+              "sidebar entry now, so the Create entry is a plain link."
+          );
         }
       }
-      // The entry itself is the classic-flow link again.
-      if (!src.includes('to="/create"')) {
-        throw new Error("the Create Video entry does not link to /create");
+      if (src.includes('aria-haspopup="menu"') || src.includes('role="menu"')) {
+        throw new Error("the sidebar still carries a menu opened by a menu toggle");
       }
-      // The chevron is its own button, labelled for what it opens.
-      if (!src.includes("create-flow-toggle")) {
+      // The entry itself is the classic-flow link, one word now.
+      if (!/to: "\/create", label: "Create", icon: Clapperboard, testId: "create-nav-link"/.test(src)) {
         throw new Error(
-          "the Create Video entry has no separate pop-up toggle (create-flow-toggle)"
+          "the Create link changed its label, route, icon or testId. " +
+            "create-nav-link is referenced by convention and /create by " +
+            "every existing deep link."
         );
-      }
-      if (!src.includes('aria-label="Show other ways to create a video"')) {
-        throw new Error("the pop-up toggle does not name what it opens");
-      }
-      if (!src.includes('to="/hook-cta"')) {
-        throw new Error("the pop-up's Hook + CTA option does not link to the Hook + CTA page");
       }
       if (src.includes("step=finish")) {
         throw new Error(
           "the sidebar still builds a finishing-step link. ADR 0273 removed " +
             "the pop-up's Demo + CTA option, which was its only builder."
         );
-      }
-      if (!src.includes('aria-haspopup="menu"') || !src.includes('role="menu"')) {
-        throw new Error("the Create Video pop-up is not a menu opened by a menu toggle");
-      }
-      // The entry keeps the canonical testid the tours anchor to.
-      if (!src.includes('testId: "create-nav-link"')) {
-        throw new Error("the Create Video nav item lost its create-nav-link testId");
       }
     }
   );
@@ -15226,12 +15196,17 @@ async function runHookCtaChecks() {
             throw new Error(`the ${testid} pick did not render in the Hook card`);
           }
         }
-        // ADR 0320 (Kasra's ruling, Nov 24 2026): the Buffet stands
-        // in the Focus header only once a hook exists to steer, or
-        // early when the menu itself is stale. This profile's menu
-        // is fresh and no hook exists yet, so it must not stand.
-        if (card.querySelector('[data-testid="hook-picks-focus-refresh"]')) {
-          throw new Error("the Buffet stands before any hook on a fresh menu (ADR 0320)");
+        // ADR 0325 (Kasra's ruling, Nov 24 2026, superseding ADR
+        // 0320 on this surface): on the HookSnap page the Focus
+        // refresh is always available, wearing the page's own
+        // "New options" text link — never the Buffet button, which
+        // remains the control's default rendering elsewhere.
+        const refreshEarly = card.querySelector('[data-testid="hook-picks-focus-refresh"]');
+        if (!refreshEarly) {
+          throw new Error("the Focus refresh does not stand before any hook (ADR 0325)");
+        }
+        if (!refreshEarly.textContent.includes("New options") || refreshEarly.textContent.includes("Buffet")) {
+          throw new Error(`the Focus refresh reads "${refreshEarly.textContent}", expected the New options link (ADR 0325)`);
         }
         await chooseOption(ctx, card.querySelector('[data-testid="hook-picks-focus"]'), OUTCOME);
         await clickEl(ctx, card.querySelector('[data-testid="hook-picks-tone-warm"]'));
@@ -15255,12 +15230,12 @@ async function runHookCtaChecks() {
         if (!savedBefore.some((p) => p.hook_shape === "question")) {
           throw new Error("the hook was written before its picks had saved");
         }
-        // ADR 0320: with a hook on file, the Buffet takes its place
-        // in the Focus header — the steering moment has arrived.
+        // ADR 0325: the refresh stands with a hook on file too —
+        // on this page it never left.
         await act(async () => {});
         const cardAfter = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
         if (!cardAfter || !cardAfter.querySelector('[data-testid="hook-picks-focus-refresh"]')) {
-          throw new Error("the Buffet did not take its place once a hook exists (ADR 0320)");
+          throw new Error("the Focus refresh left once a hook exists (ADR 0325)");
         }
       }
     );
@@ -15305,7 +15280,7 @@ async function runHookCtaChecks() {
         }
         await clickEl(ctx, focusControl);
         const refresh = card.querySelector('[data-testid="hook-picks-focus-refresh"]');
-        if (!refresh) throw new Error("the Focus refresh button did not render");
+        if (!refresh) throw new Error("the Focus refresh control did not render");
         await clickEl(ctx, refresh);
         await act(async () => {});
         await act(async () => {});
@@ -15362,6 +15337,44 @@ async function runHookCtaChecks() {
         const field = ctx.container.querySelector("#review-hook_line");
         if (!field || field.value !== HOOK) {
           throw new Error("the line on file changed when only a pick changed");
+        }
+      }
+    );
+  });
+
+  await check("the HookSnap presenter photo section stands at the very bottom", async (ctx) => {
+    // ADR 0326: the presenter photo section moved out of the direction
+    // card to the very bottom of HookSnap, after the Post kit — the same
+    // end-of-flow spot it holds in the Create wizard.
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1" }),
+        getAssets: async () => ({
+          assets: [
+            {
+              id: "a1", kind: "character_reference", status: "active",
+              rights_confirmed: true, label: "Founder photo",
+              created_at: new Date().toISOString(), used_in: [],
+            },
+          ],
+        }),
+      },
+      "",
+      async () => {
+        const photo = ctx.container.querySelector('[data-testid="template-photo"]');
+        if (!photo) throw new Error("the presenter photo section never rendered");
+        const direction = ctx.container.querySelector('[data-testid="hook-cta-direction-card"]');
+        if (direction && direction.contains(photo)) {
+          throw new Error("the presenter photo section still sits inside the direction card");
+        }
+        const postKit = ctx.container.querySelector('[data-testid="hook-cta-post-kit"]');
+        if (!postKit) throw new Error("the post kit card never rendered");
+        // querySelectorAll walks in document order: the post kit must
+        // come first, the photo section after it.
+        const ordered = [...ctx.container.querySelectorAll('[data-testid="hook-cta-post-kit"], [data-testid="template-photo"]')];
+        if (ordered[0] !== postKit || ordered[ordered.length - 1] !== photo) {
+          throw new Error("the presenter photo section does not stand after the post kit");
         }
       }
     );
@@ -17400,9 +17413,10 @@ async function runDemoCtaChecks() {
   // by this check's own standard, so it is pinned rather than banned.
   await check("topic page headers keep titles and purposeful subtitles", async () => {
     const pages = [
-      ["BrandSetup.jsx", "App Profile", ["Lock in your product facts once — every video starts from here."]],
+      ["BrandSetup.jsx", "Profile", ["Lock in your product facts once — every video starts from here."]],
       ["DemoCtaStudio.jsx", "Demo + CTA", ["Style a finished clip: phone or full-frame, then add CTA.", "Style any clip: phone mockup or full-frame for History."]],
-      ["CreateVideo.jsx", "Create Video", []],
+      ["CreateVideo.jsx", "Create", []],
+      ["HookCta.jsx", "HookSnap", ["A short hook that flows straight into your demo and call to action."]],
       ["AssetLibrary.jsx", "Assets", []],
       ["GenerationHistory.jsx", "History", ["Review finished clips, copy post kits, and log real results."]],
       ["Analytics.jsx", "Analytics", ["Your recent renders and how they performed."]],
@@ -22723,10 +22737,13 @@ async function runDemoCtaChecks() {
     );
   });
 
-  await check("the embedded presenter picker still shows photos only", async (ctx) => {
+  await check("the embedded presenter picker shows presenter faces only", async (ctx) => {
     // ADR 0274: the library grew, but the Presenter Photo picker embedded
     // in the studio is a photo picker — a video asset must not leak into
-    // it, not even behind its "other photos" fold.
+    // it, not even behind its "other photos" fold. ADR 0326 (Kasra's
+    // uploads split): the section is for faces only, so a screenshot must
+    // not appear either — the embedded list keeps character_reference
+    // assets and nothing else.
     const AssetLibrary = load("pages/AssetLibrary.jsx").default;
     const stamp = new Date().toISOString();
     await withApi(
@@ -22736,6 +22753,7 @@ async function runDemoCtaChecks() {
           assets: [
             { id: "a1", kind: "character_reference", status: "active", rights_confirmed: true, label: "Founder photo", created_at: stamp, used_in: [] },
             { id: "a2", kind: "screen_recording", status: "active", rights_confirmed: true, label: "Demo clip", name: "demo.mp4", created_at: stamp, used_in: [] },
+            { id: "a3", kind: "screenshot", status: "active", rights_confirmed: true, label: "Checkout screen", name: "checkout.png", created_at: stamp, used_in: [] },
           ],
         }),
       },
@@ -22748,6 +22766,9 @@ async function runDemoCtaChecks() {
         if (text.includes("Demo clip")) {
           throw new Error("a video asset leaked into the presenter photo picker");
         }
+        if (text.includes("Checkout screen")) {
+          throw new Error("a screenshot leaked into the presenter photo picker");
+        }
         const fold = [...ctx.container.querySelectorAll("button")].find(
           (b) => (b.textContent || "").includes("other photo")
         );
@@ -22756,6 +22777,9 @@ async function runDemoCtaChecks() {
           text = ctx.container.textContent || "";
           if (text.includes("Demo clip")) {
             throw new Error("a video asset hides behind the picker's other-photos fold");
+          }
+          if (text.includes("Checkout screen")) {
+            throw new Error("a screenshot hides behind the picker's other-photos fold");
           }
         }
       }

@@ -3505,7 +3505,7 @@ export default function CreateVideo() {
     <PageFrame className="space-y-6">
       <PageHeader
         icon={Clapperboard}
-        title="Create Video"
+        title="Create"
       />
       {/* The step task, directly under the title: the pills below show state
           per step, and this names the one thing to do on the screen in view.

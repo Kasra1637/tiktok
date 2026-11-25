@@ -155,6 +155,7 @@ export default function HookPicksControl({
   onRefreshFocus,
   focusRefreshing = false,
   focusRefreshError = "",
+  focusRefreshAsLink = false,
   hasHook = false,
   focusStale = false,
   tone = "",
@@ -185,8 +186,26 @@ export default function HookPicksControl({
               ADR 0320 (Kasra's ruling, Nov 24 2026): the Buffet is
               staged — it stands here once a hook exists to steer, or
               early when the menu itself is stale; before either, it
-              would only invite a long refresh nobody needs yet. */}
-          {onRefreshFocus && (hasHook || focusStale) && (
+              would only invite a long refresh nobody needs yet.
+              ADR 0325 (Kasra's ruling, Nov 24 2026, superseding
+              0320 on the HookSnap surface): a host passing
+              focusRefreshAsLink gets the refresh always, wearing
+              the page's own "New options" text link — the same
+              small underlined link the page's direction picks use —
+              in the same left-hand spot, so the page reads as one
+              design. The Buffet above is untouched without it. */}
+          {onRefreshFocus && focusRefreshAsLink && (
+            <button
+              type="button"
+              onClick={onRefreshFocus}
+              disabled={disabled || focusRefreshing}
+              data-testid={`${testId}-focus-refresh`}
+              className="shrink-0 text-sm text-muted-foreground underline disabled:opacity-50"
+            >
+              {focusRefreshing ? "Finding new options…" : "New options"}
+            </button>
+          )}
+          {onRefreshFocus && !focusRefreshAsLink && (hasHook || focusStale) && (
             <Button
               type="button"
               variant="secondary"
@@ -219,8 +238,9 @@ export default function HookPicksControl({
         </p>
         {focusStale && !hasHook && (
           <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-focus-stale-note`}>
-            Some stored outcomes are fragments the menu can&rsquo;t offer whole — Buffet
-            writes a fresh set from your profile.
+            {focusRefreshAsLink
+              ? "Some stored outcomes are fragments the menu can’t offer whole — use New options for a fresh set from your profile."
+              : "Some stored outcomes are fragments the menu can’t offer whole — Buffet writes a fresh set from your profile."}
           </p>
         )}
         {focusRefreshError && (
