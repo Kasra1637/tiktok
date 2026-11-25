@@ -53,7 +53,7 @@ export default function VoiceModeControl({
             disabled={disabled}
             onClick={() => onChange?.(option.value)}
             data-testid={`${testId}-${option.value}`}
-            className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-300 ease-out hover:-translate-y-[1px] active:translate-y-0 motion-reduce:hover:-translate-y-0 ${
               current === option.value
                 ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-[color:var(--brand-indigo)]"
                 : "border-[color:var(--hairline)] text-muted-foreground"

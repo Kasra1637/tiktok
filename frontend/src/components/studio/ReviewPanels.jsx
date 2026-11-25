@@ -1,7 +1,6 @@
-import { Button } from "../ui/button";
 
 /**
- * One profile-aware pair of option buttons for a direction field (the
+ * One profile-aware set of option buttons for a direction field (the
  * section sits on the Audience & template step since ADR 0220; this
  * file keeps the name it shares with the plan-phase narration below).
  *
@@ -26,18 +25,20 @@ export function DirectionSelect({
   // { onRefresh, refreshing, refreshTestId }.
   refresh = null,
 }) {
-  // Two options stand side by side as black buttons (ADR 0330, Kasra's
-  // direction): the dropdown is gone, the pair is the whole control,
-  // and "New options" above brings the next set when the pair does not
-  // fit — the same thumb-pair design as the render panels' resolution
-  // row. A saved pick outside the shown pair still applies; the notes
-  // beside the control say so, exactly as they did for the dropdown.
+  // Three options stand side by side (ADR 0330, as corrected at
+  // Kasra's live review): the buttons wear the Voice pick's own
+  // design — the rounded pills with the indigo selection, moving
+  // with the render panels' resolution buttons' own motion (the
+  // 300ms ease and the 1px hover lift) — spaced
+  // by the row's gap, never stuck together, and "New options" above
+  // brings the next set when none of the three fits. A saved pick
+  // outside the shown three still applies: it takes the last seat,
+  // so what applies is always on a lit button. The notes beside the
+  // control say so, exactly as they did for the dropdown.
   const all = options || [];
-  let shown = all.slice(0, 2);
-  // A saved pick outside the pair still stands as the pick: it takes
-  // the pair's second seat, so what applies is always on a lit button.
+  let shown = all.slice(0, 3);
   if (value && all.includes(value) && !shown.includes(value)) {
-    shown = [all[0], value];
+    shown = [...all.slice(0, 2), value];
   }
   return (
     <div className="space-y-2">
@@ -56,7 +57,7 @@ export function DirectionSelect({
         )}
       </div>
       <div
-        className="thumb-pair"
+        className="flex flex-wrap gap-2"
         role="group"
         aria-labelledby={`${id}-label`}
         data-testid={testId}
@@ -68,19 +69,21 @@ export function DirectionSelect({
           shown.map((option) => {
             const picked = value === option;
             return (
-              <Button
+              <button
                 key={option}
                 type="button"
-                size="sm"
-                variant={picked ? "brand" : "secondary"}
                 aria-pressed={picked}
                 data-value={option}
-                className={`tap-chip ${picked ? "thumb-selected" : ""}`}
                 disabled={disabled}
                 onClick={() => onPick(option)}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-300 ease-out hover:-translate-y-[1px] active:translate-y-0 motion-reduce:hover:-translate-y-0 ${
+                  picked
+                    ? "border-[color:var(--indigo-35)] bg-[color:var(--indigo-6)] text-[color:var(--brand-indigo)]"
+                    : "border-[color:var(--hairline)] text-muted-foreground"
+                }`}
               >
                 {option}
-              </Button>
+              </button>
             );
           })
         )}

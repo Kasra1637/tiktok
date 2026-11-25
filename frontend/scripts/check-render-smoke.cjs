@@ -1366,6 +1366,21 @@ async function main() {
       if (row.getAttribute("aria-expanded") !== "true") {
         throw new Error("the picked row does not read as the popover's open row");
       }
+      // The sheet stands in a centered layer above the whole page
+      // (ADR 0330, as corrected at Kasra's live review): a fixed,
+      // centered, top layer — the anchored popover it replaces sat
+      // inside the card's own stacking layer, so the step's other
+      // cards painted straight over it, as Kasra's screenshot showed.
+      const layer = popover.parentElement;
+      if (
+        !layer
+        || !layer.className.includes("fixed")
+        || !layer.className.includes("z-50")
+        || !layer.className.includes("items-center")
+        || !layer.className.includes("justify-center")
+      ) {
+        throw new Error("the angle details do not stand in the centered top layer (ADR 0330)");
+      }
       await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-popover-close-a2"]'), "no popover close button");
       if (ctx.container.querySelector('[data-testid="angle-popover-a2"]')) {
         throw new Error("the popover did not close");
@@ -7796,15 +7811,16 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
         const select = ctx.container.querySelector('[data-testid="camera-setup"]');
         if (!select || select.dataset.value !== "handheld") throw new Error("handheld camera is not the default");
-        // ADR 0330: the direction fields are pairs of black buttons —
-        // the first two of the four profile-matched options stand as
-        // buttons, and "New options" brings the next set.
+        // ADR 0330 (as corrected at Kasra's live review): the
+        // direction fields stand three options as spaced pills in
+        // the Voice pick's design, and "New options" brings the
+        // next set.
         for (const [id, list] of Object.entries({ "review-location-direction": OPTIONS.location, "review-wardrobe": OPTIONS.wardrobe })) {
           const pair = ctx.container.querySelector(`[data-testid="${id}"]`);
           if (!pair) throw new Error(`the step lost the ${id} pair`);
           const buttons = [...pair.querySelectorAll("button")].map((b) => b.dataset.value);
-          if (JSON.stringify(buttons) !== JSON.stringify(list.slice(0, 2))) {
-            throw new Error(`${id} does not stand its first two options as buttons: ${JSON.stringify(buttons)}`);
+          if (JSON.stringify(buttons) !== JSON.stringify(list.slice(0, 3))) {
+            throw new Error(`${id} does not stand its first three options as buttons: ${JSON.stringify(buttons)}`);
           }
           if (pair.dataset.value !== "") throw new Error(`${id} preselected a legacy note it cannot name`);
         }
@@ -7931,10 +7947,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
-        // ADR 0330: the pair stands the first two offered places as
-        // buttons; the camera filter still decides what is offered.
+        // ADR 0330: the set stands the first three offered places
+        // as buttons; the camera filter still decides what is
+        // offered.
         const pairValues = () => [...ctx.container.querySelectorAll('[data-testid="review-location-direction"] button')].map((b) => b.dataset.value);
-        if (JSON.stringify(pairValues()) !== JSON.stringify(ALL_LOCATIONS.slice(0, 2))) {
+        if (JSON.stringify(pairValues()) !== JSON.stringify(ALL_LOCATIONS.slice(0, 3))) {
           throw new Error(`a handheld camera was not offered every location: ${JSON.stringify(pairValues())}`);
         }
         await pickPairButton(ctx, "camera-setup", "fixed");

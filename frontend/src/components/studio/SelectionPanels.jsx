@@ -381,11 +381,13 @@ export function AngleSelector({
   // has to re-pick an angle to satisfy the setup.
   cameraSetup = "",
 }) {
-  // Angle details open in a popover over the grid (ADR 0330): picking a
-  // row selects the angle and opens its spec sheet as an overlay, so no
-  // card ever grows and the two-up rows stay even. The popover is keyed
-  // by angle id — picking another row moves it, re-picking the same row
-  // closes it, and Escape or a click outside closes it too.
+  // Angle details open in a centered pop-up over the whole page
+  // (ADR 0330, as corrected at Kasra's live review): picking a row
+  // selects the angle and opens its spec sheet in a fixed, centered
+  // layer above every other element, so no card ever grows and the
+  // two-up rows stay even. The pop-up is keyed by angle id — picking
+  // another row moves it, re-picking the same row closes it, and
+  // Escape, the backdrop, or the close button closes it too.
   const [popoverId, setPopoverId] = useState(null);
   useEffect(() => {
     if (!popoverId) return undefined;
@@ -427,6 +429,8 @@ export function AngleSelector({
   // label-attached helpers, and a dynamic age cannot hold a fixed length.
   const angleSetFreshness = angleSetAge(angles);
 
+  const openAngle = angles.find((a) => a.id === popoverId) || null;
+  const openDetails = openAngle ? angleDetails(openAngle, hookLine) : [];
   const body = angles.length === 0 || (landingGate && !showAngles) ? (
     // 12px, matching the Review step's "what's missing" panel: the red action
     // and the helper line under it are one gate section, and a tighter stack
@@ -519,14 +523,16 @@ export function AngleSelector({
           </AlertDescription>
         </Alert>
       )}
-      {/* Selection opens the angle's details in a popover (ADR 0330).
-          A closed row is its sentence-case title plus its fit pill, so
-          the set compares without opening: the list is scanned by name,
-          decided by score, and the pop-out icon at the row's right edge
-          says the details open as an overlay — audience, problem,
-          promise, feature, the emotion it aims at, and any claim
-          bounding it — never as an inline expansion, so no card grows
-          and no row-mate is left with a dead stretch beneath it. */}
+      {/* Selection opens the angle's details in a centered pop-up
+          (ADR 0330). A closed row is its sentence-case title plus its
+          fit pill, so the set compares without opening: the list is
+          scanned by name, decided by score, and the pop-out icon at
+          the row's right edge says the details open as a pop-up —
+          audience, problem, promise, feature, the emotion it aims
+          at, and any claim bounding it — never as an inline
+          expansion, so no card grows and no row-mate is left with a
+          dead stretch beneath it. The pop-up itself renders after
+          the grid, below. */}
       {/* Two-up from lg (ADR 0328): a full-width row left a dead stretch
           between the title and the fit pill stranded at its far right.
           The cards stand in the same two-up grid rule as the step's
@@ -535,7 +541,6 @@ export function AngleSelector({
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2" data-testid="angle-card-grid">
       {angles.map((a, i) => {
         const picked = angleId === a.id;
-        const details = popoverId === a.id ? angleDetails(a, hookLine) : [];
         const angleVerdicts =
           Math.max(0, Number(a.evidence?.wins) || 0) + Math.max(0, Number(a.evidence?.flops) || 0);
         const angleFit = angleFitScore({
@@ -614,48 +619,6 @@ export function AngleSelector({
               />
             </button>
             </div>
-            {popoverId === a.id && details.length > 0 && (
-              /* The spec sheet as an overlay (ADR 0330): one sheet, not a
-                  spaced stack — divided rows with the shared eyebrow
-                  label and body value, the same language Post copy and
-                  History context already read in. It floats over the
-                  grid, so the cards keep their height. */
-              <div
-                id={`angle-popover-${a.id}`}
-                data-testid={`angle-popover-${a.id}`}
-                role="dialog"
-                aria-label={`${sentenceCase(a.label).replace(/\.\s*$/, "")} details`}
-                className="absolute inset-x-0 top-full z-30 mt-2 rounded-xl border border-[color:var(--hairline)] bg-card shadow-lg"
-              >
-                <div className="flex items-center justify-between gap-2 border-b border-[color:var(--hairline)] row-pad">
-                  <span className="min-w-0 truncate text-sm font-semibold">
-                    {sentenceCase(a.label).replace(/\.\s*$/, "")}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label="Close angle details"
-                    data-testid={`angle-popover-close-${a.id}`}
-                    onClick={() => setPopoverId(null)}
-                    className="shrink-0 text-muted-foreground"
-                  >
-                    <X aria-hidden="true" className="h-4 w-4" />
-                  </button>
-                </div>
-                <dl
-                  data-testid={`angle-details-${a.id}`}
-                  className="divide-y divide-[color:var(--hairline)] row-pad"
-                >
-                  {details.map((row) => (
-                    <div key={row.label} className="post-kit-row">
-                      <dt className="eyebrow sm:pt-1">{row.label}</dt>
-                      <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">
-                        {row.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            )}
             {/* The picked angle's fields above are read against the same fit
                 pill the closed row already carries. Repeating the score in a
                 second, titled row below the fields made one number look like
@@ -664,6 +627,62 @@ export function AngleSelector({
         );
       })}
       </div>
+      {openAngle && openDetails.length > 0 && (
+        /* The spec sheet as a centered pop-up (ADR 0330, as corrected
+           at Kasra's live review): a fixed layer over the whole page,
+           the sheet wide and centered, standing above every other
+           element. The anchored popover it replaces sat inside the
+           card's own stacking layer — every card in the step arrives
+           with a fade-up transform — so the goal cards and badges
+           after the angles painted straight over it. A backdrop
+           click puts it away, with the close button and Escape. */
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          data-angle-popover-root=""
+        >
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setPopoverId(null)}
+          />
+          <div
+            id={`angle-popover-${openAngle.id}`}
+            data-testid={`angle-popover-${openAngle.id}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${sentenceCase(openAngle.label).replace(/\.\s*$/, "")} details`}
+            className="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[color:var(--hairline)] bg-card shadow-lg"
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-[color:var(--hairline)] row-pad">
+              <span className="min-w-0 truncate text-sm font-semibold">
+                {sentenceCase(openAngle.label).replace(/\.\s*$/, "")}
+              </span>
+              <button
+                type="button"
+                aria-label="Close angle details"
+                data-testid={`angle-popover-close-${openAngle.id}`}
+                onClick={() => setPopoverId(null)}
+                className="shrink-0 text-muted-foreground"
+              >
+                <X aria-hidden="true" className="h-4 w-4" />
+              </button>
+            </div>
+            <dl
+              data-testid={`angle-details-${openAngle.id}`}
+              className="divide-y divide-[color:var(--hairline)] row-pad"
+            >
+              {openDetails.map((row) => (
+                <div key={row.label} className="post-kit-row">
+                  <dt className="eyebrow sm:pt-1">{row.label}</dt>
+                  <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">
+                    {row.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </div>
+      )}
     </div>
   );
 

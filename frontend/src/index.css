@@ -2332,6 +2332,18 @@ h1,
         var(--shadow-sm);
 }
 
+/* ---------- Thumb-pair rows ----------
+   The pair rows (the camera setup, the render panels' resolution)
+   lay their buttons out with air between them — a flex row with
+   the app's standard 8px gap, never buttons stuck edge to edge
+   (Kasra's live review, Nov 25 2026). Containers that already
+   carry the same utilities agree with this rule. */
+.thumb-pair {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
 /* ---------- Thumb verdict selected + keyboard focus ----------
    The pressed thumb must read as chosen at a glance, even at the small
    part-vote size where the `brand` hairline alone is easy to miss: an

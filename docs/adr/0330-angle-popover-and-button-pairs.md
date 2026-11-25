@@ -44,6 +44,27 @@ when the shown pair does not fit.
   set of options, unchanged. The saved-value notes (unlisted place,
   fixed-camera-ineligible place) keep their wording and behavior.
 
+## Addendum (Nov 25 2026): Kasra's live review — a centered pop-up, and three spaced pills in the Voice design
+
+Kasra's first live look corrected three things. The anchored
+popover covered nothing: the step's other cards — the goal cards,
+a lock badge — painted straight over the sheet, because every
+card in the step arrives with the fade-up animation, whose
+transform makes each card its own stacking layer and left the
+popover's z-index competing only inside its own card. The pop-up
+is now a centered overlay: a fixed layer over the whole page,
+the sheet wide (max-w-2xl) and centered, standing above every
+other element, put away by a backdrop click, the close button,
+or Escape. The direction fields show three options, not two,
+spaced by the row's gap instead of stuck edge to edge, and their
+buttons wear the Voice pick's own design — the rounded pills
+with the indigo selection — in place of the black thumb-pair
+buttons, moving with the resolution buttons' own motion (the
+300ms ease and the 1px hover lift, which the Voice pills now
+carry too, so the direction area moves as one family); a saved
+pick outside the shown three takes the last seat. The camera setup row keeps the thumb-pair design, and its
+row gains the same spacing through the shared .thumb-pair rule.
+
 ## Consequences
 
 - The angle step's tallest state is now the popover, not a card: the
