@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import { Button } from "../ui/button";
 
 import { Badge } from "../ui/badge";
@@ -11,7 +13,7 @@ import { sentenceCase } from "../../lib/copyCase";
 import { angleDetails, angleFitScore, formatVerdicts, goalFitScore } from "../../lib/angleSubtitle";
 import { angleSetAge } from "../../lib/angleFreshness";
 import { BUSY_ETA_SECONDS } from "../../lib/busyEta";
-import { TriangleAlert as AlertTriangle, Target, Check, Sparkles, RefreshCw, ChevronDown, Image as ImageIcon } from "lucide-react";
+import { TriangleAlert as AlertTriangle, Target, Check, Sparkles, RefreshCw, Maximize2, X, Image as ImageIcon } from "lucide-react";
 
 import AssetLibrary from "../../pages/AssetLibrary";
 
@@ -379,6 +381,27 @@ export function AngleSelector({
   // has to re-pick an angle to satisfy the setup.
   cameraSetup = "",
 }) {
+  // Angle details open in a popover over the grid (ADR 0330): picking a
+  // row selects the angle and opens its spec sheet as an overlay, so no
+  // card ever grows and the two-up rows stay even. The popover is keyed
+  // by angle id — picking another row moves it, re-picking the same row
+  // closes it, and Escape or a click outside closes it too.
+  const [popoverId, setPopoverId] = useState(null);
+  useEffect(() => {
+    if (!popoverId) return undefined;
+    const onKey = (event) => {
+      if (event.key === "Escape") setPopoverId(null);
+    };
+    const onDown = (event) => {
+      if (!event.target.closest("[data-angle-popover-root]")) setPopoverId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [popoverId]);
   // Processing lives on the button itself: busy paints the looping sweep and
   // the label names the work concisely ("Generating angles"). The sweep loops
   // because the wait length is unknowable — a counted fill would freeze at
@@ -496,23 +519,23 @@ export function AngleSelector({
           </AlertDescription>
         </Alert>
       )}
-      {/* Selection opens the angle. A closed row is its sentence-case title
-          plus its fit pill, so the six compare without opening: the list is
-          scanned by name, decided by score, and the picked row then shows
-          what the strategy is written from — audience, problem, promise,
-          feature, the emotion it aims at, and any claim bounding it. Only
-          the picked row opens, because two open panels side by side are
-          two half-read angles, and the fields are what the render
-          downstream is held to. */}
+      {/* Selection opens the angle's details in a popover (ADR 0330).
+          A closed row is its sentence-case title plus its fit pill, so
+          the set compares without opening: the list is scanned by name,
+          decided by score, and the pop-out icon at the row's right edge
+          says the details open as an overlay — audience, problem,
+          promise, feature, the emotion it aims at, and any claim
+          bounding it — never as an inline expansion, so no card grows
+          and no row-mate is left with a dead stretch beneath it. */}
       {/* Two-up from lg (ADR 0328): a full-width row left a dead stretch
           between the title and the fit pill stranded at its far right.
           The cards stand in the same two-up grid rule as the step's
-          template cards, each keeping its own height, so an open card
-          never stretches its row-mate. Below lg the stack stands. */}
+          template cards, each keeping its own height. Below lg the
+          stack stands. */}
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2" data-testid="angle-card-grid">
       {angles.map((a, i) => {
         const picked = angleId === a.id;
-        const details = picked ? angleDetails(a, hookLine) : [];
+        const details = popoverId === a.id ? angleDetails(a, hookLine) : [];
         const angleVerdicts =
           Math.max(0, Number(a.evidence?.wins) || 0) + Math.max(0, Number(a.evidence?.flops) || 0);
         const angleFit = angleFitScore({
@@ -533,18 +556,26 @@ export function AngleSelector({
           <div
             key={a.id}
             style={{ animationDelay: `${Math.min(i, 8) * 70}ms` }}
-            className={`animate-fade-up overflow-hidden rounded-xl border bg-card/70 ${
-              picked
-                ? "border-[color:var(--indigo-35)]"
-                : "border-[color:var(--hairline)]"
-            }`}
+            className="animate-fade-up relative"
+            data-angle-popover-root=""
           >
+            <div
+              className={`overflow-hidden rounded-xl border bg-card/70 ${
+                picked
+                  ? "border-[color:var(--indigo-35)]"
+                  : "border-[color:var(--hairline)]"
+              }`}
+            >
             <button
               type="button"
               aria-pressed={picked}
-              aria-expanded={picked}
-              aria-controls={picked ? `angle-details-${a.id}` : undefined}
-              onClick={() => onSelect(a.id)}
+              aria-haspopup="dialog"
+              aria-expanded={popoverId === a.id}
+              aria-controls={popoverId === a.id ? `angle-popover-${a.id}` : undefined}
+              onClick={() => {
+                onSelect(a.id);
+                setPopoverId((current) => (current === a.id ? null : a.id));
+              }}
               data-testid={`angle-option-${a.id}`}
               className={`flex w-full min-w-0 items-center gap-3 row-pad angle-option-row text-left transition-colors ${
                 picked ? "bg-[color:var(--indigo-6)]" : ""
@@ -568,7 +599,7 @@ export function AngleSelector({
                   the same pill on the now-open row rather than a second
                   titled badge, which read one number as two findings. It
                   sits beside the title it scores (ADR 0328), not at the
-                  row's far right: only the chevron stands at that edge. */}
+                  row's far right: only the pop-out icon stands there. */}
               <span className="shrink-0">
                 <FitBadge
                   score={angleFit.score}
@@ -576,30 +607,54 @@ export function AngleSelector({
                   testId={`angle-row-fit-${a.id}`}
                 />
               </span>
-              <ChevronDown
-                className={`ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
-                  picked ? "rotate-180" : ""
-                }`}
+              <Maximize2
+                aria-hidden="true"
+                data-testid="angle-row-popover-icon"
+                className="ml-auto h-4 w-4 shrink-0 text-muted-foreground"
               />
             </button>
-            {picked && details.length > 0 && (
-              /* One spec sheet, not a spaced stack: divided rows with the
-                  shared eyebrow label and body value, the same language
-                  Post copy and History context already read in. */
-              <dl
-                id={`angle-details-${a.id}`}
-                data-testid={`angle-details-${a.id}`}
-                className="divide-y divide-[color:var(--hairline)] border-t border-[color:var(--hairline)] row-pad"
+            </div>
+            {popoverId === a.id && details.length > 0 && (
+              /* The spec sheet as an overlay (ADR 0330): one sheet, not a
+                  spaced stack — divided rows with the shared eyebrow
+                  label and body value, the same language Post copy and
+                  History context already read in. It floats over the
+                  grid, so the cards keep their height. */
+              <div
+                id={`angle-popover-${a.id}`}
+                data-testid={`angle-popover-${a.id}`}
+                role="dialog"
+                aria-label={`${sentenceCase(a.label).replace(/\.\s*$/, "")} details`}
+                className="absolute inset-x-0 top-full z-30 mt-2 rounded-xl border border-[color:var(--hairline)] bg-card shadow-lg"
               >
-                {details.map((row) => (
-                  <div key={row.label} className="post-kit-row">
-                    <dt className="eyebrow sm:pt-1">{row.label}</dt>
-                    <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">
-                      {row.value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+                <div className="flex items-center justify-between gap-2 border-b border-[color:var(--hairline)] row-pad">
+                  <span className="min-w-0 truncate text-sm font-semibold">
+                    {sentenceCase(a.label).replace(/\.\s*$/, "")}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Close angle details"
+                    data-testid={`angle-popover-close-${a.id}`}
+                    onClick={() => setPopoverId(null)}
+                    className="shrink-0 text-muted-foreground"
+                  >
+                    <X aria-hidden="true" className="h-4 w-4" />
+                  </button>
+                </div>
+                <dl
+                  data-testid={`angle-details-${a.id}`}
+                  className="divide-y divide-[color:var(--hairline)] row-pad"
+                >
+                  {details.map((row) => (
+                    <div key={row.label} className="post-kit-row">
+                      <dt className="eyebrow sm:pt-1">{row.label}</dt>
+                      <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">
+                        {row.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
             )}
             {/* The picked angle's fields above are read against the same fit
                 pill the closed row already carries. Repeating the score in a

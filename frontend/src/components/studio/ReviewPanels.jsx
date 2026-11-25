@@ -1,10 +1,9 @@
-import { CONTROL_CLASS } from "../formControls";
-import { AppSelect } from "../AppSelect";
+import { Button } from "../ui/button";
 
 /**
- * One profile-aware dropdown for a direction field (the section sits on
- * the Audience & template step since ADR 0220; this file keeps the name
- * it shares with the plan-phase narration below).
+ * One profile-aware pair of option buttons for a direction field (the
+ * section sits on the Audience & template step since ADR 0220; this
+ * file keeps the name it shares with the plan-phase narration below).
  *
  * The options come from the profile's category group (no free typing), and
  * picking only fills the draft — saving still validates like any edit
@@ -19,17 +18,31 @@ export function DirectionSelect({
   options,
   placeholder,
   disabled,
-  // Fresh-list generation for this dropdown alone. When provided, a small
-  // action beside the label spends one text model call for four new options
-  // grounded in the profile and the selected angle — the static category
-  // list repeats itself across videos, and a founder who has seen all four
-  // has nowhere else to go. { onRefresh, refreshing, refreshTestId }.
+  // Fresh-list generation for this field alone. When provided, the
+  // "New options" action beside the label spends one text model call
+  // for four new options grounded in the profile and the selected
+  // angle — the static category list repeats itself across videos, and
+  // a founder who has seen all four has nowhere else to go.
+  // { onRefresh, refreshing, refreshTestId }.
   refresh = null,
 }) {
+  // Two options stand side by side as black buttons (ADR 0330, Kasra's
+  // direction): the dropdown is gone, the pair is the whole control,
+  // and "New options" above brings the next set when the pair does not
+  // fit — the same thumb-pair design as the render panels' resolution
+  // row. A saved pick outside the shown pair still applies; the notes
+  // beside the control say so, exactly as they did for the dropdown.
+  const all = options || [];
+  let shown = all.slice(0, 2);
+  // A saved pick outside the pair still stands as the pick: it takes
+  // the pair's second seat, so what applies is always on a lit button.
+  if (value && all.includes(value) && !shown.includes(value)) {
+    shown = [all[0], value];
+  }
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <label htmlFor={id} className="text-sm font-semibold">{label}</label>
+        <span id={`${id}-label`} className="text-sm font-semibold">{label}</span>
         {refresh && (
           <button
             type="button"
@@ -42,21 +55,36 @@ export function DirectionSelect({
           </button>
         )}
       </div>
-      {/* The prompt row stays a row of the menu (value ""), as the native
-          prompt option was: it can be re-picked to clear the field. */}
-      <AppSelect
-        id={id}
-        testId={testId}
-        block
-        className={CONTROL_CLASS}
-        value={value}
-        disabled={disabled || !options}
-        onChange={onPick}
-        options={[
-          { value: "", label: options ? placeholder : "Loading options…" },
-          ...(options || []).map((option) => ({ value: option, label: option })),
-        ]}
-      />
+      <div
+        className="thumb-pair"
+        role="group"
+        aria-labelledby={`${id}-label`}
+        data-testid={testId}
+        data-value={value || ""}
+      >
+        {!options ? (
+          <span className="text-sm text-muted-foreground">Loading options…</span>
+        ) : (
+          shown.map((option) => {
+            const picked = value === option;
+            return (
+              <Button
+                key={option}
+                type="button"
+                size="sm"
+                variant={picked ? "brand" : "secondary"}
+                aria-pressed={picked}
+                data-value={option}
+                className={`tap-chip ${picked ? "thumb-selected" : ""}`}
+                disabled={disabled}
+                onClick={() => onPick(option)}
+              >
+                {option}
+              </Button>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }

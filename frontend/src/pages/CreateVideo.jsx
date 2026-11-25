@@ -2467,22 +2467,42 @@ export default function CreateVideo() {
                 Optional scene picks; the plan's defaults render as-is.
               </p>
               <div className="space-y-2">
-                <label htmlFor="camera-setup" className="text-sm font-semibold">Camera setup</label>
-                <AppSelect
-                  id="camera-setup"
-                  testId="camera-setup"
-                  block
-                  className={CONTROL_CLASS}
-                  value={editValue("camera_setup", "handheld")}
-                  disabled={busy}
-                  onChange={(value) => {
-                    dispatchDraft({ type: "edit-field", field: "camera_setup", value, omitDefault: true, fallback: "handheld" });
-                  }}
-                  options={[
+                <p className="text-sm font-semibold">Camera setup</p>
+                {/* Two options stand side by side as black buttons (ADR
+                    0330) — the thumb-pair design of the render panels'
+                    resolution row; a dropdown is earned only at four or
+                    more options (ADR 0329). */}
+                <div
+                  className="thumb-pair"
+                  role="group"
+                  aria-label="Camera setup"
+                  data-testid="camera-setup"
+                  data-value={editValue("camera_setup", "handheld")}
+                >
+                  {[
                     { value: "handheld", label: "Handheld selfie" },
                     { value: "fixed", label: "Fixed camera" },
-                  ]}
-                />
+                  ].map((option) => {
+                    const picked = editValue("camera_setup", "handheld") === option.value;
+                    return (
+                      <Button
+                        key={option.value}
+                        type="button"
+                        size="sm"
+                        variant={picked ? "brand" : "secondary"}
+                        aria-pressed={picked}
+                        data-value={option.value}
+                        className={`tap-chip ${picked ? "thumb-selected" : ""}`}
+                        disabled={busy}
+                        onClick={() => {
+                          dispatchDraft({ type: "edit-field", field: "camera_setup", value: option.value, omitDefault: true, fallback: "handheld" });
+                        }}
+                      >
+                        {option.label}
+                      </Button>
+                    );
+                  })}
+                </div>
                 <p className="text-sm text-muted-foreground">
                   {editValue("camera_setup", "handheld") === "fixed"
                     ? "Phone on a shelf or tripod. Head to mid-thigh, natural gestures, no camera movement or automatic zoom. A face reference guides identity, not exact body proportions."

@@ -1294,8 +1294,8 @@ async function main() {
     // from lg (the same grid rule as the step's goal cards and the
     // template cards), each card keeps its own height, and inside a
     // row the fit pill annotates the title directly instead of riding
-    // the row's far edge; only the chevron — the expand affordance —
-    // stands at the right.
+    // the row's far edge; only the pop-out icon — the popover
+    // affordance (ADR 0330) — stands at the right.
     global.__SMOKE_PARAMS = "";
     try {
       await mount(CreateVideo, {})(ctx);
@@ -1320,16 +1320,55 @@ async function main() {
       }
       const fit = row.querySelector('[data-testid="angle-row-fit-a1"]');
       if (!fit) throw new Error("the angle row has no fit pill");
-      const chevron = [...row.querySelectorAll("svg")].pop();
-      if (!chevron) throw new Error("the angle row has no chevron");
+      const icon = [...row.querySelectorAll("svg")].pop();
+      if (!icon) throw new Error("the angle row has no pop-out icon");
+      if (row.getAttribute("aria-haspopup") !== "dialog") {
+        throw new Error("the angle row does not say it opens a pop-up");
+      }
       if (!(title.compareDocumentPosition(fit) & Node.DOCUMENT_POSITION_FOLLOWING)) {
         throw new Error("the fit pill does not follow the title");
       }
-      if (!(fit.compareDocumentPosition(chevron) & Node.DOCUMENT_POSITION_FOLLOWING)) {
-        throw new Error("the chevron does not close the row after the fit pill");
+      if (!(fit.compareDocumentPosition(icon) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+        throw new Error("the pop-out icon does not close the row after the fit pill");
       }
-      if (!(chevron.getAttribute("class") || "").includes("ml-auto")) {
-        throw new Error("the chevron is not the row's right-edge affordance");
+      if (!(icon.getAttribute("class") || "").includes("ml-auto")) {
+        throw new Error("the pop-out icon is not the row's right-edge affordance");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("angle details open in a popover over the grid, never as an inline expansion", async (ctx) => {
+    // ADR 0330 (Kasra's ruling, Nov 25 2026): the two-up cards keep
+    // their height — picking a row selects the angle and floats its
+    // spec sheet over the grid in a popover, so the card beside it is
+    // never left with a dead stretch. The pop-out icon on the row says
+    // a pop-up opens; the close button puts it away.
+    global.__SMOKE_PARAMS = "";
+    try {
+      await mount(CreateVideo, {})(ctx);
+      await openStep(ctx, "Audience & template");
+      if (ctx.container.querySelector('[data-testid="angle-popover-a2"]')) {
+        throw new Error("a popover stands before any angle is picked");
+      }
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a2"]'), "no angle row to pick");
+      const popover = ctx.container.querySelector('[data-testid="angle-popover-a2"]');
+      if (!popover) throw new Error("picking an angle did not open its popover");
+      if (!popover.querySelector('[data-testid="angle-details-a2"]')) {
+        throw new Error("the popover does not carry the angle's spec sheet");
+      }
+      const card = ctx.container.querySelector('[data-testid="angle-option-a2"]').closest(".overflow-hidden");
+      if (!card || card.querySelector("dl")) {
+        throw new Error("the spec sheet still expands inside the card");
+      }
+      const row = ctx.container.querySelector('[data-testid="angle-option-a2"]');
+      if (row.getAttribute("aria-expanded") !== "true") {
+        throw new Error("the picked row does not read as the popover's open row");
+      }
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-popover-close-a2"]'), "no popover close button");
+      if (ctx.container.querySelector('[data-testid="angle-popover-a2"]')) {
+        throw new Error("the popover did not close");
       }
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -1357,12 +1396,12 @@ async function main() {
         if (ctx.container.querySelector('[data-testid="angles-fixed-indoor-note"]')) {
           throw new Error("the indoor note shows under a handheld camera");
         }
-        await chooseOption(ctx, ctx.container.querySelector('#camera-setup'), "fixed");
+        await pickPairButton(ctx, "camera-setup", "fixed");
         if (!ctx.container.querySelector('[data-testid="angles-fixed-indoor-note"]')) {
           throw new Error("the indoor note is missing under a fixed camera");
         }
         expectText(ctx, "staged indoors", "the note does not say the angles are staged indoors");
-        await chooseOption(ctx, ctx.container.querySelector('#camera-setup'), "handheld");
+        await pickPairButton(ctx, "camera-setup", "handheld");
         if (ctx.container.querySelector('[data-testid="angles-fixed-indoor-note"]')) {
           throw new Error("the indoor note stays after flipping back to handheld");
         }
@@ -3134,17 +3173,17 @@ async function main() {
         if (ctx.container.querySelector("#review-location")) {
           throw new Error("the plan still offers a free-text Location editor");
         }
-        if (ctx.container.querySelector("#review-location-direction")) {
+        if (ctx.container.querySelector('[data-testid="review-location-direction"]')) {
           throw new Error("Review still carries the direction section's Location pick");
         }
-        if (ctx.container.querySelector("#camera-setup")) {
+        if (ctx.container.querySelector('[data-testid="camera-setup"]')) {
           throw new Error("Review still carries the direction section");
         }
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
-        if (!ctx.container.querySelector("#review-location-direction")) {
+        if (!ctx.container.querySelector('[data-testid="review-location-direction"]')) {
           throw new Error("the direction section lost the Location pick");
         }
-        if (!ctx.container.querySelector("#camera-setup")) {
+        if (!ctx.container.querySelector('[data-testid="camera-setup"]')) {
           throw new Error("the direction section lost the camera setup");
         }
       });
@@ -3362,7 +3401,7 @@ async function main() {
   // the dropdown it exercised (ADR 0329): there is no model switch
   // left to reset a resolution pick.
 
-  await check("no native select remains: the render panel and Review dropdowns are the app's own listbox", async (ctx) => {
+  await check("no native select remains: the render panel dropdowns are the app's own listbox, the direction controls are button pairs", async (ctx) => {
     // ADR 0163: ADR 0162 drew the filter dropdowns' menus itself because a
     // native select's open menu belongs to the browser and ignores the
     // page; the founder widened the order to every dropdown in the app.
@@ -3402,10 +3441,16 @@ async function main() {
         if (ctx.container.querySelector("select")) {
           throw new Error("the wizard still renders a native select");
         }
+        // ADR 0330: the camera setup and the direction fields are
+        // pairs of black buttons — no dropdown stands among them.
         for (const id of ["camera-setup", "review-location-direction", "review-wardrobe"]) {
-          const control = ctx.container.querySelector(`#${id}`);
-          if (!control || control.getAttribute("aria-haspopup") !== "listbox") {
-            throw new Error(`#${id} is not the app-drawn dropdown`);
+          const control = ctx.container.querySelector(`[data-testid="${id}"]`);
+          if (!control) throw new Error(`the ${id} pair is missing`);
+          if (control.getAttribute("aria-haspopup") === "listbox" || control.querySelector("select")) {
+            throw new Error(`${id} still renders as a dropdown`);
+          }
+          if (control.querySelectorAll("button").length !== 2) {
+            throw new Error(`${id} does not stand two options side by side`);
           }
         }
       });
@@ -7716,7 +7761,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           throw new Error(`Review still offers a delivery control: ${gone}`);
         }
       }
-      if (ctx.container.querySelector("#camera-setup")) {
+      if (ctx.container.querySelector('[data-testid="camera-setup"]')) {
         throw new Error("Review still carries the direction section");
       }
       await clickEl(ctx, stepPill(ctx, "Audience & template"));
@@ -7727,7 +7772,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
   });
 
-  await check("camera setup and profile-matched direction dropdowns save and survive reload", async (ctx) => {
+  await check("camera setup and profile-matched direction pairs save and survive reload", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1";
     const OPTIONS = {
       group: "default",
@@ -7749,24 +7794,25 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
-        const select = ctx.container.querySelector('#camera-setup');
+        const select = ctx.container.querySelector('[data-testid="camera-setup"]');
         if (!select || select.dataset.value !== "handheld") throw new Error("handheld camera is not the default");
+        // ADR 0330: the direction fields are pairs of black buttons —
+        // the first two of the four profile-matched options stand as
+        // buttons, and "New options" brings the next set.
         for (const [id, list] of Object.entries({ "review-location-direction": OPTIONS.location, "review-wardrobe": OPTIONS.wardrobe })) {
-          const dropdown = ctx.container.querySelector(`#${id}`);
-          if (!dropdown) throw new Error(`Review lost the ${id} dropdown`);
-          if (dropdown.getAttribute("aria-haspopup") !== "listbox") throw new Error(`${id} is not a dropdown`);
-          const offered = await offeredOptionValues(ctx, dropdown);
-          if (offered.length !== list.length + 1) {
-            throw new Error(`${id} does not offer exactly four profile-matched options`);
+          const pair = ctx.container.querySelector(`[data-testid="${id}"]`);
+          if (!pair) throw new Error(`the step lost the ${id} pair`);
+          const buttons = [...pair.querySelectorAll("button")].map((b) => b.dataset.value);
+          if (JSON.stringify(buttons) !== JSON.stringify(list.slice(0, 2))) {
+            throw new Error(`${id} does not stand its first two options as buttons: ${JSON.stringify(buttons)}`);
           }
-          await clickEl(ctx, dropdown, `close the ${id} menu`);
-          if (dropdown.dataset.value !== "") throw new Error(`${id} preselected a legacy note it cannot name`);
+          if (pair.dataset.value !== "") throw new Error(`${id} preselected a legacy note it cannot name`);
         }
         expectText(ctx, "Location & wardrobe");
         expectText(ctx, "Plan default:");
-        await chooseOption(ctx, ctx.container.querySelector('#camera-setup'), "fixed");
-        await chooseOption(ctx, ctx.container.querySelector('#review-location-direction'), "Location one");
-        await chooseOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe one");
+        await pickPairButton(ctx, "camera-setup", "fixed");
+        await pickPairButton(ctx, "review-location-direction", "Location one");
+        await pickPairButton(ctx, "review-wardrobe", "Wardrobe one");
         // No save button on this step: the picks ride the page's
         // autosave, about a second after the last change — the same
         // server path Review's Save edits button drives (ADR 0220).
@@ -7782,9 +7828,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await act(async () => ctx.root.render(null));
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
-        if (ctx.container.querySelector('#camera-setup')?.dataset.value !== "fixed") throw new Error("saved setup lost on reload");
+        if (ctx.container.querySelector('[data-testid="camera-setup"]')?.dataset.value !== "fixed") throw new Error("saved setup lost on reload");
         for (const [id, want] of Object.entries({ "review-location-direction": "Location one", "review-wardrobe": "Wardrobe one" })) {
-          if (ctx.container.querySelector(`#${id}`)?.dataset.value !== want) {
+          if (ctx.container.querySelector(`[data-testid="${id}"]`)?.dataset.value !== want) {
             throw new Error(`saved ${id} pick lost on reload`);
           }
         }
@@ -7825,7 +7871,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
-        await chooseOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe two");
+        await pickPairButton(ctx, "review-wardrobe", "Wardrobe two");
         if (saves !== 0) throw new Error("a pick saved before the debounce elapsed");
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
         if (saves !== 1) throw new Error(`the change did not autosave: ${saves} server saves`);
@@ -7841,7 +7887,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         // A second change must schedule a second save, not reuse the first.
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
         const before = saves;
-        await chooseOption(ctx, ctx.container.querySelector('#review-wardrobe'), "Wardrobe one");
+        await pickPairButton(ctx, "review-wardrobe", "Wardrobe one");
         if (saves !== before) throw new Error("the second pick saved before the debounce elapsed");
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
         if (saves !== before + 1) throw new Error(`a second change did not autosave: ${saves} server saves`);
@@ -7885,18 +7931,17 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
-        const offered = await offeredOptionValues(ctx, ctx.container.querySelector("#review-location-direction"));
-        if (JSON.stringify(offered) !== JSON.stringify(["", ...ALL_LOCATIONS])) {
-          throw new Error(`a handheld camera was not offered every location: ${JSON.stringify(offered)}`);
+        // ADR 0330: the pair stands the first two offered places as
+        // buttons; the camera filter still decides what is offered.
+        const pairValues = () => [...ctx.container.querySelectorAll('[data-testid="review-location-direction"] button')].map((b) => b.dataset.value);
+        if (JSON.stringify(pairValues()) !== JSON.stringify(ALL_LOCATIONS.slice(0, 2))) {
+          throw new Error(`a handheld camera was not offered every location: ${JSON.stringify(pairValues())}`);
         }
-        await clickEl(ctx, ctx.container.querySelector("#review-location-direction"), "close the location menu");
-        await chooseOption(ctx, ctx.container.querySelector("#camera-setup"), "fixed");
+        await pickPairButton(ctx, "camera-setup", "fixed");
         await act(async () => {});
-        const offeredFixed = await offeredOptionValues(ctx, ctx.container.querySelector("#review-location-direction"));
-        if (JSON.stringify(offeredFixed) !== JSON.stringify(["", ...INDOOR_LOCATIONS])) {
-          throw new Error(`a fixed camera was not offered indoor locations only: ${JSON.stringify(offeredFixed)}`);
+        if (JSON.stringify(pairValues()) !== JSON.stringify(INDOOR_LOCATIONS)) {
+          throw new Error(`a fixed camera was not offered indoor locations only: ${JSON.stringify(pairValues())}`);
         }
-        await clickEl(ctx, ctx.container.querySelector("#review-location-direction"), "close the location menu");
       });
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -7942,7 +7987,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
-        const pick = ctx.container.querySelector("#review-location-direction");
+        const pick = ctx.container.querySelector('[data-testid="review-location-direction"]');
         if (!pick || pick.dataset.value !== "") {
           throw new Error("the ineligible saved place still reads as the pick");
         }
@@ -7951,9 +7996,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         if (!notice.textContent.includes("Quiet garden bench")) {
           throw new Error("the notice does not name the saved place it is about (ADR 0242)");
         }
-        await chooseOption(ctx, ctx.container.querySelector("#camera-setup"), "handheld");
+        await pickPairButton(ctx, "camera-setup", "handheld");
         await act(async () => {});
-        const restored = ctx.container.querySelector("#review-location-direction");
+        const restored = ctx.container.querySelector('[data-testid="review-location-direction"]');
         if (!restored || restored.dataset.value !== "Quiet garden bench") {
           throw new Error("the saved place did not return as the pick under handheld");
         }
@@ -25988,6 +26033,17 @@ async function chooseOption(ctx, control, value) {
  * its option rows. This is the custom control's form of the question a
  * native <option> query used to answer off the closed DOM — the same
  * user-visible truth: the values a person can pick from this control. */
+// ADR 0330: the camera setup and the direction fields are pairs of
+// black buttons now, not dropdowns. Picking is a click on the button
+// carrying the value inside the control's group.
+async function pickPairButton(ctx, testId, value) {
+  const group = ctx.container.querySelector(`[data-testid="${testId}"]`);
+  if (!group) throw new Error(`no pair control ${testId}`);
+  const button = group.querySelector(`[data-value="${value}"]`);
+  if (!button) throw new Error(`the ${testId} pair does not show ${value}`);
+  await clickEl(ctx, button, `pick ${value} in ${testId}`);
+}
+
 async function offeredOptionValues(ctx, control) {
   if (!control) throw new Error("no dropdown to open");
   await clickEl(ctx, control);
