@@ -2,10 +2,13 @@ import {
   IMAGE_SECONDS,
   IMAGE_PUSH_IN,
   IMAGE_FADE_SECONDS,
+  DEFAULT_IMAGE_MOTION,
   clampImageSeconds,
   imageSequenceDuration,
   imageFrameAt,
   pushInScale,
+  normalizeImageMotion,
+  imageMotionAt,
   imageFadeAt,
   composeImageFrame,
 } from "./imageSequence";
@@ -114,7 +117,7 @@ describe("the composed frame", () => {
     return { width: 0, height: 0, getContext: () => ctx, ctx };
   };
 
-  test("sizes itself to the first image and covers it, pushing in over time", () => {
+  test("sizes itself to the first image and covers it, still by default", () => {
     const canvas = fakeCanvas();
     const images = seq(2);
     const drawables = [fakeImage(100, 200)];
@@ -126,6 +129,17 @@ describe("the composed frame", () => {
     expect(canvas.ctx.calls[0].dw).toBeCloseTo(100);
     composeImageFrame(canvas, drawables, images, 2);
     expect(canvas.ctx.calls).toHaveLength(2);
+    expect(canvas.ctx.calls[1].dw).toBeCloseTo(100);
+    expect(canvas.ctx.calls[1].dh).toBeCloseTo(200);
+  });
+
+  test("a Zoom in pick pushes in over the hold, as the automatic zoom used to", () => {
+    const canvas = fakeCanvas();
+    const images = [{ seconds: 2, motion: "zoom-in" }];
+    const drawables = [fakeImage(100, 200)];
+    composeImageFrame(canvas, drawables, images, 0);
+    expect(canvas.ctx.calls[0].dw).toBeCloseTo(100);
+    composeImageFrame(canvas, drawables, images, 2);
     expect(canvas.ctx.calls[1].dw).toBeCloseTo(100 * (1 + IMAGE_PUSH_IN));
     expect(canvas.ctx.calls[1].dh).toBeCloseTo(200 * (1 + IMAGE_PUSH_IN));
   });
@@ -157,5 +171,58 @@ describe("the composed frame", () => {
     expect(composeImageFrame(canvas, [], seq(2), 0)).toBeNull();
     expect(composeImageFrame(canvas, [fakeImage(0, 0)], seq(2), 0)).toBeNull();
     expect(composeImageFrame(null, [fakeImage(10, 10)], seq(2), 0)).toBeNull();
+  });
+
+  test("a Pan right pick drifts the still across the frame at one overscan scale", () => {
+    const canvas = fakeCanvas();
+    const images = [{ seconds: 2, motion: "pan-right" }];
+    const drawables = [fakeImage(100, 200)];
+    composeImageFrame(canvas, drawables, images, 0);
+    expect(canvas.ctx.calls[0].dw).toBeCloseTo(100 * (1 + IMAGE_PUSH_IN));
+    expect(canvas.ctx.calls[0].dx).toBeCloseTo(0);
+    composeImageFrame(canvas, drawables, images, 2);
+    expect(canvas.ctx.calls[1].dw).toBeCloseTo(100 * (1 + IMAGE_PUSH_IN));
+    expect(canvas.ctx.calls[1].dx).toBeCloseTo(-100 * IMAGE_PUSH_IN);
+  });
+
+  test("a Zoom out pick starts pushed in and settles on the still", () => {
+    const canvas = fakeCanvas();
+    const images = [{ seconds: 2, motion: "zoom-out" }];
+    const drawables = [fakeImage(100, 200)];
+    composeImageFrame(canvas, drawables, images, 0);
+    expect(canvas.ctx.calls[0].dw).toBeCloseTo(100 * (1 + IMAGE_PUSH_IN));
+    composeImageFrame(canvas, drawables, images, 2);
+    expect(canvas.ctx.calls[1].dw).toBeCloseTo(100);
+  });
+});
+
+describe("per-image motion (ADR 0354)", () => {
+  test("no stored pick — a fresh upload or an old draft — resolves to None", () => {
+    expect(DEFAULT_IMAGE_MOTION).toBe("none");
+    expect(normalizeImageMotion(undefined)).toBe("none");
+    expect(normalizeImageMotion("bogus")).toBe("none");
+    for (const id of ["zoom-in", "zoom-out", "pan-right", "pan-left", "pan-up", "pan-down"]) {
+      expect(normalizeImageMotion(id)).toBe(id);
+    }
+  });
+
+  test("None is the still itself at every progress", () => {
+    for (const p of [0, 0.5, 1]) {
+      expect(imageMotionAt({}, p)).toEqual({ scale: 1, anchorX: 0.5, anchorY: 0.5 });
+      expect(imageMotionAt({ motion: "none" }, p)).toEqual({ scale: 1, anchorX: 0.5, anchorY: 0.5 });
+    }
+  });
+
+  test("each Pan drifts its own anchor and no other", () => {
+    expect(imageMotionAt({ motion: "pan-right" }, 1)).toEqual({ scale: 1 + IMAGE_PUSH_IN, anchorX: 1, anchorY: 0.5 });
+    expect(imageMotionAt({ motion: "pan-left" }, 1)).toEqual({ scale: 1 + IMAGE_PUSH_IN, anchorX: 0, anchorY: 0.5 });
+    expect(imageMotionAt({ motion: "pan-up" }, 1)).toEqual({ scale: 1 + IMAGE_PUSH_IN, anchorX: 0.5, anchorY: 0 });
+    expect(imageMotionAt({ motion: "pan-down" }, 1)).toEqual({ scale: 1 + IMAGE_PUSH_IN, anchorX: 0.5, anchorY: 1 });
+  });
+
+  test("reduced motion parks every pick", () => {
+    for (const motion of ["zoom-in", "zoom-out", "pan-right", "pan-left", "pan-up", "pan-down"]) {
+      expect(imageMotionAt({ motion }, 0.5, true)).toEqual({ scale: 1, anchorX: 0.5, anchorY: 0.5 });
+    }
   });
 });

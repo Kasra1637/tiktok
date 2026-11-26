@@ -65,8 +65,9 @@ async function encodeJoinedAudio(segments, audioSource, checkCancelled) {
  * Each clip's start point is where decoding begins, so the file opens on the
  * frame the preview shows — never on footage the founder skipped.
  * The added segment may instead be an image sequence (ADR 0237): stills
- * have no track to decode, so its frames are composed — push-in and
- * crossfade included — at the same 30 fps, and it carries no audio. A real
+ * have no track to decode, so its frames are composed — each still's
+ * picked motion (ADR 0354) and the crossfades included — at the same
+ * 30 fps, and it carries no audio. A real
  * added clip wins if both are somehow passed; the editor never sends both. */
 export async function exportTikTok({ source, appendSource, appendImages = null, reduceMotion = false, canvas, drawFrame, onProgress, signal, baseMuted = false, appendMuted = false, baseStart = 0, appendStart = 0, baseEnd = null, appendEnd = null }) {
   const { width, height, fps, videoBitrate, audioBitrate } = TIKTOK_EXPORT;

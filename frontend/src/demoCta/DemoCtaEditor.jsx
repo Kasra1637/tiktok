@@ -80,7 +80,7 @@ import { TRANSITIONS } from "./transitions";
 import { useEditSession } from "./editSession";
 import { readDraft } from "./draftStorage";
 import { uploadEntryToLibrary } from "./libraryUpload";
-import { IMAGE_SECONDS, clampImageSeconds, composeImageFrame, imageSequenceDuration } from "./imageSequence";
+import { IMAGE_MOTIONS, IMAGE_SECONDS, DEFAULT_IMAGE_MOTION, clampImageSeconds, composeImageFrame, imageSequenceDuration, normalizeImageMotion } from "./imageSequence";
 import { createImageSequencePlayer } from "./imagePlayer";
 import { TrimTimeline } from "./TrimTimeline";
 
@@ -1348,7 +1348,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   // cannot leave an earlier file marked ready. With locks, transport updates
   // the slider readbacks but not the exported framing, so use the locks alone.
   const exportEditKey = JSON.stringify([
-    videoUrl, appendUrl, appendImages?.map((entry) => `${entry.id}:${entry.seconds}`).join("|") || "", baseStart, appendStart, baseEnd, appendEnd,
+    videoUrl, appendUrl, appendImages?.map((entry) => `${entry.id}:${entry.seconds}:${normalizeImageMotion(entry.motion)}`).join("|") || "", baseStart, appendStart, baseEnd, appendEnd,
     device, preset, viewMode, appendMode, bg, anim, envBg,
     appendBg, appendAnim, appendEnv, mockupStretchY, appendMockupStretchY, videoFit,
     appendVideoFit, appendVideoScale, appendVideoOffsetX, appendVideoOffsetY,
@@ -1530,6 +1530,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       blob: file,
       name: file.name || "image",
       seconds: IMAGE_SECONDS.default,
+      // A fresh upload sits still (ADR 0354): motion is a pick, never an
+      // automatic zoom.
+      motion: DEFAULT_IMAGE_MOTION,
     }));
     entries.forEach((entry) => fileEntryToLibrary(entry, "screenshot"));
     if (mode === "add" && appendImages?.length) {
@@ -1577,6 +1580,13 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     // the same way the crop sliders invalidate — a drag fires dozens of
     // changes and the key catches every one.
     setAppendImages(appendImages.map((entry) => (entry.id === id ? { ...entry, seconds: clampImageSeconds(seconds) } : entry)));
+  };
+
+  const setAppendImageMotion = (id, motion) => {
+    if (!appendImages) return;
+    // Like the holds: the export edit key carries the pick, so a change
+    // retires the previous export without an explicit invalidation.
+    setAppendImages(appendImages.map((entry) => (entry.id === id ? { ...entry, motion: normalizeImageMotion(motion) } : entry)));
   };
 
   const removeAppend = () => {
@@ -2255,7 +2265,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             <div className="space-y-2" data-testid="append-images-list">
               <SubLabel>Image sequence · {imageSequenceDuration(appendImages).toFixed(1)}s</SubLabel>
               <p className="text-sm text-muted-foreground">
-                Each screen pushes in gently and crossfades into the next, so the sequence plays as one flow. Put them in the order the story walks through the app; the end card can close over the last one.
+                Each screen sits still unless you give it a motion below — a zoom or a pan — and crossfades into the next, so the sequence plays as one flow. Put them in the order the story walks through the app; the end card can close over the last one.
               </p>
               {appendImages.map((entry, index) => (
                 <div key={entry.id} className="space-y-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-2" data-testid={`append-image-row-${entry.id}`}>
@@ -2272,6 +2282,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                     </Button>
                   </div>
                   <ControlSlider label="Show for" value={entry.seconds ?? IMAGE_SECONDS.default} min={IMAGE_SECONDS.min} max={IMAGE_SECONDS.max} step={IMAGE_SECONDS.step} onChange={(v) => setAppendImageSeconds(entry.id, v)} testId={`append-image-seconds-${entry.id}`} format={(v) => `${Number(v).toFixed(1)}s`} />
+                  <div className="space-y-2">
+                    <FieldLabel>Motion</FieldLabel>
+                    <AppSelect value={normalizeImageMotion(entry.motion)} onChange={(v) => setAppendImageMotion(entry.id, v)} className={CONTROL_CLASS} wrapClassName="w-full" ariaLabel={`Motion for ${entry.name}`} testId={`append-image-motion-${entry.id}`}
+                      options={IMAGE_MOTIONS.map((motion) => ({ value: motion.id, label: motion.label }))}
+                    />
+                  </div>
                 </div>
               ))}
               <Button

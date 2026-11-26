@@ -3,7 +3,7 @@ import { api, getErrorMessage } from "../lib/api";
 import { recordSignal } from "../lib/feedback";
 import { buildExportFilename, sniffRecordingContainer } from "./constants";
 import { exportTikTok, TIKTOK_EXPORT } from "./exportTikTok";
-import { clampImageSeconds } from "./imageSequence";
+import { clampImageSeconds, normalizeImageMotion } from "./imageSequence";
 import { prepareHandViewImages } from "./handView";
 import { useExportErrors } from "./useExportErrors";
 import { clearPendingSavesFor, recordFailedSave } from "./saveOutbox";
@@ -209,7 +209,7 @@ export function useExportFlow(settings) {
         appendImageSet = [];
         for (const entry of appendImages) {
           controller.signal.throwIfAborted();
-          appendImageSet.push({ source: await decodeExportImage(entry), seconds: clampImageSeconds(entry.seconds) });
+          appendImageSet.push({ source: await decodeExportImage(entry), seconds: clampImageSeconds(entry.seconds), motion: normalizeImageMotion(entry.motion) });
         }
       }
       const canvas = document.createElement("canvas");

@@ -1318,6 +1318,71 @@ check("CTA variants and builtin look presets are populated",
   "missing copy variants or look presets");
 
 // ---------------------------------------------------------------------------
+// Image-sequence motion - an uploaded image sits still unless told to move
+// (ADR 0354)
+// ---------------------------------------------------------------------------
+// Until 0354 every uploaded still got the push-in whether the founder
+// wanted it or not. Motion is now a per-image pick stored on the entry:
+// absent (a fresh upload, or a draft saved before the pick existed)
+// resolves to None, each named option resolves to its own transform, and
+// the export carries the pick the preview showed.
+const SEQ = loadModule(path.resolve(__dirname, "..", "src", "demoCta", "imageSequence.js"));
+console.log("\nfrontend/src/demoCta/imageSequence.js - per-image motion (ADR 0354)");
+
+check("a stored image with no motion choice resolves to None",
+  SEQ.normalizeImageMotion(undefined) === "none" && SEQ.normalizeImageMotion(null) === "none" &&
+  SEQ.normalizeImageMotion("bogus") === "none" && SEQ.DEFAULT_IMAGE_MOTION === "none");
+check("the motion catalog offers None plus the six animations",
+  JSON.stringify(SEQ.IMAGE_MOTIONS.map((m) => m.id)) === JSON.stringify(["none", "zoom-in", "zoom-out", "pan-right", "pan-left", "pan-up", "pan-down"]) &&
+  JSON.stringify(SEQ.IMAGE_MOTIONS.map((m) => m.label)) === JSON.stringify(["None", "Zoom in", "Zoom out", "Pan right", "Pan left", "Pan up", "Pan down"]));
+check("a fresh uploaded image sits still for its whole hold",
+  [0, 0.5, 1].every((p) => {
+    const m = SEQ.imageMotionAt({}, p);
+    return m.scale === 1 && m.anchorX === 0.5;
+  }));
+check("Zoom in is the old automatic push-in, kept as a choice",
+  SEQ.imageMotionAt({ motion: "zoom-in" }, 0).scale === 1 &&
+  SEQ.imageMotionAt({ motion: "zoom-in" }, 1).scale === 1 + SEQ.IMAGE_PUSH_IN &&
+  SEQ.imageMotionAt({ motion: "zoom-in" }, 0.5).anchorX === 0.5);
+check("Zoom out starts pushed in and settles on the still",
+  SEQ.imageMotionAt({ motion: "zoom-out" }, 0).scale === 1 + SEQ.IMAGE_PUSH_IN &&
+  SEQ.imageMotionAt({ motion: "zoom-out" }, 1).scale === 1);
+check("each Pan holds one overscan scale and drifts its own way across the frame",
+  SEQ.imageMotionAt({ motion: "pan-right" }, 0).anchorX === 0 &&
+  SEQ.imageMotionAt({ motion: "pan-right" }, 1).anchorX === 1 &&
+  SEQ.imageMotionAt({ motion: "pan-left" }, 0).anchorX === 1 &&
+  SEQ.imageMotionAt({ motion: "pan-left" }, 1).anchorX === 0 &&
+  SEQ.imageMotionAt({ motion: "pan-up" }, 0).anchorY === 1 &&
+  SEQ.imageMotionAt({ motion: "pan-up" }, 1).anchorY === 0 &&
+  SEQ.imageMotionAt({ motion: "pan-down" }, 0).anchorY === 0 &&
+  SEQ.imageMotionAt({ motion: "pan-down" }, 1).anchorY === 1 &&
+  SEQ.imageMotionAt({ motion: "pan-up" }, 0.25).scale === 1 + SEQ.IMAGE_PUSH_IN &&
+  SEQ.imageMotionAt({ motion: "pan-down" }, 0.75).scale === 1 + SEQ.IMAGE_PUSH_IN);
+check("reduced motion parks every pick, as it parked the push-in",
+  SEQ.IMAGE_MOTIONS.every(({ id }) => {
+    const m = SEQ.imageMotionAt({ motion: id }, 0.5, true);
+    return m.scale === 1 && m.anchorX === 0.5 && m.anchorY === 0.5;
+  }));
+
+// The pick round-trips: it is written on the entry at upload, survives the
+// draft's JSON-shaped document, rides the export's image set, and stands
+// in the export edit key so a changed pick retires a stale export file.
+const roundTripped = JSON.parse(JSON.stringify({ id: "x", seconds: 2.5, motion: "pan-up" }));
+check("a picked motion survives the draft document round-trip",
+  SEQ.normalizeImageMotion(roundTripped.motion) === "pan-up" &&
+  SEQ.normalizeImageMotion(JSON.parse(JSON.stringify({ id: "x", seconds: 2.5 })).motion) === "none");
+const editorMotionSrc = fs.readFileSync(path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"), "utf8");
+const exportFlowSrc = fs.readFileSync(path.join(__dirname, "..", "src", "demoCta", "exportFlow.js"), "utf8");
+check("a fresh upload is created carrying the default motion",
+  editorMotionSrc.includes("motion: DEFAULT_IMAGE_MOTION"));
+check("the editor offers the motion pick on each image row",
+  editorMotionSrc.includes("append-image-motion-") && editorMotionSrc.includes("setAppendImageMotion"));
+check("a changed motion retires the previous export",
+  editorMotionSrc.includes("normalizeImageMotion(entry.motion)"));
+check("the export's image set carries the pick the preview showed",
+  exportFlowSrc.includes("motion: normalizeImageMotion(entry.motion)"));
+
+// ---------------------------------------------------------------------------
 // angleSetAge - the set's age in founder words
 // ---------------------------------------------------------------------------
 // The freshness line beside Regenerate answers "is this set stale?" A

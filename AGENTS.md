@@ -69,7 +69,8 @@ One render path, single-pass video generation via OpenRouter.
   pure function of video time (export matches preview), faces come from
   `OVERLAY_FONTS` (vendored woff2 only). See ADR 0007. The second slot also
   takes an image sequence (ADR 0237): `imageSequence.js` composes its
-  frames (push-in + crossfade, pure in sequence time) and `imagePlayer.js`
+  frames (each still's picked motion — still by default, ADR 0354 — plus
+  crossfade, pure in sequence time) and `imagePlayer.js`
   stands in the append element's place for transport; the export
   synthesizes that segment instead of decoding a track.
 - `frontend/src/pages/CreateVideo.jsx` — four-step wizard orchestration:
@@ -321,7 +322,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. Three hundred and fifty-three decisions (0001–0353; two
+Read `docs/adr/README.md` first. Three hundred and fifty-four decisions (0001–0354; two
 share the number 0263, written in parallel on Nov 21–22 2026) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
