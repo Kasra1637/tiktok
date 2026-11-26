@@ -29,6 +29,7 @@ import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { useWizardDirections } from "./useWizardDirections";
 import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
 import { api, getErrorMessage } from "../lib/api";
+import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { sentenceCase } from "../lib/copyCase";
 import {
   describeEmptySelection,
@@ -514,6 +515,39 @@ export default function HookCta() {
     }
   };
 
+  // The caption preview (ADR 0353): the Post kit card's own click
+  // writes the caption from the hook line, long before the render
+  // finishes and the frozen kit arrives. Page state only — the
+  // server saves nothing — and the preview is keyed to the hook
+  // line it was written from, so an edited or regenerated line
+  // retires it instead of letting stale copy stand as current.
+  const [captionPreview, setCaptionPreview] = useState(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewError, setPreviewError] = useState(null);
+  useEffect(() => {
+    setCaptionPreview(null);
+    setPreviewError(null);
+  }, [project?.id]);
+  const previewCaption = async () => {
+    if (!project || previewBusy) return;
+    const hookLineAtClick = String(editValue("hook_line", "") || "").trim();
+    setPreviewBusy(true);
+    setPreviewError(null);
+    try {
+      // The preview reads the SAVED row, as the hook does: flush
+      // pending edits first so it is written from the line on screen.
+      await savePicksRef.current?.();
+      const res = await api.previewHookCtaCaption(project.id);
+      const caption = String((res && res.caption) || "").trim();
+      if (!caption) throw new Error("The caption preview came back empty.");
+      setCaptionPreview({ caption, hookLine: hookLineAtClick });
+    } catch (err) {
+      setPreviewError(getErrorMessage(err));
+    } finally {
+      setPreviewBusy(false);
+    }
+  };
+
   const { approved, unapproved } = partitionProfiles(profiles);
   // The Hook + CTA tour's first-run state (ADR 0244, on ADR 0118's
   // fork-page rule): the page has loaded, an approved app is picked,
@@ -534,6 +568,11 @@ export default function HookCta() {
     if (hasHook) setLineRevealed(true);
   }, [hasHook]);
   const hookFinished = generation?.status === "completed";
+  // The preview stands only while the line on screen is the line
+  // it was written from (ADR 0353).
+  const currentHookLine = String(editValue("hook_line", "") || "").trim();
+  const livePreview =
+    captionPreview && captionPreview.hookLine === currentHookLine ? captionPreview : null;
   // The steering picks (ADR 0247) ride the same draft edits as every
   // other pick on the page; changing one over a written hook marks
   // the line as predating them — the note in the picks control says
@@ -896,10 +935,61 @@ export default function HookCta() {
                     </p>
                   )
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    The post kit is written when the hook finishes rendering — the same
-                    caption and hashtags the render carries in History.
-                  </p>
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      The post kit is written when the hook finishes rendering — the same
+                      caption and hashtags the render carries in History.
+                    </p>
+                    {/* ADR 0353: the caption alone can be previewed
+                        from the hook line, on this card's own click —
+                        nothing generates on its own. The preview is
+                        an early look, never the kit: the frozen kit
+                        above replaces it when the render completes. */}
+                    {hasHook && (
+                      <div className="space-y-3">
+                        {livePreview && (
+                          <div className="space-y-3" data-testid="hook-cta-caption-preview">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <GroupLabel>Caption preview</GroupLabel>
+                              <span
+                                className="text-sm text-muted-foreground"
+                                data-testid="hook-cta-caption-preview-count"
+                              >
+                                {livePreview.caption.length} / 50–80
+                              </span>
+                            </div>
+                            <p className="break-words text-base leading-relaxed text-foreground/90">
+                              <span className="generated-highlight">{livePreview.caption}</span>
+                            </p>
+                          </div>
+                        )}
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={previewCaption}
+                          disabled={previewBusy}
+                          busy={previewBusy}
+                          etaSeconds={BUSY_ETA_SECONDS.postKit}
+                          data-testid="hook-cta-caption-preview-button"
+                        >
+                          {previewBusy
+                            ? "Writing the preview"
+                            : livePreview
+                              ? "Preview the caption again"
+                              : "Preview the caption"}
+                        </Button>
+                        {previewError && (
+                          <p
+                            className="text-sm text-destructive-text"
+                            role="alert"
+                            data-testid="hook-cta-caption-preview-error"
+                          >
+                            {previewError}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </SectionCard>

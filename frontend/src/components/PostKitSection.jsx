@@ -137,7 +137,20 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated, t
       >
         {caption && (
           <div className="post-kit-row post-kit-row-stacked">
-            <dt className="eyebrow">Caption</dt>
+            {/* The caption's length against its window rides the
+                label line (ADR 0353): the kit's rule is 50 to 80
+                characters including the final '?', and the count
+                lets the founder see the finished caption sits in
+                it — the same readout the HookSnap preview shows. */}
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="eyebrow">Caption</dt>
+              <span
+                className="font-normal normal-case tracking-normal text-muted-foreground"
+                data-testid="postkit-caption-count"
+              >
+                {String(caption).length} / 50–80
+              </span>
+            </div>
             <dd className="min-w-0 break-words text-base leading-relaxed text-foreground/90">
               <span key={String(caption)} className="generated-highlight">{String(caption)}</span>
             </dd>

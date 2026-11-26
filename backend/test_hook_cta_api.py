@@ -1396,3 +1396,78 @@ class TestHistoryNamesTheSurface:
         assert by_id[generation["id"]]["project_surface"] == "hook_cta"
         assert by_id[generation["id"]]["project_kind"] == "video"
         assert by_id["history-surface-wizard"]["project_surface"] == ""
+
+
+# ------------------------------------------------------- caption preview
+
+PREVIEW_CAPTION = (
+    "I quit replaying the whole day in my head and said it out loud instead — you?"
+)
+assert 50 <= len(PREVIEW_CAPTION) <= 80 and PREVIEW_CAPTION.endswith("?")
+
+
+def _stub_caption_preview(api, monkeypatch, caption=PREVIEW_CAPTION, seen=None):
+    async def fake_preview(project, profile):
+        if seen is not None:
+            seen.append(project)
+        return {"caption": caption}
+
+    monkeypatch.setattr(api.ai_service, "generate_caption_preview", fake_preview)
+
+
+class TestCaptionPreviewEndpoint:
+    """ADR 0353: the caption can be previewed from the hook line as
+    soon as one exists — one model call, nothing written. The frozen
+    kit still arrives with the finished render exactly as before."""
+
+    def test_preview_answers_from_the_hook_and_writes_nothing(self, api, monkeypatch):
+        project, _ = _hook_cta(api, "Preview Writes Nothing")
+        _write_hook(api, project["id"], monkeypatch)
+        seen = []
+        _stub_caption_preview(api, monkeypatch, seen=seen)
+        before = _run(api._fetch_one(
+            "SELECT * FROM studio_projects WHERE id = ?", (project["id"],)))
+        out = _run(api.preview_hook_cta_caption(project["id"], ANON))
+        assert out == {"caption": PREVIEW_CAPTION, "char_count": len(PREVIEW_CAPTION)}
+        # The preview was written from the row's own hook line.
+        assert seen and seen[0].get("hook_line") == HOOK
+        # Nothing is written early: the project row is untouched and
+        # no generation — the row a post kit hangs from — exists.
+        after = _run(api._fetch_one(
+            "SELECT * FROM studio_projects WHERE id = ?", (project["id"],)))
+        assert after == before
+        count = _run(api._fetch_one(
+            "SELECT COUNT(*) AS n FROM generations WHERE studio_project_id = ?",
+            (project["id"],)))
+        assert count["n"] == 0
+
+    def test_preview_refuses_before_a_hook_exists(self, api, monkeypatch):
+        project, _ = _hook_cta(api, "Preview No Hook")
+        _stub_caption_preview(api, monkeypatch)
+        with pytest.raises(HTTPException) as exc:
+            _run(api.preview_hook_cta_caption(project["id"], ANON))
+        assert exc.value.status_code == 409
+        assert "hook" in exc.value.detail.lower()
+
+    def test_preview_refuses_a_wizard_project(self, api, monkeypatch):
+        from models import CreateStudioProjectRequest
+        profile = _profile(api, "Preview Wizard Refusal")
+        wizard = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"]), user_id=ANON))
+        _stub_caption_preview(api, monkeypatch)
+        with pytest.raises(HTTPException) as exc:
+            _run(api.preview_hook_cta_caption(wizard["id"], ANON))
+        assert exc.value.status_code == 400
+        assert "Create Video" in exc.value.detail
+
+    def test_preview_failure_is_loud(self, api, monkeypatch):
+        project, _ = _hook_cta(api, "Preview Loud Failure")
+        _write_hook(api, project["id"], monkeypatch)
+
+        async def boom_preview(project, profile):
+            raise RuntimeError("model said no")
+
+        monkeypatch.setattr(api.ai_service, "generate_caption_preview", boom_preview)
+        with pytest.raises(HTTPException) as exc:
+            _run(api.preview_hook_cta_caption(project["id"], ANON))
+        assert exc.value.status_code == 502

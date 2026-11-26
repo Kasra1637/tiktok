@@ -356,11 +356,42 @@ APP_NAME_PROMPT_CHARS = 60
 NATURAL_VARIABLE_SPACE = 2790
 
 
-def _prompt_floors(strategy, condensed: bool) -> int:
+def _hook_floor_extra(condensed: bool) -> int:
+    """The hook surface's own fixed passages, in the form the budget
+    selects: the physical opening (ADR 0250), the real scene (ADR
+    0250) and the scene motion (ADR 0352).
+
+    The measured floor constants are taken on an assembly with no
+    surface marker, so none of these three is inside them — yet on a
+    hook render they are fixed text in exactly the floor's sense:
+    they do not scale, and the fit correction divides the variable
+    text by the room the floor leaves. Uncounted, the correction
+    would divide by room this text already spent, and the 4,090 fit
+    guarantee (ADR 0327) would rest on the retry loop alone. The
+    passages resolve here, at call time, because they are defined
+    below this function in the module."""
+    if condensed:
+        return (
+            len(_CONDENSED_HOOK_PHYSICAL_OPENING)
+            + len(_CONDENSED_HOOK_REAL_SCENE)
+            + len(_CONDENSED_HOOK_SCENE_MOTION)
+        )
+    return (
+        len(_HOOK_PHYSICAL_OPENING)
+        + len(_HOOK_REAL_SCENE)
+        + len(_HOOK_SCENE_MOTION)
+    )
+
+
+def _prompt_floors(strategy, condensed: bool, hook_surface: bool = False) -> int:
     """The measured fixed-text floor for this render's camera (ADR 0255)."""
     if str((strategy or {}).get("camera_setup") or "handheld") == "fixed":
-        return FIXED_CONDENSED_PROMPT_FLOOR if condensed else FIXED_FULL_PROMPT_FLOOR
-    return CONDENSED_PROMPT_FLOOR if condensed else FULL_PROMPT_FLOOR
+        floor = FIXED_CONDENSED_PROMPT_FLOOR if condensed else FIXED_FULL_PROMPT_FLOOR
+    else:
+        floor = CONDENSED_PROMPT_FLOOR if condensed else FULL_PROMPT_FLOOR
+    if hook_surface:
+        floor += _hook_floor_extra(condensed)
+    return floor
 
 
 def _budget_scale(prompt_budget, condensed: bool, floor=None) -> float:
@@ -905,6 +936,26 @@ _HOOK_REAL_SCENE = (
 _CONDENSED_HOOK_REAL_SCENE = (
     "The location renders as a real scene behind the presenter for the whole "
     "take; a plain or white backdrop is a failed render."
+)
+
+# ADR 0352: a present scene can still be a frozen one. The real-scene
+# rule above asks for surfaces, objects and light; nothing in it asks
+# the scene to MOVE, so a compliant render could hold a still-photo
+# room behind a moving presenter. On a five-second hook the eye reads
+# that stillness instantly. The scene itself carries subtle, secondary
+# motion for the whole take — alive behind her, never competing: the
+# presenter stays the motion of the shot.
+_HOOK_SCENE_MOTION = (
+    "THE SCENE STAYS ALIVE: the place behind the presenter moves subtly for "
+    "the whole take — light shifting across a surface, a curtain stirring, "
+    "distant movement passing — quiet, secondary motion that never competes "
+    "with the presenter, who stays the motion of the shot. A frozen, "
+    "still-photo room is a failed render."
+)
+
+_CONDENSED_HOOK_SCENE_MOTION = (
+    "The scene stays alive behind the presenter — light shifting, a curtain "
+    "stirring — subtle and secondary; a frozen room is a failed render."
 )
 
 # The App Profile's must_not_show list, turned into a prompt section.
@@ -1934,7 +1985,10 @@ def build_segment_prompt(
     if budget <= 0:
         budget = float(RENDER_PROMPT_LIMIT)
     condensed = budget < CONDENSE_BELOW
-    scale = _budget_scale(budget, condensed, _prompt_floors(strategy, condensed))
+    # A hook-surface render carries its own fixed passages (ADRs
+    # 0250/0352); its floor counts them (see _hook_floor_extra).
+    hook_surface = str((plan or {}).get("surface") or "") == "hook_cta"
+    scale = _budget_scale(budget, condensed, _prompt_floors(strategy, condensed, hook_surface))
 
     # Protected values hold their full budget, so the scale is no longer a
     # reliable predictor of the assembled length and can undershoot on a very
@@ -1971,7 +2025,7 @@ def build_segment_prompt(
         # pass inside.
         if scale <= MIN_SCALE:
             break
-        fixed = _prompt_floors(strategy, condensed)
+        fixed = _prompt_floors(strategy, condensed, hook_surface)
         variable = max(1, len(prompt) - fixed)
         room = budget - fixed
         if room <= 0:
@@ -1995,7 +2049,7 @@ def build_segment_prompt(
     # ceiling becomes a guarantee rather than a hope that every value reaching
     # the prompt happens to be clipped.
     if budget and len(prompt) > budget:
-        fixed = _prompt_floors(strategy, condensed)
+        fixed = _prompt_floors(strategy, condensed, hook_surface)
         variable = max(1, len(prompt) - fixed)
         room = budget - fixed
         # Walk the scale down and MEASURE, rather than predicting one value and
@@ -2247,6 +2301,13 @@ def _assemble_prompt(
         if str(plan.get("surface") or "") == "hook_cta":
             sections.append(
                 _CONDENSED_HOOK_REAL_SCENE if condensed else _HOOK_REAL_SCENE
+            )
+            # And the scene must move, not merely be present (ADR
+            # 0352): subtle, secondary motion behind the presenter
+            # for the whole take, stated beside the presence rule it
+            # extends, on this surface only.
+            sections.append(
+                _CONDENSED_HOOK_SCENE_MOTION if condensed else _HOOK_SCENE_MOTION
             )
 
     lock = character_scene_lock(strategy, location)

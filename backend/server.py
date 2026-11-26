@@ -202,6 +202,7 @@ from routers.hook_cta import (
     router as hook_cta_router,
     configure_hook_cta,
     create_hook_cta_project, generate_hook_cta_hook, generate_hook_cta,
+    preview_hook_cta_caption,
 )
 api_router.include_router(hook_cta_router)
 

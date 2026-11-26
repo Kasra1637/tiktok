@@ -368,6 +368,55 @@ class TestHookPromptDirection:
         assert "does not open this hook" not in tight
         assert "white backdrop is a failed render" not in tight
 
+    def test_a_hook_prompt_asks_the_scene_itself_to_move(self):
+        """ADR 0352: the real scene must be present (0250) AND alive —
+        subtle, secondary motion behind the presenter for the whole
+        take. A compliant-but-frozen room is named a failed render."""
+        full = _hook_prompt({"surface": "hook_cta"}, 6800)
+        assert "THE SCENE STAYS ALIVE" in full
+        assert "A frozen, still-photo room is a failed render" in full
+        tight = _hook_prompt({"surface": "hook_cta"}, 4090)
+        assert "a frozen room is a failed render" in tight
+        assert len(tight) <= 4090
+
+    def test_a_regular_prompt_carries_no_scene_motion(self):
+        """The motion cue is the hook surface's alone, like the two
+        requirements above it: a Create plan's prompt is unchanged."""
+        full = _hook_prompt({}, 6800)
+        assert "THE SCENE STAYS ALIVE" not in full
+        tight = _hook_prompt({}, 4090)
+        assert "a frozen room is a failed render" not in tight
+
+    def test_the_hook_floor_counts_the_hook_passages(self):
+        """ADR 0352: the fit math subtracts a floor before the
+        variables get anything, so the hook surface's own fixed
+        passages — the physical opening, the real scene and the new
+        scene motion, in the form the budget selects — are counted
+        in the floor a hook render is scaled against. Uncounted, the
+        correction loop would divide by room the fixed text already
+        spent and the 4,090 fit guarantee (ADR 0327) would rest on
+        the retry loop alone."""
+        import generation_planning as gp
+        strategy = {"camera_setup": "handheld"}
+        full_extra = (
+            gp._prompt_floors(strategy, False, hook_surface=True)
+            - gp._prompt_floors(strategy, False)
+        )
+        assert full_extra == (
+            len(gp._HOOK_PHYSICAL_OPENING)
+            + len(gp._HOOK_REAL_SCENE)
+            + len(gp._HOOK_SCENE_MOTION)
+        )
+        condensed_extra = (
+            gp._prompt_floors(strategy, True, hook_surface=True)
+            - gp._prompt_floors(strategy, True)
+        )
+        assert condensed_extra == (
+            len(gp._CONDENSED_HOOK_PHYSICAL_OPENING)
+            + len(gp._CONDENSED_HOOK_REAL_SCENE)
+            + len(gp._CONDENSED_HOOK_SCENE_MOTION)
+        )
+
 
 # ------------------------------------------------- the hook line's words
 

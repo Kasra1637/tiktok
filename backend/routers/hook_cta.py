@@ -392,3 +392,43 @@ async def generate_hook_cta(
     )
     generation["provider_reason"] = video_providers.resolve(payload.model or None)[1]
     return generation
+
+
+@router.post("/hook-cta/projects/{project_id}/caption-preview")
+async def preview_hook_cta_caption(
+    project_id: str, user_id: str = Depends(get_current_user_id)
+):
+    """
+    Preview the post kit's caption from the hook line (ADR 0353).
+
+    One model call, answered to the page and written NOWHERE: the
+    preview is the founder's early look at the caption, not a kit.
+    No generation row exists yet for a kit to hang from, and the
+    frozen kit is still written at render completion, replacing
+    this preview exactly as before. The hook line is the only
+    material the preview is written from — no line, no preview.
+    Click-only, like every generation on the page: nothing calls
+    this but the Post kit card's own button.
+    """
+    require_ai_configured()
+    row = await _hook_cta_project_row(project_id, user_id)
+    profile = await _require_profile_for_studio(row.get("brand_profile_id"), user_id)
+    if not (row.get("hook_line") or "").strip():
+        raise HTTPException(
+            status_code=409,
+            detail="Generate the hook first — the caption preview is written from its line.",
+        )
+    try:
+        preview = await _log_model_call(
+            "caption_preview", "text", TEXT_MODEL,
+            lambda: ai_service.generate_caption_preview(dict(row), profile),
+            user_id,
+            brand_profile_id=row.get("brand_profile_id"),
+            studio_project_id=project_id,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Caption preview failed: {str(e)[:800]}")
+    caption = str((preview or {}).get("caption") or "").strip()
+    if not caption:
+        raise HTTPException(status_code=502, detail="Caption preview failed: empty response.")
+    return {"caption": caption, "char_count": len(caption)}

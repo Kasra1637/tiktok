@@ -356,6 +356,9 @@ export const api = {
   generateHookLine: (id, payload = {}) => client.post(`/hook-cta/projects/${id}/hook`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   // The hook renders at its own picked seconds (exact duration).
   generateHookCta: (id, payload) => client.post(`/hook-cta/projects/${id}/generate`, payload).then((r) => r.data),
+  // The caption preview (ADR 0353): one click in the Post kit card
+  // writes the caption from the hook line; nothing is saved server-side.
+  previewHookCtaCaption: (id) => client.post(`/hook-cta/projects/${id}/caption-preview`, {}, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
 
   generatePlan: (id, payload = {}) => client.post(`/studio/projects/${id}/plan`, payload, { timeout: AI_CHAIN_TIMEOUT }).then((r) => r.data),
   // The one-pass form of the two above: the server writes the plan, then

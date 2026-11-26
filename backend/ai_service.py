@@ -2887,6 +2887,13 @@ POST_KIT_JSON_SCHEMA = _strict_object({
     "cover_text": _str_prop(),
 })
 
+# The caption preview (ADR 0353) asks for the caption alone: no
+# hashtag pool to research, no cover to draft — the frozen kit still
+# writes all three when the render completes.
+CAPTION_PREVIEW_JSON_SCHEMA = _strict_object({
+    "caption": _str_prop(),
+})
+
 # The fresh-account hashtag strategy, as data. A new account has no authority
 # for the algorithm to lean on, so the tags' job is classification, not reach:
 # the set states the specific problem, the community, and the category in
@@ -3237,6 +3244,13 @@ async def generate_cover_text(
 # number and history as REWRITE_MAX_TOKENS; _chat_json's retry
 # doubles it to 12000 from there.
 POST_KIT_MAX_TOKENS = 6000
+
+# The caption preview (ADR 0353) is one field of the kit written by
+# the same model with the same reasoning, so it starts from the
+# kit's own budget rather than a smaller number the reasoning would
+# truncate (ADR 0129's rule) — its own constant, so the kit's pin
+# on its call site stays a pin on the kit's call alone.
+CAPTION_PREVIEW_MAX_TOKENS = POST_KIT_MAX_TOKENS
 
 
 # One Hook + CTA hook (ADR 0244): the line, its opening and closing
@@ -4004,6 +4018,113 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         )
 
     return {"caption": caption, "hashtags": hashtags, "cover_text": cover_text}
+
+
+async def generate_caption_preview(project: dict, profile: dict) -> dict:
+    """
+    One post-kit caption, previewed from the hook line alone (ADR 0353).
+
+    The frozen kit is written when a render completes, so on HookSnap
+    the founder waits for the render to see any post copy at all. The
+    preview answers the caption early, from the one piece of copy
+    that already exists — the hook line. It is grounded in the hook
+    ONLY: the project's script never reaches the prompt, because on
+    this surface the hook is the whole spoken piece, and a preview
+    written from words the clip does not carry would promise copy
+    the finished kit cannot confirm. The caption rules are the kit's
+    own (ADR 0100 as amended): it sells the watch, it is written as
+    an everyday user, it ends in its question, it runs 50 to 80
+    characters including that '?', and no content word appears
+    twice (ADR 0346). A reply outside the rules raises — the
+    preview never repairs a bad caption into a plausible one.
+    Nothing is persisted here or by its caller: the frozen kit
+    still replaces this preview when the render completes.
+    """
+    hook = str((project or {}).get("hook_line") or "").strip()
+    if not hook:
+        raise RuntimeError("Caption preview needs the project's hook line.")
+
+    def _bits(*names):
+        out = []
+        for name in names:
+            val = (profile or {}).get(name)
+            items = val if isinstance(val, list) else [val]
+            out.extend(str(v).strip() for v in items if str(v or "").strip())
+        return out
+
+    context = {
+        "app_name": (profile or {}).get("brand_name") or "(unnamed app)",
+        "description": (profile or {}).get("brand_description") or "(unstated)",
+        "app_category": (profile or {}).get("app_category") or (profile or {}).get("niche") or "(unstated)",
+        "audience": _bits("target_audience", "ideal_customer_profile") or "(unstated)",
+        "voice": (profile or {}).get("tone_voice") or "(unstated)",
+        "features": _bits("core_features") or "(unstated)",
+        "use_moments": _bits("primary_use_cases", "usage_moments") or "(unstated)",
+        "hook_line": hook,
+        "call_to_action": str((project or {}).get("cta") or "").strip() or "(none)",
+        "plan_objective": (project or {}).get("objective") or "(unstated)",
+        "plan_audience": (project or {}).get("audience") or "(unstated)",
+        "demo_brief": (project or {}).get("demo_brief") or "(none)",
+    }
+
+    system_message = (
+        "You write TikTok post copy for an app or software product's finished clip. Every "
+        "word must be grounded in the render material and profile facts "
+        "below — restate, compress, and rephrase them, never add to them. "
+        "The caption is written AS an everyday user of the app, never as its "
+        "founder or marketer: first-person or plain observation, no "
+        "promotional language, no founder voice, no marketer voice. "
+        "Never state a price, plan name, trial term, follower count, ranking, "
+        "or outcome the inputs do not state. Never promise guaranteed results "
+        "or invent testimonials. Respond with STRICT JSON only, no markdown "
+        "fences."
+    )
+    prompt = (
+        f"RENDER MATERIAL:\n{json.dumps(context, indent=2)}\n\n"
+        "Write the TikTok caption for THIS clip. The hook line above is the "
+        "whole spoken piece — ground the caption in it and the profile facts, "
+        "nothing else. Return ONLY a JSON object:\n"
+        "{\n"
+        '  "caption": "one TikTok caption, 50 to 80 characters total including '
+        'the final \u2018?\u2019: the caption SELLS THE WATCH, not the app — '
+        'lead with what the viewer gets from watching, the clip\u2019s moment '
+        'and its tension with the payoff withheld, so the caption itself is '
+        'a reason to watch. Write AS an everyday user in the clip\u2019s '
+        'situation (first person or plain observation, never promotional, '
+        'never founder or marketer voice). '
+        'Never narrate the recording, the place, or using the app, and '
+        'never make the app the caption\u2019s subject. End with a short '
+        'question about the viewer\u2019s own experience, one anyone would '
+        'care to answer, never about the app — the caption\u2019s final '
+        'character must be \u2018?\u2019"\n'
+        "}\n"
+        "Rules: use ONLY the hook, CTA, plan, and profile facts above. "
+        "No content word appears twice in the caption — "
+        "if an idea returns, use a synonym or reframe it (ADR 0346). "
+        "Caption must be 50 to 80 characters including the final \u2018?\u2019. "
+        "No guaranteed outcomes. No promotional or founder voice. "
+        "Return ONLY valid JSON."
+    )
+    parsed = await _chat_json(
+        system_message=system_message,
+        prompt=prompt,
+        context="Caption preview",
+        max_tokens=CAPTION_PREVIEW_MAX_TOKENS,
+        timeout=90,
+        json_schema=CAPTION_PREVIEW_JSON_SCHEMA,
+    )
+    if not isinstance(parsed, dict):
+        raise RuntimeError("Caption preview response was not an object.")
+    caption = str(parsed.get("caption") or "").strip()
+    if not caption:
+        raise RuntimeError("Caption preview response was missing its caption.")
+    if not caption.endswith("?"):
+        raise RuntimeError("Caption preview caption must end with its question.")
+    if not 50 <= len(caption) <= 80:
+        raise RuntimeError(
+            f"Caption preview caption must be 50 to 80 characters, got {len(caption)}."
+        )
+    return {"caption": caption}
 
 
 # How many tailored structures each approved profile gets, per objective.

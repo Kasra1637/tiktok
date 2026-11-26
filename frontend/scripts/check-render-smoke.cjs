@@ -422,6 +422,12 @@ const apiStub = {
   }),
   getHookCtaProjects: async () => ({ projects: [] }),
   generateHookLine: async () => ({}),
+  // The caption preview (ADR 0353): a valid in-window caption by
+  // default; the preview check overrides it to count the calls.
+  previewHookCtaCaption: async () => ({
+    caption: "I quit replaying the whole day in my head and said it out loud instead — you?",
+    char_count: 77,
+  }),
   generateHookCta: async () => SEGMENT,
   getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
   // Profile-matched direction dropdowns. Four options per field by default;
@@ -14635,6 +14641,56 @@ async function runHookCtaChecks() {
     );
   });
 
+  await check("the HookSnap post kit card previews the caption from the hook, with its count (ADR 0353)", async (ctx) => {
+    const PREVIEW = "I quit replaying the whole day in my head and said it out loud instead — you?";
+    const previewCalls = [];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1" }),
+        generateHookLine: async () => hookRow({ id: "hook-cta-1", hook_line: HOOK }),
+        getGenerations: async () => ({ generations: [] }),
+        previewHookCtaCaption: async (id) => {
+          previewCalls.push(id);
+          return { caption: PREVIEW, char_count: PREVIEW.length };
+        },
+      },
+      "",
+      async () => {
+        const card = () => ctx.container.querySelector('[data-testid="hook-cta-post-kit"]');
+        // No hook yet: the preview is written from the hook line,
+        // so no preview control stands in the card.
+        if (card().querySelector('[data-testid="hook-cta-caption-preview-button"]')) {
+          throw new Error("the caption preview button stands before a hook exists");
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-generate"]'));
+        await act(async () => {});
+        // Writing the hook does NOT spend a preview call: the
+        // preview is the Post kit card's own click (ADR 0122).
+        if (previewCalls.length !== 0) {
+          throw new Error("writing the hook spent a caption preview call on its own");
+        }
+        const button = card().querySelector('[data-testid="hook-cta-caption-preview-button"]');
+        if (!button || !button.textContent.includes("Preview the caption")) {
+          throw new Error("the Preview the caption button did not render once a hook existed");
+        }
+        await clickEl(ctx, button);
+        await act(async () => {});
+        if (previewCalls.length !== 1 || previewCalls[0] !== "hook-cta-1") {
+          throw new Error(`the preview call went out ${JSON.stringify(previewCalls)}, expected once for the draft`);
+        }
+        const preview = card().querySelector('[data-testid="hook-cta-caption-preview"]');
+        if (!preview || !preview.textContent.includes(PREVIEW)) {
+          throw new Error("the previewed caption did not render in the post kit card");
+        }
+        const count = card().querySelector('[data-testid="hook-cta-caption-preview-count"]');
+        if (!count || count.textContent.trim() !== `${PREVIEW.length} / 50–80`) {
+          throw new Error(`the preview count reads "${count && count.textContent}", expected ${PREVIEW.length} / 50–80`);
+        }
+      }
+    );
+  });
+
   await check("the Hook + CTA tour walks the page's six stages", async () => {
     const { TOURS, getTourIdForPath } = load("lib/onboarding/tours.js");
     if (getTourIdForPath("/hook-cta") !== "hook-cta") {
@@ -17553,6 +17609,21 @@ async function runDemoCtaChecks() {
     async (ctx) => {
       await mountStudio(ctx, [{ ...COMPLETED, post_kit: POST_KIT }]);
       assertFrozenKit(ctx.container.querySelector('[data-testid="post-kit"]'), "output moment");
+    }
+  );
+
+  await check(
+    "a finished post kit shows its caption's length against the window (ADR 0353)",
+    async (ctx) => {
+      await mountStudio(ctx, [{ ...COMPLETED, post_kit: POST_KIT }]);
+      const section = ctx.container.querySelector('[data-testid="post-kit"]');
+      const count = section && section.querySelector('[data-testid="postkit-caption-count"]');
+      if (!count) throw new Error("the finished kit shows no caption count");
+      if (count.textContent.trim() !== `${POST_KIT.caption.length} / 50–80`) {
+        throw new Error(
+          `the caption count reads "${count.textContent}", expected ${POST_KIT.caption.length} / 50–80`
+        );
+      }
     }
   );
 
