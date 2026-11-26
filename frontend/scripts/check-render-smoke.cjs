@@ -1589,8 +1589,10 @@ async function main() {
     // descriptive text line in the section is removed: the section
     // subtitle, both camera lines, the voice note in both modes,
     // and the two location & wardrobe sentences. What stands is the
-    // title with its Optional chip, the two pairs, their headings,
-    // buttons and separators. The shared controls' new props are
+    // title, the two pairs, their headings, buttons and separators.
+    // ADR 0363: the title's Optional chip is removed too — Kasra's
+    // word was "What's the point of having that button there?" —
+    // so the word stands nowhere in the section. The shared controls' new props are
     // Create-only: HookSnap passes neither, so its plain labels and
     // its voice note keep their faces (the HookSnap checks pin the
     // note there; the last assertion here pins the scoping itself).
@@ -1639,6 +1641,7 @@ async function main() {
         // Every descriptive line is out of the section, in the face
         // the untouched project renders.
         for (const gone of [
+          "Optional",
           "Optional scene picks; the plan's defaults render as-is.",
           "Mid-chest handheld framing",
           "Camera setup controls framing",

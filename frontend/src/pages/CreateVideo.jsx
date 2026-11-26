@@ -2473,10 +2473,7 @@ export default function CreateVideo() {
               detailsClassName="group inset-panel space-y-3"
               summaryClassName="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 [&::-webkit-details-marker]:hidden"
               summary={
-                <>
-                  <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
-                  <Badge variant="secondary" className="text-xs">Optional</Badge>
-                </>
+                <GroupLabel icon={AudioLines}>Visual &amp; audio direction</GroupLabel>
               }
             >
               {/* Camera setup and Voice stand side by side inside the
@@ -2489,7 +2486,10 @@ export default function CreateVideo() {
                   the section carries no descriptive lines at all —
                   no subtitle under the title, no copy under the
                   buttons — and every group heading wears the one
-                  GroupLabel face, Voice's own, icon at the left. */}
+                  GroupLabel face, Voice's own, icon at the left.
+                  ADR 0363: the title's Optional chip is gone too —
+                  the section explains itself, and the chip only
+                  repeated what the empty picks already say. */}
               <div className="section-pair">
               <div className="space-y-2">
                 <GroupLabel icon={Camera}>Camera setup</GroupLabel>
