@@ -1543,6 +1543,45 @@ async function main() {
     }
   });
 
+  await check("the section pair's areas center their contents in their halves (ADR 0371)", async () => {
+    // ADR 0364 put the divider at the container's exact center, and
+    // Kasra's live review still read it as leaning toward the
+    // right-hand group (Voice, Wardrobe): the line's geometry was
+    // centered, but each area's contents stood left-aligned, so a
+    // short left area left a wide empty pool beside the line while
+    // the right area's contents started close to it. The correction
+    // is in the areas, not the line (Kasra's order, Nov 26 2026:
+    // centralize it, across every side-by-side section): from
+    // 1024px each area becomes a flex column with its contents
+    // centered in its half, so the whitespace mirrors on both
+    // sides of the divider and the centered line reads centered.
+    // The divider mechanism itself does not move — ADR 0364's
+    // check above still pins it — the areas' insides keep their
+    // own layout, and the stacked layout below 1024px carries
+    // none of this. Stylesheet arithmetic again: jsdom lays
+    // nothing out, so the declarations ARE the geometry.
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const pairAt = css.indexOf(".section-pair {");
+    if (pairAt < 0) throw new Error("index.css carries no .section-pair layout");
+    const mediaAt = css.indexOf("@media (min-width: 1024px)", pairAt);
+    if (mediaAt < 0) throw new Error("the section pair has no desktop media block");
+    const stacked = css.slice(pairAt, mediaAt);
+    if (stacked.includes("align-items: center")) {
+      throw new Error("the pair's stacked layout centers its areas — the centering belongs to the desktop halves only (ADR 0371)");
+    }
+    const pairDesktop = css.slice(mediaAt, mediaAt + 3200);
+    const cellRule = /\.section-pair > \* \{([^}]*)\}/.exec(pairDesktop);
+    if (!cellRule) {
+      throw new Error("the pair's desktop areas carry no shared cell rule (ADR 0371)");
+    }
+    if (!cellRule[1].includes("display: flex") || !cellRule[1].includes("flex-direction: column")) {
+      throw new Error("the pair's desktop areas are not flex columns (ADR 0371)");
+    }
+    if (!cellRule[1].includes("align-items: center")) {
+      throw new Error("the pair's desktop areas do not center their contents in their halves (ADR 0371)");
+    }
+  });
+
   await check("no direction button stands picked until the founder picks it", async (ctx) => {
     // ADR 0361 (Kasra's order, Nov 25 2026): on a fresh project the
     // direction pairs show their standing defaults as VALUES — the
@@ -1610,6 +1649,66 @@ async function main() {
         }
         if (ctx.container.querySelector('[data-testid="voice-mode-talking"]').getAttribute("aria-pressed") !== "true") {
           throw new Error("the saved voice pick does not stand picked on return (ADR 0361)");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("clicking Character stays silent picks it on Create (ADR 0373)", async (ctx) => {
+    // The bug Kasra hit live (Nov 26 2026): on a fresh project —
+    // silent since its creation (ADR 0248) — the Character stays
+    // silent button could not be clicked. The tap restated the
+    // saved value, so the draft's omitDefault rule stored no edit,
+    // and ADR 0361's read derives the picked face from the value,
+    // where a default-valued field reads as no pick: the button
+    // never lit, nothing on screen changed, and only Character
+    // talks — standing off the default — answered. The repair
+    // (ADR 0373): the draft remembers a pick-shaped click as a
+    // pick in its own record, and editPick reads the record first.
+    // A clicked silent stands picked; an untouched project still
+    // shows no pick (ADR 0361's check above stands unchanged).
+    global.__SMOKE_PARAMS = "?project=p1";
+    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", voice_mode: "silent" };
+    try {
+      await withApi({
+        getStudioProject: async () => saved,
+        updateStudioProject: async (_id, patch) => {
+          saved = { ...saved, ...patch };
+          return saved;
+        },
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
+        const silentBtn = ctx.container.querySelector('[data-testid="voice-mode-silent"]');
+        const talkingBtn = ctx.container.querySelector('[data-testid="voice-mode-talking"]');
+        if (!silentBtn || !talkingBtn) throw new Error("the voice pair is gone");
+        if (silentBtn.getAttribute("aria-pressed") === "true" || talkingBtn.getAttribute("aria-pressed") === "true") {
+          throw new Error("a voice button stands picked before any click (ADR 0361)");
+        }
+        await clickEl(ctx, silentBtn);
+        if (silentBtn.getAttribute("aria-pressed") !== "true") {
+          throw new Error("clicking Character stays silent did not pick it — the button reads as dead (ADR 0373)");
+        }
+        if (talkingBtn.getAttribute("aria-pressed") === "true") {
+          throw new Error("Character talks stands picked beside the silent pick");
+        }
+        // The pick survives the autosave settling: no edit is owed
+        // (silent already stands saved), and the record — not a
+        // pending edit — is what keeps the face lit.
+        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
+        if (silentBtn.getAttribute("aria-pressed") !== "true") {
+          throw new Error("the silent pick did not survive the autosave settling (ADR 0373)");
+        }
+        // And the pair still swings both ways off the record.
+        await clickEl(ctx, talkingBtn);
+        if (talkingBtn.getAttribute("aria-pressed") !== "true") {
+          throw new Error("clicking Character talks did not pick it after the silent pick");
+        }
+        await clickEl(ctx, silentBtn);
+        if (silentBtn.getAttribute("aria-pressed") !== "true") {
+          throw new Error("clicking back to Character stays silent did not pick it (ADR 0373)");
         }
       });
     } finally {
@@ -1855,7 +1954,8 @@ async function main() {
 
       await check("the angle freshness and the aim hint share one line", async (ctx) => {
         // ADR 0291 (Kasra's order): the set's date and the pick-a-goal hint
-        // read as one status line under Regenerate, never two stacked lines.
+        // read as one status line — above Regenerate since ADR 0372 —
+        // never two stacked lines.
         const threeDays = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
         const rows = [ANGLE, ANGLE_B].map((a) => ({ ...a, created_at: threeDays }));
         try {
@@ -1873,6 +1973,69 @@ async function main() {
               }
               if (fresh.parentElement !== hint.parentElement) {
                 throw new Error("the freshness and the aim hint do not share one line");
+              }
+            }
+          );
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+      });
+
+      await check("the angle refresh line stands above Regenerate in its new words (ADR 0372)", async (ctx) => {
+        // Kasra's order (Nov 26 2026): the freshness-and-hint line
+        // moves ABOVE the Regenerate angles button — right under
+        // the "Audience angle (required)" heading — and the hint is
+        // rewritten punchier and plainer: "Pick your goal first —
+        // new angles will aim straight at it." (58 chars, inside
+        // the 55–60 wizard subtitle budget its data-subtitle marker
+        // carries, pinned by the budget check). The freshness
+        // stamp, the separator and the one-line rule (ADR 0291,
+        // the check above) are unchanged, and the fixed-camera
+        // indoor note still stands below the button.
+        const threeDays = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+        const rows = [ANGLE, ANGLE_B].map((a) => ({ ...a, created_at: threeDays }));
+        try {
+          await withApi(
+            { getContentAngles: async () => ({ angles: rows }) },
+            async () => {
+              global.__SMOKE_PARAMS = "";
+              await mount(CreateVideo, {})(ctx);
+              await openStep(ctx, "Audience & template");
+              await passAngleGate(ctx);
+              const hint = ctx.container.querySelector('[data-testid="angles-aim-hint"]');
+              if (!hint) throw new Error("the aim hint is missing above Regenerate");
+              if ((hint.textContent || "").trim() !== "Pick your goal first — new angles will aim straight at it.") {
+                throw new Error(`the aim hint does not carry its new words: ${JSON.stringify(hint.textContent)}`);
+              }
+              const button = ctx.container.querySelector('[data-testid="regenerate-angles-button"]');
+              if (!button) throw new Error("the Regenerate angles button is gone");
+              if (!(hint.compareDocumentPosition(button) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+                throw new Error("the refresh line does not stand above the Regenerate button (ADR 0372)");
+              }
+            }
+          );
+          // Second mount, a project standing on the fixed camera:
+          // the indoor note still stands BELOW the button.
+          await act(async () => ctx.root.render(null));
+          let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "fixed" };
+          await withApi(
+            {
+              getStudioProject: async () => saved,
+              updateStudioProject: async (_id, patch) => {
+                saved = { ...saved, ...patch };
+                return saved;
+              },
+            },
+            async () => {
+              global.__SMOKE_PARAMS = "?project=p1";
+              await mount(CreateVideo, {})(ctx);
+              await openStep(ctx, "Audience & template");
+              const note = ctx.container.querySelector('[data-testid="angles-fixed-indoor-note"]');
+              if (!note) throw new Error("the fixed-camera indoor note is missing");
+              const button = ctx.container.querySelector('[data-testid="regenerate-angles-button"]');
+              if (!button) throw new Error("the Regenerate angles button is gone beside the indoor note");
+              if (!(button.compareDocumentPosition(note) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+                throw new Error("the fixed-camera indoor note no longer stands below the button (ADR 0372)");
               }
             }
           );
@@ -16107,6 +16270,60 @@ async function runHookCtaChecks() {
         await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
         if (!patches.some((p) => p.voice_mode === "talking")) {
           throw new Error(`the switch back to talking never saved: ${JSON.stringify(patches)}`);
+        }
+      }
+    );
+  });
+
+  await check("clicking Character stays silent picks it on HookSnap (ADR 0373)", async (ctx) => {
+    // The same dead button as Create's, on the shared control's
+    // other wiring (Kasra's report named Create's section; the
+    // mechanism — a restating tap stores no edit, and the read
+    // derives the face from the value — is shared, so the repair
+    // is pinned here too). A draft standing silent since its
+    // creation (ADR 0248) shows no pill picked (ADR 0364, the
+    // check above), and before this repair tapping Character
+    // stays silent changed nothing on screen. ADR 0373: the
+    // page's draft remembers the click as a pick, the pill stands
+    // picked, and it keeps standing picked after the autosave
+    // settles — no edit is owed, silent already stands saved.
+    const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
+    let row = hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face, voice_mode: "silent" });
+    const patches = [];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => row,
+        updateStudioProject: async (_id, patch) => {
+          patches.push(patch);
+          row = { ...row, ...patch };
+          return row;
+        },
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const silentPill = ctx.container.querySelector('[data-testid="voice-mode-silent"]');
+        const talkingPill = ctx.container.querySelector('[data-testid="voice-mode-talking"]');
+        if (!silentPill || !talkingPill) throw new Error("the voice pick did not render in the direction card");
+        if (silentPill.getAttribute("aria-pressed") === "true" || talkingPill.getAttribute("aria-pressed") === "true") {
+          throw new Error("a voice pill stands picked before any click (ADR 0364)");
+        }
+        await clickEl(ctx, silentPill);
+        if (silentPill.getAttribute("aria-pressed") !== "true") {
+          throw new Error("clicking Character stays silent did not pick it — the pill reads as dead (ADR 0373)");
+        }
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        if (silentPill.getAttribute("aria-pressed") !== "true") {
+          throw new Error("the silent pick did not survive the autosave settling (ADR 0373)");
+        }
+        await clickEl(ctx, talkingPill);
+        if (talkingPill.getAttribute("aria-pressed") !== "true") {
+          throw new Error("clicking Character talks did not pick it after the silent pick");
+        }
+        await clickEl(ctx, silentPill);
+        if (silentPill.getAttribute("aria-pressed") !== "true") {
+          throw new Error("clicking back to Character stays silent did not pick it (ADR 0373)");
         }
       }
     );

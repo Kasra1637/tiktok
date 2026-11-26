@@ -641,7 +641,7 @@ export default function CreateVideo() {
     angle: params.get("angle") || "",
     template: params.get("template") || "",
   }, createWizardDraft);
-  const { selectedProfileId, angleId, templateId, objective, tone, project, edits } = draft;
+  const { selectedProfileId, angleId, templateId, objective, tone, project, edits, picks } = draft;
   const receiveProject = useCallback((fresh) => {
     dispatchDraft({ type: "project-received", project: fresh });
   }, []);
@@ -1703,7 +1703,20 @@ export default function CreateVideo() {
   // stands picked on return. editValue itself is untouched: the
   // plan, the direction lists and the render keep reading the
   // effective value exactly as before.
+  //
+  // ADR 0373 completes the rule: a recorded pick wins over the
+  // value test. Deriving the face from the value alone made the
+  // default's own button unclickable — on a fresh project the
+  // Character stays silent tap restated the saved value, stored
+  // no edit, and the face derived here still read "no pick", so
+  // the tap changed nothing anywhere. The draft now remembers
+  // pick-shaped clicks in its pick record (wizardDraft), and a
+  // field with a recorded pick shows THAT as its pick — silent
+  // included — while a field nobody clicked keeps 0361's rule
+  // exactly: the default reads as no pick, an off-default stored
+  // value reads as the pick it is.
   const editPick = (key, standingDefault) => {
+    if (picks[key] !== undefined) return picks[key];
     const value = editValue(key, standingDefault);
     return value === standingDefault ? "" : value;
   };

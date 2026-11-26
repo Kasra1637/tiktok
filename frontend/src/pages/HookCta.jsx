@@ -78,7 +78,7 @@ import {
 // mirrored — the pick is the whole set, there is no third length.
 
 function createHookCtaDraft({ profileId = "" } = {}) {
-  return { profileId, project: null, edits: {} };
+  return { profileId, project: null, edits: {}, picks: {} };
 }
 
 function hookCtaDraftReducer(state, action) {
@@ -113,13 +113,27 @@ function hookCtaDraftReducer(state, action) {
       ) {
         delete edits[action.field];
       }
-      return { ...state, edits };
+      // The pick record (ADR 0373, the wizard draft's own rule
+      // carried over): a pick-shaped edit is remembered as a pick
+      // even when it restates the saved value and stores no edit
+      // above — the click happened, and editPick below reads the
+      // record first. Without it the Character stays silent tap
+      // on a draft standing silent since its creation changed
+      // nothing anywhere and the pill read as dead, exactly as
+      // on Create. Save adoptions keep the record; opening a
+      // draft or switching apps clears it, so an untouched draft
+      // still shows no pick (ADR 0364).
+      const picks = action.omitDefault && action.value
+        ? { ...state.picks, [action.field]: action.value }
+        : state.picks;
+      return { ...state, edits, picks };
     }
     case "draft-opened":
       return {
         profileId: action.project.brand_profile_id || "",
         project: action.project,
         edits: {},
+        picks: {},
       };
     case "project-received":
       return { ...state, project: action.project };
@@ -199,7 +213,7 @@ export default function HookCta() {
   const [saveStatus, setSaveStatus] = useState("");
   const [autosaving, setAutosaving] = useState(false);
   const [draft, dispatch] = useReducer(hookCtaDraftReducer, undefined, () => createHookCtaDraft());
-  const { profileId, project, edits } = draft;
+  const { profileId, project, edits, picks } = draft;
 
   const adoptOpenedDraft = useCallback((opened) => {
     if (!isHookCtaProject(opened)) {
@@ -393,7 +407,14 @@ export default function HookCta() {
   // standing default, else nothing picked. Generation keeps
   // reading editValue untouched, so what renders is identical;
   // only the buttons' lit faces change.
+  //
+  // ADR 0373 completes the rule as on Create: a recorded pick
+  // (the reducer's pick record, written by the same tap) wins
+  // over the value test, so a clicked Character stays silent
+  // stands picked even though silent is the standing default —
+  // the value test alone made that pill read as unclickable.
   const editPick = (field, standingDefault) => {
+    if (picks[field] !== undefined) return picks[field];
     const value = editValue(field, standingDefault);
     return value === standingDefault ? "" : value;
   };

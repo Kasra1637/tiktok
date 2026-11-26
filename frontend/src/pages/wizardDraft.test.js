@@ -12,7 +12,7 @@ test("resuming a draft adopts all selections and discards edits together", () =>
   const dirty = { ...createWizardDraft(), edits: { script: "Old edits" } };
   expect(wizardDraftReducer(dirty, { type: "draft-resumed", project })).toEqual({
     selectedProfileId: "app-1", angleId: "angle-1", templateId: "template-1",
-    objective: "create_curiosity", tone: "Warm", project, edits: {},
+    objective: "create_curiosity", tone: "Warm", project, edits: {}, picks: {},
   });
 });
 
@@ -20,7 +20,7 @@ test("switching apps clears the previous draft and creative selections atomicall
   const dirty = wizardDraftReducer(resume(), { type: "edit-field", field: "script", value: "New words" });
   expect(wizardDraftReducer(dirty, { type: "profile-selected", id: "app-2" })).toEqual({
     selectedProfileId: "app-2", angleId: "", templateId: "", objective: "", tone: "",
-    project: null, edits: {},
+    project: null, edits: {}, picks: {},
   });
 });
 
@@ -51,6 +51,18 @@ test("returning a direction to the saved/default value removes only its pending 
     type: "edit-field", field: "camera_setup", value: "handheld", omitDefault: true, fallback: "handheld",
   });
   expect(state.edits).toEqual({ script: "Keep this" });
+});
+
+test("a pick that restates the saved value stores no edit but is remembered as a pick (ADR 0373)", () => {
+  const savedSilent = { ...project, voice_mode: "silent" };
+  const opened = wizardDraftReducer(createWizardDraft(), { type: "draft-resumed", project: savedSilent });
+  const state = wizardDraftReducer(opened, {
+    type: "edit-field", field: "voice_mode", value: "silent", omitDefault: true, fallback: "silent",
+  });
+  expect(state.edits).toEqual({});
+  expect(state.picks).toEqual({ voice_mode: "silent" });
+  const adopted = wizardDraftReducer(state, { type: "plan-accepted", project: savedSilent, savedEdits: {} });
+  expect(adopted.picks).toEqual({ voice_mode: "silent" });
 });
 
 test("selection edits do not silently adopt or alter the saved project", () => {
@@ -85,6 +97,6 @@ test("edited-same-value during a save flight still clears (no phantom edit)", ()
 test("deep-link picks initialize without inventing a project or goal", () => {
   expect(createWizardDraft({ profile: "app", angle: "angle", template: "template" })).toEqual({
     selectedProfileId: "app", angleId: "angle", templateId: "template", objective: "", tone: "",
-    project: null, edits: {},
+    project: null, edits: {}, picks: {},
   });
 });

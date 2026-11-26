@@ -2496,6 +2496,24 @@ h1,
         border-left: 1px solid var(--hairline);
         padding-left: 2rem;
     }
+    .section-pair > * {
+        /* Centered contents (ADR 0371, Kasra's order): the
+           divider's geometry above is exact and does not move,
+           but with each area's contents left-aligned the pair
+           still READ as leaning toward the right-hand group —
+           a short left area left a wide empty pool beside the
+           line while the right area's contents started close
+           to it. Each area is therefore a flex column with its
+           contents centered in its half, so the whitespace
+           mirrors on both sides of the line and the centered
+           divider reads centered. The areas' insides keep
+           their own layout (button rows stay rows); this rule
+           lives only in the desktop block, so the stacked
+           layout below 1024px is untouched. */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
 }
 
 /* ---------- Shared keyboard focus ring for pressable chips and swatches ----------

@@ -3,7 +3,7 @@
 export function createWizardDraft({ profile = "", angle = "", template = "" } = {}) {
   return {
     selectedProfileId: profile, angleId: angle, templateId: template,
-    objective: "", tone: "", project: null, edits: {},
+    objective: "", tone: "", project: null, edits: {}, picks: {},
   };
 }
 
@@ -37,7 +37,21 @@ export function wizardDraftReducer(state, action) {
       if (action.omitDefault && (!action.value || action.value === (state.project?.[action.field] || action.fallback || ""))) {
         delete edits[action.field];
       }
-      return { ...state, edits };
+      // The pick record (ADR 0373): a pick-shaped edit (omitDefault)
+      // is remembered as a pick even when it restates the saved
+      // value and so stores no edit above. The click happened, and
+      // the direction groups' faces read this record first (see
+      // editPick in CreateVideo) — without it, a click on the
+      // standing default (Character stays silent on a fresh
+      // project, Handheld selfie) changed nothing anywhere and the
+      // button read as dead. Save adoptions keep the record; only
+      // a fresh draft (resume, profile switch) clears it, which is
+      // what keeps an untouched project showing no pick (ADR 0361)
+      // while a clicked default stands picked.
+      const picks = action.omitDefault && action.value
+        ? { ...state.picks, [action.field]: action.value }
+        : state.picks;
+      return { ...state, edits, picks };
     }
     case "project-received":
       return { ...state, project: action.project };

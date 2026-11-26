@@ -452,6 +452,32 @@ export function AngleSelector({
           AI-derived angles and keeps hand-written ones server-side, so this
           cannot discard founder work. */}
       <div className="pt-1">
+        {/* ADR 0372 (Kasra's order): the freshness-and-hint line
+            stands ABOVE the Regenerate button, right under the
+            "Audience angle (required)" heading, and the hint is
+            rewritten punchier and plainer — same meaning (pick a
+            goal first; regenerating aims the fresh angles at it),
+            58 chars inside the data-subtitle budget. The stamp,
+            the separator and the one-line shape (ADR 0291) are
+            unchanged, and the fixed-camera indoor note still
+            stands below the button. */}
+        {(angleSetFreshness || !objective) && !generating && (
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            {angleSetFreshness && (
+              <p className="text-sm text-muted-foreground" data-testid="angle-set-freshness">
+                Refreshed {angleSetFreshness}
+              </p>
+            )}
+            {angleSetFreshness && !objective && (
+              <span aria-hidden="true" className="text-sm text-muted-foreground">·</span>
+            )}
+            {!objective && (
+              <p className="text-sm text-muted-foreground" data-testid="angles-aim-hint" data-subtitle="">
+                Pick your goal first — new angles will aim straight at it.
+              </p>
+            )}
+          </div>
+        )}
         <Button
           variant="secondary"
           size="sm"
@@ -464,30 +490,13 @@ export function AngleSelector({
         >
           <RefreshCw className="h-3.5 w-3.5" />
           {generating ? "Regenerating angles" : "Regenerate angles"}
-            </Button>
-            {(angleSetFreshness || !objective) && !generating && (
-              <div className="flex flex-wrap items-baseline gap-x-2">
-                {angleSetFreshness && (
-                  <p className="text-sm text-muted-foreground" data-testid="angle-set-freshness">
-                    Refreshed {angleSetFreshness}
-                  </p>
-                )}
-                {angleSetFreshness && !objective && (
-                  <span aria-hidden="true" className="text-sm text-muted-foreground">·</span>
-                )}
-                {!objective && (
-                  <p className="text-sm text-muted-foreground" data-testid="angles-aim-hint" data-subtitle="">
-                    Pick a goal first — regenerating aims fresh angles at it.
-                  </p>
-                )}
-              </div>
-            )}
-            {cameraSetup === "fixed" && !generating && (
-              <p className="text-sm text-muted-foreground" data-testid="angles-fixed-indoor-note">
-                With the fixed camera, these angles are staged indoors — an outdoor place shows as its indoor version.
-              </p>
-            )}
-          </div>
+        </Button>
+        {cameraSetup === "fixed" && !generating && (
+          <p className="text-sm text-muted-foreground" data-testid="angles-fixed-indoor-note">
+            With the fixed camera, these angles are staged indoors — an outdoor place shows as its indoor version.
+          </p>
+        )}
+      </div>
       {notice && (
         <Alert variant="warning" data-testid="angle-regen-notice">
           <AlertTriangle className="h-4 w-4 text-[color:var(--brand-indigo)]" />
