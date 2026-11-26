@@ -588,6 +588,24 @@ async def attach_asset_to_project(
         entry["audio_gain"] = audio_gain if audio_gain is not None else (
             1.0 if audio_role == "voiceover" else 0.25
         )
+    # One presenter photo per project (ADR 0345, Kasra's order): a
+    # render takes exactly one face, so a new attach REPLACES the
+    # photo on file instead of stacking a second one the founder
+    # would later have to debug, and re-attaching the photo already
+    # on file is a no-op — never two, never an error.
+    current = [
+        a for a in current
+        if not (
+            isinstance(a, dict)
+            and (a.get("kind") or "") == "character_reference"
+            and a.get("asset_id") != asset["id"]
+        )
+    ]
+    if any(
+        isinstance(a, dict) and a.get("asset_id") == asset["id"]
+        for a in current
+    ):
+        return {"assets": current}
     current.append(entry)
 
     await _cfg("_execute")(

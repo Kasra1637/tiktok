@@ -364,3 +364,11 @@ come from the architecture map and code, not an old record's UI description.
 | [0339](0339-location-labels-name-only-the-place.md) | Location labels name only the place — two or three words, no adjectives, in the library and the refresh writer |
 | [0340](0340-the-generator-lands-the-verb.md) | The generator lands the verb: a hook arrives as a finished sentence, never a fragment |
 | [0341](0341-pop-ups-render-on-the-body-like-the-tour.md) | Pop-ups render on the body, like the tour: a portal, so the dim covers the whole screen |
+| [0342](0342-the-highlight-is-measured-from-the-words.md) | The highlight is measured from the words: a mirror sizes the hook editor's seat, never a character count |
+| [0343](0343-a-regenerate-must-not-repeat-the-line-on-file.md) | A regenerate must not repeat the line on file: the prompt excludes it and the hard gates charge a repeat |
+| [0344](0344-a-question-hook-keeps-the-trying.md) | A question hook keeps the trying: asked from inside the struggle, never a bare "can I" ask |
+| [0345](0345-one-presenter-photo-per-project.md) | One presenter photo per project: a new attach replaces the old, the same photo is a no-op |
+| [0346](0346-no-content-word-twice.md) | No content word twice: anywhere in the generation, a repeated idea takes a synonym or a reframe |
+| [0347](0347-a-blurred-render-is-refused-at-delivery.md) | A blurred render is refused at delivery: sharpness measured through the clip, a wall-to-wall blur fails the generation instead of delivering |
+| [0348](0348-the-open-last-line-is-the-demo-handoff.md) | The open last line is the Demo handoff: the script answers in its first clause, lands the shift before the end, and is never a quote, a narration, a hook repeat, or a vague stand-in |
+| [0349](0349-reasoning-returns-to-extra-high.md) | Reasoning returns to extra high: every call and the plan chain run at xhigh, superseding the medium pin |

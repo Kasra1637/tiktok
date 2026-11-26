@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import { Input } from "../ui/input";
 import LineRewriteAction from "./LineRewriteAction";
 
@@ -22,6 +23,26 @@ export default function HookLineEditor({ projectId, value, onChange, disabled, c
   // The wash is worn only while the line exists (ADR 0264): an
   // unwritten hook is a plain field, never an empty indigo bar.
   const washed = Boolean(text.trim());
+  // The input's width is measured from the words themselves (ADR
+  // 0342): the character-count estimate it replaces ran wide in a
+  // proportional font — most glyphs are narrower than the 0 they
+  // were charged for — so the wash trailed past the end of the
+  // line, exactly as Kasra's screenshot showed. A hidden mirror in
+  // the same font carries the text; the input takes its measured
+  // width, plus a breath for the caret. Where nothing can be
+  // measured (a layout-less test DOM), the estimate stands.
+  const measureRef = useRef(null);
+  const [inputWidth, setInputWidth] = useState(null);
+  useLayoutEffect(() => {
+    if (!washed) {
+      setInputWidth(null);
+      return;
+    }
+    const node = measureRef.current;
+    if (!node) return;
+    const measured = node.scrollWidth;
+    setInputWidth(measured > 0 ? measured + 2 : null);
+  }, [text, washed]);
   return (
     <div className="space-y-4">
       <label htmlFor="review-hook_line" className="text-sm font-semibold">Hook line</label>
@@ -41,7 +62,9 @@ export default function HookLineEditor({ projectId, value, onChange, disabled, c
           live count below. The seat hugs the words (ADR 0264): while
           the line exists the wrapper shrink-wraps and the input is
           sized to its text, so the wash ends where the words do
-          instead of stretching the full width of the card. */}
+          instead of stretching the full width of the card. The size
+          is the measured width of the words (ADR 0342), read off the
+          hidden mirror below — never a character count. */}
       <div
         className={washed ? "generated-highlight-field" : undefined}
         style={washed ? { width: "fit-content", maxWidth: "100%" } : undefined}
@@ -50,8 +73,24 @@ export default function HookLineEditor({ projectId, value, onChange, disabled, c
           id="review-hook_line"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          style={washed ? { width: `${Math.max(text.length, 1)}ch` } : undefined}
+          style={washed ? { width: inputWidth ? `${inputWidth}px` : `${Math.max(text.length, 1)}ch` } : undefined}
         />
+        {washed && (
+          <span
+            ref={measureRef}
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              visibility: "hidden",
+              whiteSpace: "pre",
+              display: "inline-block",
+              font: "inherit",
+              letterSpacing: "inherit",
+            }}
+          >
+            {text}
+          </span>
+        )}
       </div>
       {suggestClearerHook && (
         <LineRewriteAction

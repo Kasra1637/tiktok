@@ -954,6 +954,7 @@ async def list_studio_projects(
         tuple(params) + (max(1, min(int(limit or 50), 200)),),
     )
     await _backfill_two_section_projects(rows)
+    await _collapse_presenter_photos(rows)
     return {"projects": [_public_project(r) for r in rows]}
 
 async def _backfill_two_section_projects(rows: list) -> None:
@@ -991,6 +992,46 @@ async def _backfill_two_section_projects(rows: list) -> None:
         )
         # Keep the caller's row consistent with what was just written.
         row.update(repairs)
+
+async def _collapse_presenter_photos(rows: list) -> None:
+    """
+    One presenter photo per project, repaired on read (ADR 0345).
+
+    Attach is replace now, so a project can no longer gain a second
+    character reference — but rows written before that ruling can
+    still hold two, and the render refused those with a
+    detach-it-yourself error: the exact dead end Kasra ruled out
+    when he ordered the fix ("this also should not allow"). So
+    reopening the project is what repairs it, the same pattern as
+    the two-section backfill above: the list stands in attach
+    order, so the LAST character reference is the founder's most
+    recent pick; it stays, the earlier ones are dropped, and the
+    healed list is written back — in the row object as well as the
+    database, because the caller's row is what gets serialized —
+    so every later read, and the render itself, sees one photo.
+    Rows holding at most one face are left exactly as they are.
+    """
+    for row in rows:
+        assets = row.get("assets")
+        if not isinstance(assets, list):
+            continue
+        face_indexes = [
+            i for i, a in enumerate(assets)
+            if isinstance(a, dict)
+            and str(a.get("kind") or "").strip().lower() == "character_reference"
+        ]
+        if len(face_indexes) <= 1:
+            continue
+        keep = face_indexes[-1]
+        healed = [
+            a for i, a in enumerate(assets)
+            if i == keep or i not in face_indexes
+        ]
+        row["assets"] = healed
+        await _execute(
+            "UPDATE studio_projects SET assets = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+            (json.dumps(healed), now_iso(), row.get("id"), row.get("user_id")),
+        )
 
 @router.post("/studio/projects", status_code=201)
 async def create_studio_project(
@@ -1082,6 +1123,7 @@ async def get_studio_project(project_id: str, user_id: str = Depends(get_current
     # A project from before one-render generation is brought forward here, so
     # reopening it is what repairs it — see _backfill_two_section_projects.
     await _backfill_two_section_projects([row])
+    await _collapse_presenter_photos([row])
     payload = _public_project(row)
     # The Review card's craft report is the model's evaluation, against
     # the checklist's own rubric (ADR 0312): _public_project's

@@ -397,6 +397,30 @@ class TestGenerateHookLine:
         assert ai_spoken.short_hook_word_budget(4) == 9
         assert ai_spoken.short_hook_word_budget(5) == 12
 
+    def test_a_regenerate_names_the_line_on_file_and_refuses_its_repeat(self, monkeypatch):
+        import ai_service
+        # ADR 0343: the founder pressed Generate a new hook with a
+        # line already on file. The prompt names that line as an
+        # exclusion, and a reply that hands it straight back is a
+        # hard failure the loop corrects — the button never reads
+        # as doing nothing again.
+        new_hook = "I'm trying to stop replaying today before it steals tonight."
+        calls = _stub_chat(monkeypatch, [
+            _hook_reply(hook_line=HOOK), _hook_reply(hook_line=new_hook)])
+        out = _run(ai_service.generate_hook_line(
+            _hook_project(hook_line=HOOK), PROFILE_FACTS))
+        assert out["hook_line"] == new_hook
+        assert "ALREADY ON FILE" in calls[0]["prompt"]
+        assert HOOK in calls[0]["prompt"]
+        assert len(_draft_calls(calls)) == 2
+        assert "repeats the hook already on file" in str(calls[1])
+
+    def test_a_first_generation_prompt_carries_no_already_on_file_block(self, monkeypatch):
+        import ai_service
+        calls = _stub_chat(monkeypatch, [_hook_reply()])
+        _run(ai_service.generate_hook_line(_hook_project(), PROFILE_FACTS))
+        assert "ALREADY ON FILE" not in calls[0]["prompt"]
+
     def test_a_good_reply_returns_the_line_and_its_direction(self, monkeypatch):
         import ai_service
         _stub_chat(monkeypatch, [_hook_reply()])
@@ -1061,6 +1085,19 @@ class TestGenerateHookLineSteering:
         assert STATEMENT_OUTCOME in block
         assert "TONE: bold" in block
         assert "SHAPE: a question" in block
+
+    def test_a_question_pick_keeps_the_trying_in_its_steering(self, monkeypatch):
+        import ai_service
+        # ADR 0344 (Kasra's rule): a question-shaped hook is asked
+        # from inside the struggle — the steering line itself
+        # carries the trying and its cost, so the pick never yields
+        # a bare "can I" ask that drops the effort.
+        calls = _stub_chat(monkeypatch, [_hook_reply(hook_line=QUESTION_HOOK)])
+        _run(ai_service.generate_hook_line(
+            _hook_project(hook_shape="question"), STEERING_PROFILE))
+        prompt = calls[0]["prompt"]
+        assert "keeps the trying and what it costs her" in prompt
+        assert "never" in prompt and "bare" in prompt and "ask that drops the effort" in prompt
 
     def test_a_stale_focus_pick_steers_nothing(self, monkeypatch):
         import ai_service

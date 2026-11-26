@@ -375,7 +375,7 @@ class TestChatModelRequestShape:
         import ai_service
         assert ai_service.TEXT_MODEL == "meta/muse-ember"
         assert ai_service.VISION_MODEL == "meta/muse-ember"
-        assert ai_service.REASONING_EFFORT == "medium"
+        assert ai_service.REASONING_EFFORT == "xhigh"
 
     def test_the_shipped_default_gets_temperature_and_medium(self, monkeypatch):
         """
@@ -389,7 +389,7 @@ class TestChatModelRequestShape:
         assert _run(ai_service._chat_json("sys", "prompt", "Ctx")) == {"a": 1}
         assert rec.payloads[0]["model"] == "meta/muse-ember"
         assert rec.payloads[0]["temperature"] == 0.4
-        assert rec.payloads[0]["reasoning_effort"] == "medium"
+        assert rec.payloads[0]["reasoning_effort"] == "xhigh"
 
     def test_no_reasoning_effort_for_an_override_model(self, monkeypatch):
         """
@@ -550,11 +550,11 @@ class TestChatModelRequestShape:
         for payload in rec.payloads:
             assert payload["response_format"]["type"] == "json_schema"
         # The direct flows (profile research, angles) keep the pinned
-        # medium level; the plan chain's three calls — draft, hook
-        # candidates, craft correction — run at medium too since
-        # ADR 0297 retired the one-level-under structure.
+        # extra high level; the plan chain's three calls — draft, hook
+        # candidates, craft correction — run at extra high too since
+        # ADR 0297 retired the one-level-under structure (ADR 0349).
         assert [p["reasoning_effort"] for p in rec.payloads] == [
-            "medium", "medium", "medium", "medium", "medium"]
+            "xhigh", "xhigh", "xhigh", "xhigh", "xhigh"]
 
 
 class TestLiveAngleGoals:
@@ -1651,9 +1651,9 @@ class TestPlanChainReasoningEffort:
     correction, the craft correction, then the strategy call — and at
     the old global Max pin the founder waited 90-100+ seconds for the
     pair. The chain's call sites pass
-    reasoning_effort=PLAN_CHAIN_REASONING_EFFORT ("medium") through
+    reasoning_effort=PLAN_CHAIN_REASONING_EFFORT ("xhigh") through
     _chat_json, the same level as the app-wide default
-    (REASONING_EFFORT="medium"; the TestChatModelRequestShape pins
+    (REASONING_EFFORT="xhigh"; the TestChatModelRequestShape pins
     above pin that default). The override rides the same declaration
     gate as the default (ADR 0003): the field goes only to the
     shipped slug, never to a model that did not declare it.
@@ -1676,10 +1676,10 @@ class TestPlanChainReasoningEffort:
         "claims_used": [],
     }
 
-    def test_the_chain_is_medium_and_the_default_is_medium(self):
+    def test_the_chain_is_extra_high_and_the_default_is_extra_high(self):
         import ai_service
-        assert ai_service.REASONING_EFFORT == "medium"
-        assert ai_service.PLAN_CHAIN_REASONING_EFFORT == "medium"
+        assert ai_service.REASONING_EFFORT == "xhigh"
+        assert ai_service.PLAN_CHAIN_REASONING_EFFORT == "xhigh"
 
     def test_an_overridden_call_sends_the_override(self, monkeypatch):
         import ai_service
@@ -1714,7 +1714,7 @@ class TestPlanChainReasoningEffort:
         # draft, its doubled retry, the bake-off candidates call
         # (ADR 0130) and the 80-bar craft correction (ADR 0115).
         assert [p["max_tokens"] for p in rec.payloads] == [32768, 65536, 6000, 32768]
-        assert [p["reasoning_effort"] for p in rec.payloads] == ["medium"] * 4
+        assert [p["reasoning_effort"] for p in rec.payloads] == ["xhigh"] * 4
 
     def test_the_bake_off_correction_call_carries_medium(self, monkeypatch):
         """When every candidate breaks a gate, its correction is chained too."""
@@ -1751,7 +1751,7 @@ class TestPlanChainReasoningEffort:
         ))
         assert [p["max_tokens"] for p in rec.payloads] == [
             ai_service.HOOK_CANDIDATES_MAX_TOKENS, ai_service.REWRITE_MAX_TOKENS]
-        assert [p["reasoning_effort"] for p in rec.payloads] == ["medium", "medium"]
+        assert [p["reasoning_effort"] for p in rec.payloads] == ["xhigh", "xhigh"]
 
     def test_the_strategy_call_carries_medium(self, monkeypatch):
         import ai_service
@@ -1780,7 +1780,7 @@ class TestPlanChainReasoningEffort:
         assert result["strategy_summary"] == "s"
         assert len(rec.payloads) == 1, "a good reply must not cost a retry"
         assert rec.payloads[0]["max_tokens"] == ai_service.STRATEGY_MAX_TOKENS
-        assert rec.payloads[0]["reasoning_effort"] == "medium"
+        assert rec.payloads[0]["reasoning_effort"] == "xhigh"
 
 
 class _PostKitBudgetGate(_BudgetGate):
@@ -2047,6 +2047,28 @@ class TestDirectionRefreshBudget:
         assert "LAND THE VERB" in block
         assert "why don't my words come out right?" in block
         assert "before they slip away" in block
+
+    def test_spoken_rules_use_no_word_twice(self):
+        """ADR 0346 (Kasra's rule): the shared spoken-line block bars
+        a repeated content word in the hook — his own line spent
+        "drains" twice and said it once."""
+        import ai_service
+        block = ai_service._spoken_line_rules_block()
+        assert "NO WORD TWICE" in block
+        assert "why do drains hide?" in block
+        assert "Grammar words" in block
+        assert "synonym" in block
+
+    def test_spoken_rules_score_the_open_ending_as_demo_handoff(self):
+        """ADR 0348 (Kasra's dictation): the shared block ties the
+        script's open last line to the Demo handoff score and bans
+        the four dead forms — a quote, a narration, a repeat of the
+        hook, a vague stand-in."""
+        import ai_service
+        block = ai_service._spoken_line_rules_block()
+        assert "what Demo handoff scores" in block
+        assert "never a quote, never a narration, never a repeat of" in block
+        assert "never a vague stand-in" in block
 
     def test_direction_refresh_recovers_when_the_first_reply_is_all_thinking(self, monkeypatch):
         """The live failure becomes a result on the doubled retry.
@@ -2945,7 +2967,12 @@ class TestStrategyBudget:
         # block (+430 chars; the fully populated prompt now measures
         # 48,978), so the ceiling moves by a measured 900 to 49,500,
         # keeping ~520 of headroom.
-        CEILING = 49_500
+        #
+        # ADR 0346 adds NO WORD TWICE and ADR 0348 the Demo handoff
+        # sharpening to the same block (the fully populated prompt
+        # now measures 49,624), so the ceiling moves by a measured
+        # 700 to 50,200, keeping ~575 of headroom.
+        CEILING = 50_200
         assert len(prompt) <= CEILING, (
             f"fully-populated strategy prompt is {len(prompt)} chars "
             f"(~{len(prompt) // 4} tokens), over the {CEILING} ceiling. "

@@ -423,6 +423,85 @@ async def extract_last_frame(video_path: Path, out_path: Path) -> Optional[Path]
     return out_path
 
 
+# A finished render that comes back blurred wall to wall must never
+# be delivered as a finished video (ADR 0347 — Kasra's order after a
+# blurred render reached him: fix it so this never occurs). The
+# floor is a catastrophe gate, not a quality judge. Calibrated on
+# synthetic clips measured through clip_sharpness itself: a sharp
+# render ~289, the app's own downscale-then-upscale delivery path
+# ~172, a wall-to-wall blur ~2. The floor sits an order of magnitude
+# above the blur and far below the softest honest render.
+BLUR_FLOOR = 25.0
+
+
+async def clip_sharpness(video_path: Path) -> Optional[float]:
+    """
+    Median frame sharpness (Laplacian variance) sampled THROUGH
+    the clip — at a quarter, a half and three quarters of its
+    length (ADR 0347). Sampling through the whole clip matters:
+    Kasra's blurred render was blurred end to end, not just in
+    its opening frame, and a soft first frame alone must never
+    condemn a render either.
+
+    Returns None when the clip cannot be measured (no duration,
+    no frames, no numpy): an unmeasurable clip is delivered,
+    because a measurement failure must never strand a finished
+    render. Only a measured blur refuses delivery. A frame with
+    essentially no luminance variation carries no scene to judge
+    — a flat color's sharpness is meaningless — so such frames
+    are skipped, and a clip with no judgeable frame is
+    unmeasurable: measured, a blurred SCENE still holds its
+    light and dark regions (luminance std ~62) while a flat
+    frame holds none (~0).
+    """
+    try:
+        rc, out, _err = await run_cmd([
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", str(video_path),
+        ], timeout=30)
+        duration = float((out or "").strip() or 0)
+    except Exception:
+        return None
+    if rc != 0 or duration <= 0:
+        return None
+    sample_dir = FRAMES_DIR / f"sharp_{uuid.uuid4().hex[:12]}"
+    try:
+        sample_dir.mkdir(parents=True, exist_ok=True)
+        import numpy as np
+        from PIL import Image
+        values = []
+        for fraction in (0.25, 0.5, 0.75):
+            frame_path = sample_dir / f"f{int(fraction * 100)}.jpg"
+            rc, _o, _e = await run_cmd([
+                "ffmpeg", "-y", "-ss", f"{duration * fraction:.2f}",
+                "-i", str(video_path), "-frames:v", "1",
+                "-threads", "1", "-vf", "scale=480:-1", "-q:v", "3",
+                str(frame_path),
+            ], timeout=45)
+            if rc != 0 or not frame_path.exists() or frame_path.stat().st_size == 0:
+                continue
+            grey = np.asarray(
+                Image.open(frame_path).convert("L"), dtype=np.float32)
+            if float(grey.std()) < 5.0:
+                continue  # no scene in this frame — nothing to judge
+            lap = (-4.0 * grey[1:-1, 1:-1] + grey[:-2, 1:-1]
+                   + grey[2:, 1:-1] + grey[1:-1, :-2] + grey[1:-1, 2:])
+            values.append(float(lap.var()))
+        if not values:
+            return None
+        values.sort()
+        return values[len(values) // 2]
+    except Exception:
+        return None
+    finally:
+        for f in sample_dir.glob("*.jpg"):
+            f.unlink(missing_ok=True)
+        try:
+            sample_dir.rmdir()
+        except OSError:
+            pass
+
+
 async def trim_video_to_hook(video_path: Path, duration: float = 3.0) -> Optional[Path]:
     """
     Extract the first `duration` seconds of a video as a standalone clip.

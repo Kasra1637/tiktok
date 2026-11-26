@@ -436,3 +436,66 @@ class TestTheStorageLayerContract:
         assert storage_service.upload_asset("u", "a", src) is True
         assert calls[0]["extra"]["ContentType"] == "image/jpeg"
         assert calls[0]["key"] == "u/assets/a"
+
+
+class TestOnePresenterPhotoPerProject:
+    """ADR 0345 (Kasra's order): one presenter photo per project."""
+
+    def _project(self, api, profile):
+        from models import CreateStudioProjectRequest
+        template = _run(api.list_templates(user_id=ANON))["templates"][0]
+        return _run(api.create_studio_project(payload=CreateStudioProjectRequest(
+            brand_profile_id=profile["id"], template_id=template["id"]), user_id=ANON))
+
+    def _attach_to(self, api, project_id, asset_id):
+        from models import AttachAssetRequest
+        return _run(api.attach_asset_to_project(
+            project_id=project_id,
+            payload=AttachAssetRequest(asset_id=asset_id),
+            user_id=ANON,
+        ))
+
+    def test_a_second_presenter_photo_replaces_the_first(self, api, tmp_root):
+        profile = _profile(api, "One Face Only")
+        first = _upload(api, profile["id"], "first.jpg", _photo(api, tmp_root))
+        second = _upload(api, profile["id"], "second.jpg", _photo(api, tmp_root))
+        project = self._project(api, profile)
+        self._attach_to(api, project["id"], first["id"])
+        attached = self._attach_to(api, project["id"], second["id"])
+        faces = [a for a in attached["assets"] if a["kind"] == "character_reference"]
+        assert [a["asset_id"] for a in faces] == [second["id"]]
+
+    def test_a_legacy_duplicate_is_healed_on_read(self, api, tmp_root):
+        """Rows written before attach became replace can still hold
+        two faces, and the render refused those with a
+        detach-it-yourself error. Reopening the project keeps the
+        latest pick and writes the healed list back, so the founder
+        never meets that refusal (ADR 0345)."""
+        import json
+        profile = _profile(api, "Legacy Two Faces")
+        first = _upload(api, profile["id"], "first.jpg", _photo(api, tmp_root))
+        second = _upload(api, profile["id"], "second.jpg", _photo(api, tmp_root))
+        project = self._project(api, profile)
+        attached = self._attach_to(api, project["id"], first["id"])
+        entry = attached["assets"][0]
+        legacy = [entry, {**entry, "asset_id": second["id"], "label": "second.jpg"}]
+        _run(api._execute(
+            "UPDATE studio_projects SET assets = ? WHERE id = ?",
+            (json.dumps(legacy), project["id"]),
+        ))
+        healed = _run(api.get_studio_project(project["id"], user_id=ANON))
+        faces = [a for a in healed["assets"] if a["kind"] == "character_reference"]
+        assert [a["asset_id"] for a in faces] == [second["id"]]
+        row = _run(api._fetch_one(
+            "SELECT assets FROM studio_projects WHERE id = ?", (project["id"],)))
+        stored = row["assets"] if isinstance(row["assets"], list) else json.loads(row["assets"])
+        assert [a["asset_id"] for a in stored if a["kind"] == "character_reference"] == [second["id"]]
+
+    def test_attaching_the_same_photo_twice_keeps_one(self, api, tmp_root):
+        profile = _profile(api, "Same Face Twice")
+        created = _upload(api, profile["id"], "portrait.jpg", _photo(api, tmp_root))
+        project = self._project(api, profile)
+        self._attach_to(api, project["id"], created["id"])
+        attached = self._attach_to(api, project["id"], created["id"])
+        faces = [a for a in attached["assets"] if a["kind"] == "character_reference"]
+        assert [a["asset_id"] for a in faces] == [created["id"]]

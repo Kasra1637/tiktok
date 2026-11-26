@@ -122,10 +122,11 @@ logger = logging.getLogger(__name__)
 #   declaration and leaves the field off a model that does not take
 #   it (the GPT-6 and Sonnet endpoints declared none), and stays
 #   the net for any override whose endpoints declare something else.
-# - reasoning stays at medium (ADR 0297 stands): the effort pin was
-#   Kasra's separate later ruling for speed, not part of either
-#   model swap. Ember ran at extra high before ADR 0295; restoring
-#   that is a separate order if he gives it.
+# - reasoning runs at extra high (ADR 0349, Kasra's order,
+#   superseding ADR 0297): he ruled the medium speed pin too
+#   low once the generation rules grew this demanding, and
+#   picked extra high on everything, accepting the slower
+#   generations that come with it.
 # - max_tokens is accepted via OpenRouter (it maps to the provider field), and
 #   reasoning tokens are billed against the same budget, so small budgets can
 #   return empty content with finish_reason=length — which _chat_json already
@@ -137,25 +138,27 @@ logger = logging.getLogger(__name__)
 #   rather than a guarantee.
 DEFAULT_TEXT_MODEL = "meta/muse-ember"
 DEFAULT_VISION_MODEL = "meta/muse-ember"
-# The app-wide reasoning level: medium since ADR 0295 (extra high
-# before it, ADR 0211; Max before that, ADR 0110). Kasra's ruling was
-# speed across the whole app on the new model — every chat call
-# thinks at medium, the chained plan flow below included (ADR 0297).
-REASONING_EFFORT = "medium"
+# The app-wide reasoning level: extra high (ADR 0349, Kasra's
+# order superseding ADR 0297's medium pin; extra high before
+# ADR 0295 too, ADR 0211; Max before that, ADR 0110). Every chat
+# call thinks at extra high, the chained plan flow below
+# included.
+REASONING_EFFORT = "xhigh"
 # The plan-and-strategy chain runs at the same pin as everything
-# else (ADR 0297; it sat one level under the pin from ADR 0211
-# until then, at Low under ADR 0295). It is the one flow that
-# chains three to seven reasoning calls behind a single click —
-# the plan's editorial loop, the hook bake-off, the craft
-# correction, then the strategy — and it is also the most
-# gate-constrained flow in the app: three editorial attempts, each
-# held to complete sentences inside tight character budgets and
-# the delivery band. At Low on the new model the founder's first
-# live plan generation failed all three attempts and saved
-# nothing; Kasra named medium for generation, so the chain runs
-# at medium. This constant is passed explicitly by the chain's
-# call sites only, through _chat_json's per-call override.
-PLAN_CHAIN_REASONING_EFFORT = "medium"
+# else (ADR 0349; at medium under ADR 0297 until then, one level
+# under the pin from ADR 0211, at Low under ADR 0295). It is the
+# one flow that chains three to seven reasoning calls behind a
+# single click — the plan's editorial loop, the hook bake-off,
+# the craft correction, then the strategy — and it is also the
+# most gate-constrained flow in the app: three editorial
+# attempts, each held to complete sentences inside tight
+# character budgets and the delivery band. At Low on the new
+# model the founder's first live plan generation failed all
+# three attempts and saved nothing; the chain now reasons at
+# extra high with everything else. This constant is passed
+# explicitly by the chain's call sites only, through
+# _chat_json's per-call override.
+PLAN_CHAIN_REASONING_EFFORT = "xhigh"
 
 
 def _model_from_env(var: str, default: str) -> str:
@@ -418,9 +421,9 @@ def _reasoning_effort_param(model: str, effort: Optional[str] = None) -> dict:
     """
     The pinned reasoning level, for the shipped model only.
 
-    Medium is how this model is specified to run at all since
-    ADR 0295 (carried through ADR 0299; extra high before it,
-    ADR 0211). The field is sent as
+    Extra high is how this model is specified to run since
+    ADR 0349 (medium under ADR 0297 before it; extra high
+    before that, ADR 0211). The field is sent as
     `reasoning_effort`, which the shipped slug's endpoints declare, and only for
     that slug: an override pointed at another model is taken as given for its
     request shape (see _temperature_param — declared data, offline fallback,
@@ -3378,7 +3381,11 @@ def _hook_steering_block(project: dict, profile: dict) -> str:
             "It names the feeling or the pain point and asks it, "
             "first person and goal-first as above (she asks what she "
             "is trying to fix), and it holds the answer back: the "
-            "demo that follows is the answer."
+            "demo that follows is the answer. The question keeps the "
+            "trying and what it costs her (ADR 0344, Kasra's rule): "
+            "she asks from inside the struggle, mid-attempt — never "
+            "a bare 'can I' ask that drops the effort and asks about "
+            "the act instead."
         )
     elif shape == "statement":
         lines.append(
@@ -3497,6 +3504,22 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
         "known_limitations": profile.get("known_limitations") or "(none recorded)",
     }
 
+    # A regenerate carries the line on file (ADR 0343): without it the
+    # prompt is byte-for-byte the first generation's, and the model
+    # can hand back the very hook the founder is replacing — the
+    # button read as doing nothing. The line rides as an explicit
+    # exclusion in the prompt, and _line_issues charges a word-for-
+    # word repeat as a hard issue, so the draft loop corrects it and
+    # the bake-off and craft filters refuse it too.
+    existing_line = " ".join(str(project.get("hook_line") or "").split()).strip()
+    avoid_block = (
+        f"\nALREADY ON FILE (the founder pressed Generate a new hook): "
+        f"the hook on file is \"{existing_line}\". Write a genuinely "
+        f"new line — a different way into the same pain — never that "
+        f"line again, and never a light restatement of it.\n"
+        if existing_line else ""
+    )
+
     prompt = (
         f"VERIFIED APP FACTS:\n{json.dumps(facts, indent=2)}\n\n"
         f"{_angle_grounding_block(None)}\n\n"
@@ -3571,6 +3594,7 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
         "settle.\n"
         "- location: the one place the hook happens, in words.\n"
         f"{_hook_steering_block(project, profile)}"
+        f"{avoid_block}"
         "\nReturn ONLY a JSON object: "
         "{\"hook_line\": \"...\", \"hook_action\": \"...\", "
         "\"closing_action\": \"...\", \"location\": \"...\"}"
@@ -3639,6 +3663,11 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
             dangling = _dangling_question_issue(hook)
             if dangling:
                 issues.append(dangling)
+        if existing_line and hook.lower() == existing_line.lower():
+            issues.append(
+                "the line repeats the hook already on file word for "
+                "word — the founder asked for a new hook, so write a "
+                "genuinely different line into the same pain")
         return issues
 
     correction = ""
@@ -3902,6 +3931,8 @@ async def generate_post_kit(project: dict, profile: dict) -> dict:
         '  "cover_text": "the cover text, written to these rules: 3 to 5 words, eye catching, punchy and enticing, first person in the person\'s own voice (never a label or title), the ache up front in plain words with one concrete felt detail, never the place, the resolution withheld — a second angle on the hook\'s moment, never a copy of the hook line"\n'
         "}\n"
         "Rules: use ONLY the hook, script, CTA, plan, and profile facts above. "
+        "No content word appears twice in the caption or the cover text — "
+        "if an idea returns, use a synonym or reframe it (ADR 0346). "
         "Caption must be 50 to 80 characters including the final \u2018?\u2019. "
         "Hashtag candidates: propose 12 to 15, each grounded in the hook, "
         "caption topic, audience, category, or app name above, each a single "
@@ -4503,6 +4534,13 @@ def _spoken_line_rules_block() -> str:
         "takes it ('before they slip away', never 'before they slip' "
         "left hanging). A hook that arrives as a fragment is a failed "
         "draft, however strong its opening words are.\n"
+        "- NO WORD TWICE (ADR 0346, Kasra's rule): no content word "
+        "appears twice in a line — every word earns its place, and "
+        "the second use adds nothing ('spot my drains... why do "
+        "drains hide?' spends 'drains' twice and says it once). "
+        "When the thought needs the idea again, reach for a synonym "
+        "or reframe the thought. Grammar words (I, my, the, to) are "
+        "exempt: they are the sentence's joints, not its weight.\n"
         "- HOOK POWER (the hook line only — it earns the stop, or nothing after "
         "it matters): speak as the person living the moment, never as a report "
         "about it. FIRST PERSON, LIVED FEELING: the feeling in the speaker's "
@@ -4555,7 +4593,11 @@ def _spoken_line_rules_block() -> str:
         "filler items from lists. Keep the emotional arc: problem, then "
         "insight, then the shift in feeling — landed BEFORE the last "
         "line, which stays open on the question the demo answers: the "
-        "demo completes it, so never wrap up or resolve there (ADR 0311).\n"
+        "demo completes it, so never wrap up or resolve there (ADR 0311). "
+        "That open last line is what Demo handoff scores: it hands the "
+        "viewer to the demo, or the score falls. And the script as a "
+        "whole is never a quote, never a narration, never a repeat of "
+        "the hook, and never a vague stand-in (ADR 0348, Kasra's rule).\n"
         "- LIVE POV: spoken live straight to camera in first person, every "
         "word something a real person would say out loud. No narration "
         "about the speaker or the scene, no stage directions, no 'I said "

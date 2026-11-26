@@ -114,7 +114,7 @@ async def _reasoning_effort_probe(ai_service, model: str, effort: str) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Live chat-model verification.")
-    ap.add_argument("--effort", default="medium",
+    ap.add_argument("--effort", default="xhigh",
                     help="reasoning effort to probe for acceptance")
     ap.add_argument("--model", default="",
                     help="model slug to probe (default: the configured TEXT_MODEL)")

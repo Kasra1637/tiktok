@@ -15117,6 +15117,14 @@ async function runHookCtaChecks() {
     if (/animation:\s*generated-wash-in/.test(ungated)) {
       throw new Error("the wash-in animation is applied outside the reduced-motion gate");
     }
+    // ADR 0342: the hook editor's seat is sized from the measured
+    // width of the words themselves (a hidden mirror's scrollWidth),
+    // never from a character count — the count ran wide in a
+    // proportional font and the wash trailed past the line's end.
+    const editorSrc = fs.readFileSync(path.join(SRC, "components", "studio", "HookLineEditor.jsx"), "utf8");
+    if (!/scrollWidth/.test(editorSrc)) {
+      throw new Error("the hook editor does not measure its words for the highlight's width (ADR 0342)");
+    }
   });
 
   await check("the silent pick saves, names the hook line for text-to-speech, and submits audio off", async (ctx) => {

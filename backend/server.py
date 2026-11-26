@@ -2688,6 +2688,15 @@ async def _download_generation_video(video_url: str, generation_id: str) -> tupl
 # first syllable of the opening line.
 _MODEL_HEAD_TRIM_SECONDS = {"heygen-video-1": 0.2}
 
+# The delivery gate's refusal, named once (ADR 0347): a render
+# measured blurred through the whole clip is a FAILED generation
+# carrying this message, never a degraded completion — a completed
+# row would hand the founder a blurred video as a finished one.
+_BLURRED_RENDER_ERROR = (
+    "The render came back blurred, so it was not delivered as a "
+    "finished video. Generate again."
+)
+
 # A Hook + CTA hook render's head cut (ADR 0250). The dissolve on the
 # short hook renders runs longer than HeyGen's 0.2s — Kasra's live 4s
 # hook still opened on it — so a hook-surface render takes a longer
@@ -3048,9 +3057,26 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
             if want_move and not move_first:
                 local_path = await _apply_move(local_path)
 
-    stored_url = await asyncio.to_thread(
-        storage_service.upload_video, user_id, generation_id, Path(local_path))
-    if not stored_url:
+    # Delivery gate (ADR 0347): the finished clip is measured for
+    # sharpness THROUGH its length, after every trim and the
+    # rescale, before it can be stored as a finished video. A
+    # measured wall-to-wall blur refuses delivery; an unmeasurable
+    # clip (the probe cannot run) is delivered as before.
+    blurred = False
+    sharpness = await pipeline.clip_sharpness(local_path)
+    if sharpness is not None and sharpness < pipeline.BLUR_FLOOR:
+        blurred = True
+        logger.warning(
+            f"Generation {generation_id}: render refused at delivery, "
+            f"sharpness {sharpness:.1f} under the "
+            f"{pipeline.BLUR_FLOOR:.0f} floor (ADR 0347)."
+        )
+
+    stored_url = None
+    if not blurred:
+        stored_url = await asyncio.to_thread(
+            storage_service.upload_video, user_id, generation_id, Path(local_path))
+    if not blurred and not stored_url:
         # R2 is unconfigured or the upload failed, but the local copy
         # survived and /api/media serves it. Record that instead of
         # leaving r2_url empty, because an empty r2_url makes the
@@ -3084,6 +3110,8 @@ async def _persist_generation_clip(row: dict, user_id: str, video_url: str = "")
         delivered_seconds = int(base_seconds - _MODEL_HEAD_TRIM_SECONDS[row["model"]])
     else:
         delivered_seconds = base_seconds
+    if blurred:
+        return None, _BLURRED_RENDER_ERROR, delivered_seconds
     return stored_url, storage_error or trim_note, delivered_seconds
 
 
@@ -3232,6 +3260,17 @@ async def _apply_persist_outcome(generation_id: str, user_id: str, video_url: st
     URL, delivered length, the frozen post kit and the poster scheduled
     the same way.
     """
+    if not stored_url and storage_error == _BLURRED_RENDER_ERROR:
+        # A blurred render is a failed generation, not a degraded
+        # completion (ADR 0347): no post kit, no poster, and the
+        # founder's retry renders anew.
+        now = now_iso()
+        await _execute(
+            "UPDATE generations SET status = 'failed', error = ?, "
+            "retryable = 1, completed_at = ?, updated_at = ? WHERE id = ?",
+            (_BLURRED_RENDER_ERROR, now, now, generation_id),
+        )
+        return
     now = now_iso()
     await _execute(
         "UPDATE generations SET status = 'completed', video_url = ?, r2_url = ?, "
