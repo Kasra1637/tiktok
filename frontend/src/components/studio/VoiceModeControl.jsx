@@ -29,7 +29,10 @@ import { GroupLabel } from "../SectionCard";
  * feature, not decoration: it tells the founder the character will
  * be silent and names the exact text to paste into TikTok's
  * text-to-speech so TikTok voices the post — the line itself, shown
- * verbatim once it exists.
+ * verbatim once it exists. A caller may pass `hideNote` to stand
+ * the pills without the note in either mode (ADR 0362: Create's
+ * direction section carries no descriptive lines at all, so it
+ * opts out; HookSnap passes nothing and keeps the note).
  */
 const OPTIONS = [
   { value: "talking", label: "Character talks" },
@@ -42,6 +45,7 @@ export default function VoiceModeControl({
   onChange,
   silentText = "",
   silentTextName = "the line",
+  hideNote = false,
   disabled = false,
   testId = "voice-mode",
 }) {
@@ -80,7 +84,7 @@ export default function VoiceModeControl({
           );
         })}
       </div>
-      {current === "talking" ? (
+      {!hideNote && (current === "talking" ? (
         <p className="text-sm text-muted-foreground">
           The character speaks the line on camera — voice on, and the lips move with the words.
         </p>
@@ -97,7 +101,7 @@ export default function VoiceModeControl({
             </span>
           )}
         </p>
-      )}
+      ))}
     </div>
   );
 }

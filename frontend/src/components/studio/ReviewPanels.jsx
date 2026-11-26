@@ -1,4 +1,5 @@
 import { Button } from "../ui/button";
+import { GroupLabel } from "../SectionCard";
 
 /**
  * One profile-aware set of option buttons for a direction field (the
@@ -8,6 +9,13 @@ import { Button } from "../ui/button";
  * The options come from the profile's category group (no free typing), and
  * picking only fills the draft — saving still validates like any edit
  * and the strategy still needs a rebuild, exactly as with typed notes.
+ *
+ * The label stands as a plain bold span unless the caller passes
+ * `labelIcon`, in which case it wears the shared GroupLabel face —
+ * the uppercase eyebrow with the icon at its left (ADR 0362:
+ * Create's direction section unifies its four group headings on
+ * that face; HookSnap passes nothing and keeps the plain label).
+ * The "New options" action sits beside the label either way.
  */
 // Kasra's cap (ADR 0332): a direction button's text never runs
 // past 25 characters, so the row stays a row of buttons instead
@@ -56,6 +64,7 @@ export function DirectionSelect({
   id,
   testId,
   label,
+  labelIcon = null,
   value,
   onPick,
   options,
@@ -87,7 +96,11 @@ export function DirectionSelect({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <span id={`${id}-label`} className="text-sm font-semibold">{label}</span>
+        {labelIcon ? (
+          <GroupLabel icon={labelIcon} id={`${id}-label`}>{label}</GroupLabel>
+        ) : (
+          <span id={`${id}-label`} className="text-sm font-semibold">{label}</span>
+        )}
         {refresh && (
           <button
             type="button"

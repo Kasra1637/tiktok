@@ -1452,7 +1452,10 @@ async function main() {
     // Voice area stand side by side as the reusable .section-pair,
     // divided by a hairline with air around it on wide widths and
     // stacked, hairline on top, on narrow ones. Location & wardrobe
-    // stays full width below the pair.
+    // stood full width below the pair until ADR 0362 laid it as a
+    // second pair under the same pattern (pinned by its own check
+    // below); this check now counts both pairs and keeps the first
+    // pair's composition as 0360 settled it.
     global.__SMOKE_PARAMS = "?project=p1";
     let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld" };
     try {
@@ -1468,7 +1471,7 @@ async function main() {
         const section = ctx.container.querySelector('[data-testid="visual-audio-direction"]');
         if (!section) throw new Error("the direction section is gone");
         const pairs = section.querySelectorAll(".section-pair");
-        if (pairs.length !== 1) throw new Error("the direction section does not lay its first two areas in the one section pair (ADR 0360)");
+        if (pairs.length !== 2) throw new Error("the direction section does not stand its two section pairs (ADRs 0360/0362)");
         const cells = [...pairs[0].children];
         if (cells.length !== 2) throw new Error(`the section pair holds ${cells.length} areas, not two`);
         if (!cells[0].querySelector('[data-testid="camera-setup"]')) {
@@ -1478,10 +1481,10 @@ async function main() {
           throw new Error("the pair's second area is not Voice");
         }
         if (pairs[0].querySelector('[data-testid="review-location-direction"]')) {
-          throw new Error("Location was pulled into the pair — it stays full width below it");
+          throw new Error("Location was pulled into the first pair — it stands in the second (ADR 0362)");
         }
         if (!section.querySelector('[data-testid="review-location-direction"]')) {
-          throw new Error("the direction section lost Location & wardrobe");
+          throw new Error("the direction section lost the Location pick");
         }
         const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
         const pairAt = css.indexOf(".section-pair");
@@ -1536,11 +1539,17 @@ async function main() {
             throw new Error("a voice button stands picked before any click (ADR 0361)");
           }
         }
-        // The default still renders, so its guidance stands: a fresh
-        // project is silent at render (ADR 0248) and the note naming
-        // the text-to-speech line stays under the unpicked pair.
-        if (!ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the silent default's note vanished with its picked face (ADR 0361)");
+        // The default still renders — a fresh project is silent at
+        // render (ADR 0248) — but the note that used to name it no
+        // longer stands on this page: ADR 0362 took every
+        // descriptive line out of Create's direction section, the
+        // voice note among them, so Create passes hideNote and the
+        // note's absence here is the new pin. HookSnap passes
+        // nothing and keeps the note; its own checks below pin it
+        // there. What 0361 still promises on this page is the value
+        // and the faces, asserted above and below.
+        if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the voice note stands on Create — ADR 0362 removed the section's descriptive lines");
         }
         await pickPairButton(ctx, "camera-setup", "fixed");
         if (camGroup.querySelector('[data-value="fixed"]').getAttribute("aria-pressed") !== "true") {
@@ -1560,6 +1569,114 @@ async function main() {
         }
         if (ctx.container.querySelector('[data-testid="voice-mode-talking"]').getAttribute("aria-pressed") !== "true") {
           throw new Error("the saved voice pick does not stand picked on return (ADR 0361)");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("the direction section's groups wear one heading face and carry no descriptive lines", async (ctx) => {
+    // ADR 0362 (Kasra's order, Nov 26 2026, from his live screenshot
+    // of ADR 0360's pair): he loved the layout, the divider and the
+    // four buttons standing in one line — the one problem was the
+    // headings, which were not equal: Camera setup stood as a wide
+    // bold title while Voice wore the small all-caps eyebrow with
+    // its icon. All four groups now wear Voice's face — the shared
+    // GroupLabel, same size, color and tone, an icon at the left, a
+    // unique icon each — Location and Wardrobe stand side by side
+    // as a second .section-pair mirroring the first, and every
+    // descriptive text line in the section is removed: the section
+    // subtitle, both camera lines, the voice note in both modes,
+    // and the two location & wardrobe sentences. What stands is the
+    // title with its Optional chip, the two pairs, their headings,
+    // buttons and separators. The shared controls' new props are
+    // Create-only: HookSnap passes neither, so its plain labels and
+    // its voice note keep their faces (the HookSnap checks pin the
+    // note there; the last assertion here pins the scoping itself).
+    global.__SMOKE_PARAMS = "?project=p1";
+    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", voice_mode: "silent" };
+    try {
+      await withApi({
+        getStudioProject: async () => saved,
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: ["Location one", "Location two", "Location three"],
+          wardrobe: ["Wardrobe one", "Wardrobe two", "Wardrobe three"],
+        }),
+        updateStudioProject: async (_id, patch) => {
+          saved = { ...saved, ...patch };
+          return saved;
+        },
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
+        const section = ctx.container.querySelector('[data-testid="visual-audio-direction"]');
+        if (!section) throw new Error("the direction section is gone");
+        // The second pair mirrors the first: Location, then Wardrobe.
+        const pairs = section.querySelectorAll(".section-pair");
+        if (pairs.length !== 2) throw new Error("the direction section does not stand two section pairs (ADR 0362)");
+        const sceneCells = [...pairs[1].children];
+        if (sceneCells.length !== 2) throw new Error(`the scene pair holds ${sceneCells.length} areas, not two`);
+        if (!sceneCells[0].querySelector('[data-testid="review-location-direction"]')) {
+          throw new Error("the scene pair's first area is not Location");
+        }
+        if (!sceneCells[1].querySelector('[data-testid="review-wardrobe"]')) {
+          throw new Error("the scene pair's second area is not Wardrobe");
+        }
+        // One heading face for all four groups: the shared eyebrow,
+        // an icon at its left — and the umbrella heading is gone.
+        const headings = [...section.querySelectorAll(".eyebrow")];
+        const byText = new Map(headings.map((el) => [el.textContent.trim(), el]));
+        for (const name of ["Camera setup", "Voice", "Location", "Wardrobe"]) {
+          const heading = byText.get(name);
+          if (!heading) throw new Error(`the ${name} group does not wear the shared eyebrow heading`);
+          if (!heading.querySelector("svg")) throw new Error(`the ${name} heading carries no icon`);
+        }
+        if (byText.has("Location & wardrobe")) {
+          throw new Error("the umbrella Location & wardrobe heading still stands");
+        }
+        // Every descriptive line is out of the section, in the face
+        // the untouched project renders.
+        for (const gone of [
+          "Optional scene picks; the plan's defaults render as-is.",
+          "Mid-chest handheld framing",
+          "Camera setup controls framing",
+          "The character stays silent in this video",
+          "The place is picked here; wardrobe refines the saved look.",
+          "Location and wardrobe apply together",
+        ]) {
+          if (section.textContent.includes(gone)) {
+            throw new Error(`a removed descriptive line still stands in the section: ${JSON.stringify(gone)}`);
+          }
+        }
+        if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the voice note still stands on Create (ADR 0362)");
+        }
+        // The fixed camera's framing line and the talking note are
+        // gone in their faces too.
+        await pickPairButton(ctx, "camera-setup", "fixed");
+        if (section.textContent.includes("Phone on a shelf or tripod")) {
+          throw new Error("the fixed camera's framing line still stands in the section (ADR 0362)");
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-talking"]'));
+        if (section.textContent.includes("The character speaks the line on camera")) {
+          throw new Error("the talking note still stands in the section (ADR 0362)");
+        }
+        // The picks themselves are untouched: the scene pair's
+        // buttons still save through the draft autosave.
+        await pickPairButton(ctx, "review-location-direction", "Location one");
+        await pickPairButton(ctx, "review-wardrobe", "Wardrobe one");
+        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
+        if (saved.location !== "Location one") throw new Error("the Location pick no longer saves from the pair");
+        if (saved.visual_direction !== "Wardrobe one") {
+          throw new Error(`the Wardrobe pick no longer composes the saved scene: ${JSON.stringify(saved.visual_direction)}`);
+        }
+        // The scoping itself: HookSnap passes neither new prop, so
+        // its card keeps the plain labels and the voice note.
+        const hookSrc = fs.readFileSync(path.join(SRC, "pages", "HookCta.jsx"), "utf8");
+        if (/labelIcon|hideNote/.test(hookSrc)) {
+          throw new Error("HookSnap took the Create-only direction props (ADR 0362 scopes them to Create)");
         }
       });
     } finally {
@@ -7925,7 +8042,15 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }
       await clickEl(ctx, stepPill(ctx, "Audience & template"));
       expectText(ctx, "Voice: Calm.", "the video's own voice direction is not shown");
-      expectText(ctx, "Location & wardrobe", "the scene group lost its label");
+      // ADR 0362: the umbrella "Location & wardrobe" label is gone —
+      // the two scene groups stand under their own unified eyebrow
+      // headings, so the labels are asserted on the headings
+      // themselves rather than as one combined string.
+      const sceneLabels = [...ctx.container.querySelectorAll('[data-testid="visual-audio-direction"] .eyebrow')]
+        .map((el) => el.textContent.trim());
+      if (!sceneLabels.includes("Location") || !sceneLabels.includes("Wardrobe")) {
+        throw new Error("the scene groups lost their labels");
+      }
     } finally {
       global.__SMOKE_PARAMS = "";
     }
@@ -7968,7 +8093,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           }
           if (pair.dataset.value !== "") throw new Error(`${id} preselected a legacy note it cannot name`);
         }
-        expectText(ctx, "Location & wardrobe");
+        // ADR 0362: no umbrella "Location & wardrobe" heading — the
+        // two groups wear their own eyebrow labels now.
+        const sceneLabels = [...ctx.container.querySelectorAll('[data-testid="visual-audio-direction"] .eyebrow')]
+          .map((el) => el.textContent.trim());
+        if (!sceneLabels.includes("Location") || !sceneLabels.includes("Wardrobe")) {
+          throw new Error("the scene groups lost their labels (ADR 0362)");
+        }
         expectText(ctx, "Plan default:");
         await pickPairButton(ctx, "camera-setup", "fixed");
         await pickPairButton(ctx, "review-location-direction", "Location one");
@@ -7978,7 +8109,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         // server path Review's Save edits button drives (ADR 0220).
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
         if (saved.camera_setup !== "fixed") throw new Error("camera setup was not saved");
-        expectText(ctx, "Camera setup controls framing");
+        // ADR 0362 removed the section's descriptive lines, this
+        // one among them; the save assertions around this point
+        // carry the check's subject, and the line's absence is the
+        // new pin.
+        expectAbsent(ctx, "Camera setup controls framing", "the removed framing line came back (ADR 0362)");
         if (saved.location !== "Location one") {
           throw new Error(`the Location pick was not saved: ${JSON.stringify(saved.location)}`);
         }

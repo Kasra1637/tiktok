@@ -61,7 +61,7 @@ import { useDesktopWidth } from "../lib/desktopWidth";
 import { readPieceSeconds } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Smartphone, X, Lock, Play } from "lucide-react";
+import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Smartphone, X, Lock, Play, Camera, MapPin, Shirt } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -2479,19 +2479,20 @@ export default function CreateVideo() {
                 </>
               }
             >
-              <p className="text-sm text-muted-foreground" data-subtitle="">
-                Optional scene picks; the plan's defaults render as-is.
-              </p>
               {/* Camera setup and Voice stand side by side inside the
                   section (ADR 0360): the reusable .section-pair lays
                   the section's first two areas in two columns with a
                   hairline between them on wide widths and stacks
                   them on narrow ones. The section card itself is
                   untouched and the pair adds no container around
-                  them — it is a layout, not a section. */}
+                  them — it is a layout, not a section. ADR 0362:
+                  the section carries no descriptive lines at all —
+                  no subtitle under the title, no copy under the
+                  buttons — and every group heading wears the one
+                  GroupLabel face, Voice's own, icon at the left. */}
               <div className="section-pair">
               <div className="space-y-2">
-                <p className="text-sm font-semibold">Camera setup</p>
+                <GroupLabel icon={Camera}>Camera setup</GroupLabel>
                 {/* Two options stand side by side as black buttons (ADR
                     0330) — the thumb-pair design of the render panels'
                     resolution row; a dropdown is earned only at four or
@@ -2527,12 +2528,6 @@ export default function CreateVideo() {
                     );
                   })}
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  {editValue("camera_setup", "handheld") === "fixed"
-                    ? "Phone on a shelf or tripod. Head to mid-thigh, natural gestures, no camera movement or automatic zoom. A face reference guides identity, not exact body proportions."
-                    : "Mid-chest handheld framing with headroom, subtle sway, and the current centered zoom."}
-                </p>
-                <p className="text-sm text-muted-foreground">Camera setup controls framing; the plan and the render follow the setup saved here.</p>
               </div>
               {/* The voice pick (ADR 0246) sits with the movement and
                   direction controls: the character talks, or stays
@@ -2541,11 +2536,15 @@ export default function CreateVideo() {
                   never move — so it saves through the same draft
                   edit as the camera setup above it. Inside the pair
                   the divider is the pair's own, so this block no
-                  longer carries the stacked border. */}
+                  longer carries the stacked border. ADR 0362: this
+                  section carries no descriptive lines, so Create
+                  hides the control's note (hideNote); HookSnap's
+                  card passes nothing and keeps it. */}
               <div className="space-y-2">
                 <VoiceModeControl
                   value={editValue("voice_mode", "silent")}
                   pickedValue={editPick("voice_mode", "silent")}
+                  hideNote
                   onChange={(value) => {
                     dispatchDraft({ type: "edit-field", field: "voice_mode", value, omitDefault: true, fallback: "silent" });
                   }}
@@ -2558,53 +2557,66 @@ export default function CreateVideo() {
                 />
               </div>
               </div>
+              {/* Location and Wardrobe stand side by side as a second
+                  .section-pair (ADR 0362), mirroring the pair above:
+                  each group wears the unified GroupLabel heading
+                  through DirectionSelect's labelIcon, the umbrella
+                  "Location & wardrobe" heading and the block's two
+                  descriptive sentences are gone, and the pair keeps
+                  the block's own top hairline against the pair above
+                  it. The conditional notes stay with the pick they
+                  belong to — the saved-place warnings under Location,
+                  the plan default under Wardrobe — and a refresh
+                  error still names itself below the pair. */}
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-                <p className="text-sm font-semibold">Location &amp; wardrobe</p>
-                <p className="text-sm text-muted-foreground" data-subtitle="">The place is picked here; wardrobe refines the saved look.</p>
-                <DirectionSelect
-                  id="review-location-direction"
-                  testId="review-location-direction"
-                  label="Location"
-                  value={dirSel.location}
-                  onPick={pickScenePart("location")}
-                  options={directionOptions?.location}
-                  placeholder="Choose a Location…"
-                  disabled={busy}
-                  refresh={refreshProps("location", "review-location-refresh")}
-                />
-                {directionLocationIneligible && (
-                  <p className="text-sm text-muted-foreground" data-testid="direction-location-ineligible">
-                    Your saved place, &lsquo;{String(editValue("location", "")).trim()}&rsquo;, is
-                    not offered for a fixed camera. Pick an indoor location from the
-                    list — the plan is written from the pick saved here.
-                  </p>
-                )}
-                {savedLocationUnlisted && !directionLocationIneligible && (
-                  <p className="text-sm text-muted-foreground" data-testid="direction-location-unlisted">
-                    Your saved place, &lsquo;{String(editValue("location", "")).trim()}&rsquo;, is
-                    not in this list — it still applies. Pick a listed place to change it.
-                  </p>
-                )}
-                <DirectionSelect
-                  id="review-wardrobe"
-                  testId="review-wardrobe"
-                  label="Wardrobe"
-                  value={dirSel.wardrobe}
-                  onPick={pickScenePart("wardrobe")}
-                  options={directionOptions?.wardrobe}
-                  placeholder="Choose wardrobe…"
-                  disabled={busy}
-                  refresh={refreshProps("wardrobe", "review-wardrobe-refresh")}
-                />
-                {project?.visual_direction && !edits.visual_direction && (
-                  <p className="text-sm text-muted-foreground">
-                    Plan default: {sentenceCase(project.visual_direction)}
-                  </p>
-                )}
-                <p id="review-visual-direction-help" className="text-sm text-muted-foreground">
-                  Location and wardrobe apply together in the plan written from them. Lighting
-                  is set from this video's scene.
-                </p>
+                <div className="section-pair">
+                <div className="space-y-2">
+                  <DirectionSelect
+                    id="review-location-direction"
+                    testId="review-location-direction"
+                    label="Location"
+                    labelIcon={MapPin}
+                    value={dirSel.location}
+                    onPick={pickScenePart("location")}
+                    options={directionOptions?.location}
+                    placeholder="Choose a Location…"
+                    disabled={busy}
+                    refresh={refreshProps("location", "review-location-refresh")}
+                  />
+                  {directionLocationIneligible && (
+                    <p className="text-sm text-muted-foreground" data-testid="direction-location-ineligible">
+                      Your saved place, &lsquo;{String(editValue("location", "")).trim()}&rsquo;, is
+                      not offered for a fixed camera. Pick an indoor location from the
+                      list — the plan is written from the pick saved here.
+                    </p>
+                  )}
+                  {savedLocationUnlisted && !directionLocationIneligible && (
+                    <p className="text-sm text-muted-foreground" data-testid="direction-location-unlisted">
+                      Your saved place, &lsquo;{String(editValue("location", "")).trim()}&rsquo;, is
+                      not in this list — it still applies. Pick a listed place to change it.
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <DirectionSelect
+                    id="review-wardrobe"
+                    testId="review-wardrobe"
+                    label="Wardrobe"
+                    labelIcon={Shirt}
+                    value={dirSel.wardrobe}
+                    onPick={pickScenePart("wardrobe")}
+                    options={directionOptions?.wardrobe}
+                    placeholder="Choose wardrobe…"
+                    disabled={busy}
+                    refresh={refreshProps("wardrobe", "review-wardrobe-refresh")}
+                  />
+                  {project?.visual_direction && !edits.visual_direction && (
+                    <p className="text-sm text-muted-foreground">
+                      Plan default: {sentenceCase(project.visual_direction)}
+                    </p>
+                  )}
+                </div>
+                </div>
                 {refreshError && (
                   <p role="alert" data-testid="direction-refresh-error" className="text-sm text-red-600">
                     {refreshError}

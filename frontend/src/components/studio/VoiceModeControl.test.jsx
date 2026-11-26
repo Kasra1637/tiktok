@@ -41,6 +41,23 @@ describe("VoiceModeControl", () => {
     await view.unmount();
   });
 
+  test("hideNote stands the pills without the note in either mode", async () => {
+    // ADR 0362: Create's direction section carries no descriptive
+    // lines, so it passes hideNote — the buttons and their picked
+    // faces are untouched, and neither mode's note renders. A
+    // caller that passes nothing (HookSnap) keeps the note, as the
+    // cases above and below pin.
+    const silent = await mount({ value: "silent", hideNote: true, silentText: "A line." });
+    expect(silent.q("voice-mode-silent-note")).toBeNull();
+    expect(silent.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("true");
+    expect(silent.container.textContent).not.toContain("The character stays silent in this video");
+    await silent.unmount();
+    const talking = await mount({ value: "talking", hideNote: true });
+    expect(talking.container.textContent).not.toContain("The character speaks the line on camera");
+    expect(talking.q("voice-mode-talking").getAttribute("aria-pressed")).toBe("true");
+    await talking.unmount();
+  });
+
   test("picking silent reports the choice", async () => {
     const view = await mount();
     await act(async () => { view.q("voice-mode-silent").click(); });
