@@ -467,6 +467,7 @@ export default function HookCta() {
   const dispatchDraft = useCallback((action) => dispatch(action), []);
   const {
     directionOptions,
+    directionSettled,
     dirSel,
     pickScenePart,
     refreshError: directionRefreshError,
@@ -568,6 +569,35 @@ export default function HookCta() {
     if (hasHook) setLineRevealed(true);
   }, [hasHook]);
   const hookFinished = generation?.status === "completed";
+  // The section cascade (ADR 0356, Kasra's order): every section
+  // stands at its headline alone until the work above it is done,
+  // then opens with everything it shows today — no toggle, no new
+  // chrome, and the signals are this page's existing state only.
+  // Choose an app stands open when the page is ready, and Place
+  // and wardrobe opens with the draft it rides on. The hook opens
+  // when the direction read for the picked app has settled: the
+  // place and wardrobe picks are optional refinements the page
+  // defaults (the hook generates from them empty), so a settled
+  // read — landed or failed — is that section's work done, and a
+  // hook already on file proves the step was passed either way.
+  // The presenter photo opens when a hook line exists; the render
+  // opens when a presenter photo is attached; Demo + CTA opens
+  // when the render has finished. The post kit opens with the
+  // hook too: its first work, the caption preview, is written
+  // from the hook line alone (ADR 0353), and its frozen kit is
+  // the render's own artifact — nothing in it waits on the Demo
+  // + CTA export, which no page state records and nothing here
+  // requires. A section whose own content already exists (a
+  // photo attached, a finished render) stands open on that alone,
+  // so a returning project resolves open in sequence from state.
+  const photoAttached = (project?.assets || []).some(
+    (asset) => Boolean(asset) && asset.kind === "character_reference"
+  );
+  const hookSectionOpen = directionSettled || hasHook;
+  const presenterSectionOpen = hasHook || photoAttached;
+  const renderSectionOpen = photoAttached || hookFinished;
+  const finishSectionOpen = hookFinished;
+  const postKitSectionOpen = hasHook || hookFinished;
   // The preview stands only while the line on screen is the line
   // it was written from (ADR 0353).
   const currentHookLine = String(editValue("hook_line", "") || "").trim();
@@ -737,7 +767,7 @@ export default function HookCta() {
           )}
 
           {project && (
-            <SectionCard title="The hook" icon={Zap} data-testid="hook-cta-hook-card">
+            <SectionCard title="The hook" icon={Zap} data-testid="hook-cta-hook-card" collapsed={!hookSectionOpen}>
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground" data-subtitle="">
                   One line from your app and your direction, five seconds.
@@ -873,6 +903,7 @@ export default function HookCta() {
               project={project}
               profileId={profileId}
               busy={false}
+              collapsed={!presenterSectionOpen}
               onEnsureProject={async () => project}
               onProjectChanged={(updated) => dispatch({ type: "project-received", project: updated || project })}
               onRefreshProject={refreshProject}
@@ -880,7 +911,7 @@ export default function HookCta() {
           )}
 
           {project && (
-            <SectionCard title="Render the hook" icon={Clapperboard} data-testid="hook-cta-render-card">
+            <SectionCard title="Render the hook" icon={Clapperboard} data-testid="hook-cta-render-card" collapsed={!renderSectionOpen}>
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground" data-subtitle="">
                   One press renders the finished hook at its picked length.
@@ -901,7 +932,7 @@ export default function HookCta() {
           )}
 
           {project && (
-            <SectionCard title="Demo + CTA" icon={Film} data-testid="hook-cta-finish-card">
+            <SectionCard title="Demo + CTA" icon={Film} data-testid="hook-cta-finish-card" collapsed={!finishSectionOpen}>
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground" data-subtitle="">
                   Your demo and call to action, joined onto the hook&apos;s end.
@@ -925,7 +956,7 @@ export default function HookCta() {
           )}
 
           {project && (
-            <SectionCard title="Post kit" icon={Share2} data-testid="hook-cta-post-kit">
+            <SectionCard title="Post kit" icon={Share2} data-testid="hook-cta-post-kit" collapsed={!postKitSectionOpen}>
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground" data-subtitle="">
                   The caption and hashtags for posting the finished video.

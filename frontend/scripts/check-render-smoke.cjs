@@ -15767,6 +15767,221 @@ async function runHookCtaChecks() {
       }
     );
   });
+
+  // ADR 0356: the HookSnap sections collapse in sequence — a
+  // section shows only its headline until the work above it is
+  // done, then its whole body, unchanged. The collapse marker is
+  // the hidden body wrapper a collapsed section carries in place
+  // of its shown body; a shown body carries no such wrapper, and
+  // the headline stands either way.
+  const bodyCollapsed = (ctx, testid) => {
+    const card = ctx.container.querySelector(`[data-testid="${testid}"]`);
+    if (!card) throw new Error(`the ${testid} section did not render at all`);
+    return Boolean(card.querySelector("[data-collapsed-body]"));
+  };
+
+  await check("a fresh HookSnap draft stands with the later sections collapsed to their headlines (ADR 0356)", async (ctx) => {
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => blankRow({ id: "hook-cta-1" }),
+        getGenerations: async () => ({ generations: [] }),
+        getAssets: async () => ({ assets: [] }),
+      },
+      "",
+      async () => {
+        // The first three sections stand open: the app is picked,
+        // the draft exists, and the direction read has settled —
+        // the place and wardrobe picks are optional refinements
+        // the page defaults, so the hook's turn has come.
+        for (const testid of ["hook-cta-setup-card", "hook-cta-direction-card", "hook-cta-hook-card"]) {
+          if (bodyCollapsed(ctx, testid)) {
+            throw new Error(`the ${testid} body is collapsed on a fresh draft whose setup is done`);
+          }
+        }
+        // The later four show only their headlines.
+        const headlines = {
+          "template-photo": "Presenter photo",
+          "hook-cta-render-card": "Render the hook",
+          "hook-cta-finish-card": "Demo + CTA",
+          "hook-cta-post-kit": "Post kit",
+        };
+        for (const [testid, headline] of Object.entries(headlines)) {
+          const card = ctx.container.querySelector(`[data-testid="${testid}"]`);
+          if (!card.textContent.includes(headline)) {
+            throw new Error(`the ${testid} headline "${headline}" is missing`);
+          }
+          if (!bodyCollapsed(ctx, testid)) {
+            throw new Error(`the ${testid} body stands open on a fresh draft, before its work exists`);
+          }
+        }
+        // Nothing is removed by the collapse: the hidden finish
+        // body still carries the words it shows once it opens.
+        const finishBody = ctx.container.querySelector('[data-testid="hook-cta-finish-card"] [data-collapsed-body]');
+        if (!finishBody || !finishBody.textContent.includes("Render the hook above first")) {
+          throw new Error("the collapsed Demo + CTA body lost the content it shows when open");
+        }
+      }
+    );
+  });
+
+  await check("each finished HookSnap step opens the next section in sequence (ADR 0356)", async (ctx) => {
+    const faceAsset = {
+      id: "face-1", kind: "character_reference", status: "active",
+      rights_confirmed: true, label: "Founder face", name: "face.png",
+      brand_profile_id: "p1",
+    };
+    const attachedRow = [{ asset_id: "face-1", kind: "character_reference", label: "Founder face" }];
+    const KIT = {
+      caption: "A caption for the finished hook, written to sell the watch.",
+      hashtags: ["#focus"],
+      cover_text: "Cover",
+    };
+    const doneGen = {
+      ...SEGMENT, id: "gen-hook-done", studio_project_id: "hook-cta-1",
+      status: "completed", post_kit: KIT,
+    };
+    let attached = false;
+    let hooked = false;
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => blankRow({ id: "hook-cta-1" }),
+        generateHookLine: async () => {
+          hooked = true;
+          return hookRow({ id: "hook-cta-1", hook_line: HOOK });
+        },
+        getAssets: async () => ({ assets: [faceAsset] }),
+        attachAsset: async () => {
+          attached = true;
+          return { assets: attachedRow };
+        },
+        getStudioProject: async () => hookRow({
+          id: "hook-cta-1",
+          hook_line: hooked ? HOOK : "",
+          assets: attached ? attachedRow : [],
+        }),
+        getGenerations: async () => ({ generations: [] }),
+        generateHookCta: async () => doneGen,
+        pollGeneration: async () => doneGen,
+      },
+      "",
+      async () => {
+        // Fresh: the first three sections stand open, the later
+        // four collapsed.
+        if (bodyCollapsed(ctx, "hook-cta-hook-card")) {
+          throw new Error("the hook section starts collapsed on a fresh draft");
+        }
+        for (const testid of ["template-photo", "hook-cta-render-card", "hook-cta-finish-card", "hook-cta-post-kit"]) {
+          if (!bodyCollapsed(ctx, testid)) {
+            throw new Error(`the ${testid} section stands open before any work is done`);
+          }
+        }
+        // Step one: write the hook. The presenter photo opens,
+        // and the post kit with it — its first work, the caption
+        // preview, is written from the hook line alone (ADR
+        // 0353). The render and the finish still wait.
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-generate"]'));
+        await act(async () => {});
+        if (bodyCollapsed(ctx, "template-photo")) {
+          throw new Error("the presenter photo section did not open once the hook was written");
+        }
+        if (bodyCollapsed(ctx, "hook-cta-post-kit")) {
+          throw new Error("the post kit section did not open once the hook was written");
+        }
+        if (!bodyCollapsed(ctx, "hook-cta-render-card")) {
+          throw new Error("the render section opened before a photo was attached");
+        }
+        if (!bodyCollapsed(ctx, "hook-cta-finish-card")) {
+          throw new Error("the Demo + CTA section opened before the render finished");
+        }
+        // Step two: attach the photo. The render opens; the
+        // finish still waits.
+        const useButton = [...ctx.container.querySelectorAll("button")].find((b) => (b.textContent || "").includes("Use this photo"));
+        if (!useButton) throw new Error("the library's use-this-photo button did not render");
+        await clickEl(ctx, useButton);
+        await act(async () => {});
+        if (!attached) throw new Error("the attach never reached the api stub");
+        if (bodyCollapsed(ctx, "hook-cta-render-card")) {
+          throw new Error("the render section did not open once the photo was attached");
+        }
+        if (!bodyCollapsed(ctx, "hook-cta-finish-card")) {
+          throw new Error("the Demo + CTA section opened before the render finished");
+        }
+        // Step three: render the hook to completion. The finish
+        // opens, and the post kit shows the frozen kit.
+        const renderButton = ctx.container.querySelector('[data-testid="hook-render-generate"]');
+        if (!renderButton) throw new Error("the render button did not render");
+        await clickEl(ctx, renderButton);
+        await act(async () => {});
+        if (bodyCollapsed(ctx, "hook-cta-finish-card")) {
+          throw new Error("the Demo + CTA section did not open once the render finished");
+        }
+        const kit = ctx.container.querySelector('[data-testid="hook-cta-post-kit"] [data-testid="post-kit"]');
+        if (!kit || !kit.textContent.includes(KIT.caption)) {
+          throw new Error("the finished render's post kit did not stand in the opened post kit section");
+        }
+      }
+    );
+  });
+
+  await check("a HookSnap project whose work is done opens with every section expanded (ADR 0356)", async (ctx) => {
+    const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
+    const KIT = {
+      caption: "A caption for the finished hook, written to sell the watch.",
+      hashtags: ["#focus"],
+      cover_text: "Cover",
+    };
+    const doneGen = {
+      ...SEGMENT, id: "gen-hook-done", studio_project_id: "hook-cta-7",
+      status: "completed", post_kit: KIT,
+    };
+    const hooked = hookRow({
+      id: "hook-cta-7", hook_line: HOOK, assets: face, script_version: 1,
+      strategy: { hook_concept: HOOK },
+      location: "A quiet bedroom in the evening",
+      visual_direction: "Wardrobe one",
+      updated_at: "2026-11-20T12:00:00Z",
+    });
+    await inHookCta(
+      ctx,
+      {
+        getHookCtaProjects: async () => ({ projects: [hooked] }),
+        getStudioProject: async () => hooked,
+        getGenerations: async () => ({ generations: [doneGen] }),
+        getAssets: async () => ({ assets: [] }),
+      },
+      "?project=hook-cta-7",
+      async () => {
+        // The cascade settles from state: every section whose
+        // work exists stands open, with its full content.
+        for (const testid of [
+          "hook-cta-setup-card",
+          "hook-cta-direction-card",
+          "hook-cta-hook-card",
+          "template-photo",
+          "hook-cta-render-card",
+          "hook-cta-finish-card",
+          "hook-cta-post-kit",
+        ]) {
+          if (bodyCollapsed(ctx, testid)) {
+            throw new Error(`the ${testid} section stands collapsed on a project whose work is complete`);
+          }
+        }
+        const field = ctx.container.querySelector("#review-hook_line");
+        if (!field || field.value !== HOOK) {
+          throw new Error("the written hook does not stand in its editor");
+        }
+        if (!ctx.container.querySelector('[data-testid="platform-preview-video"]')) {
+          throw new Error("the finished render does not stand in its frame");
+        }
+        const kit = ctx.container.querySelector('[data-testid="hook-cta-post-kit"] [data-testid="post-kit"]');
+        if (!kit || !kit.textContent.includes(KIT.caption)) {
+          throw new Error("the finished kit's caption does not stand in the post kit section");
+        }
+      }
+    );
+  });
 }
 
 /**

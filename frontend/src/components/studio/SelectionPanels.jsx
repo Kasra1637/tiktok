@@ -1077,13 +1077,18 @@ export function PresenterPhotoControl({
   project,
   profileId,
   busy = false,
+  collapsed = false,
   onEnsureProject,
   onProjectChanged,
   onRefreshProject,
 }) {
-  return (
-    <div id={TEMPLATE_PHOTO_ID} data-testid="template-photo" className="inset-panel scroll-mt-4 space-y-4">
-      <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
+  // ADR 0356 (HookSnap only): `collapsed` stands the panel at its
+  // headline alone — the GroupLabel renders exactly as it does open
+  // and everything under it stands in a hidden wrapper, mounted and
+  // unchanged, simply not shown. No toggle, no new chrome; callers
+  // that never pass it (the Create wizard) render as before.
+  const body = (
+    <>
       <p className="text-sm text-muted-foreground" data-subtitle="">
         Upload one clear photo of the person you want on camera.
       </p>
@@ -1111,6 +1116,12 @@ export function PresenterPhotoControl({
           />
         </>
       )}
+    </>
+  );
+  return (
+    <div id={TEMPLATE_PHOTO_ID} data-testid="template-photo" className="inset-panel scroll-mt-4 space-y-4">
+      <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
+      {collapsed ? <div hidden data-collapsed-body="">{body}</div> : body}
     </div>
   );
 }

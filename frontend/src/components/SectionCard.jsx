@@ -25,6 +25,13 @@ export function SectionHeading({ icon: Icon, as: Tag = "h2", className, children
  * `flush` is for a card whose first child is a full-bleed row (an accordion
  * header, a group bar): the card chrome stays, the gutter goes, and the row
  * brings its own `row-pad`. It replaces `!p-0 !space-y-0` at the call sites.
+ *
+ * `collapsed` (ADR 0356, HookSnap only so far) stands the card at its
+ * headline alone: the heading row renders exactly as it does open, and
+ * the body stands in a hidden wrapper — mounted, unchanged, simply not
+ * shown. There is no toggle and no new chrome: the caller drives the
+ * flag from its own state, and a caller that never passes it renders
+ * byte-for-byte as before.
  */
 export function SectionCard({
   title,
@@ -34,6 +41,7 @@ export function SectionCard({
   compact = false,
   flush = false,
   headingLevel = "h2",
+  collapsed = false,
   children,
   className,
   ...rest
@@ -60,7 +68,7 @@ export function SectionCard({
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </div>
       )}
-      {children}
+      {collapsed ? <div hidden data-collapsed-body="">{children}</div> : children}
     </div>
   );
 }

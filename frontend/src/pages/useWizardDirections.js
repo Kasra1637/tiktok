@@ -22,6 +22,12 @@ import { api, getErrorMessage } from "../lib/api";
  */
 export function useWizardDirections({ profileId, project, angle, dispatchDraft, cameraSetup = "" }) {
   const [directionOptions, setDirectionOptions] = useState(null);
+  // Whether the options read for the current profile has settled —
+  // landed OR failed (ADR 0356). HookSnap's section cascade reads
+  // it to know the direction step is done being prepared; a failed
+  // read settles too, so the cascade can never wait forever on a
+  // read that already answered with an error. The wizard ignores it.
+  const [directionSettled, setDirectionSettled] = useState(false);
   const angleId = angle?.id || "";
   const directionRequestRef = useRef(0);
 
@@ -29,15 +35,23 @@ export function useWizardDirections({ profileId, project, angle, dispatchDraft, 
     const request = ++directionRequestRef.current;
     if (!profileId) {
       setDirectionOptions(null);
+      setDirectionSettled(false);
       return undefined;
     }
+    setDirectionSettled(false);
     let cancelled = false;
     api.getDirectionOptions(profileId, angleId, cameraSetup)
       .then((data) => {
-        if (!cancelled && directionRequestRef.current === request) setDirectionOptions(data);
+        if (!cancelled && directionRequestRef.current === request) {
+          setDirectionOptions(data);
+          setDirectionSettled(true);
+        }
       })
       .catch(() => {
-        if (!cancelled && directionRequestRef.current === request) setDirectionOptions(null);
+        if (!cancelled && directionRequestRef.current === request) {
+          setDirectionOptions(null);
+          setDirectionSettled(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -141,6 +155,7 @@ export function useWizardDirections({ profileId, project, angle, dispatchDraft, 
 
   return {
     directionOptions,
+    directionSettled,
     dirSel,
     pickScenePart,
     refreshingField,
