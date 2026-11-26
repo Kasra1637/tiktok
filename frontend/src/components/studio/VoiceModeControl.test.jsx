@@ -30,6 +30,17 @@ describe("VoiceModeControl", () => {
     await view.unmount();
   });
 
+  test("an explicitly unpicked face marks no choice while the note follows the mode", async () => {
+    // ADR 0361: Create passes pickedValue="" for a project standing
+    // on its defaults — no button is pressed, and the note still
+    // names the mode that will render.
+    const view = await mount({ value: "silent", pickedValue: "" });
+    expect(view.q("voice-mode-talking").getAttribute("aria-pressed")).toBe("false");
+    expect(view.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("false");
+    expect(view.q("voice-mode-silent-note")).not.toBeNull();
+    await view.unmount();
+  });
+
   test("picking silent reports the choice", async () => {
     const view = await mount();
     await act(async () => { view.q("voice-mode-silent").click(); });

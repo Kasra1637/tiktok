@@ -1692,6 +1692,22 @@ export default function CreateVideo() {
   const editValue = (key, fallback) =>
     edits[key] !== undefined ? edits[key] : project?.[key] ?? fallback;
 
+  // The pick a defaulted direction group may show as chosen (ADR
+  // 0361): the effective value counts as a pick only when it stands
+  // off the field's standing default. The write side already ruled
+  // this — picking the default stores nothing (omitDefault in the
+  // draft reducer) — so a fresh project, whose camera reads
+  // handheld and whose voice was written silent at its creation
+  // (ADR 0248), shows NO button picked, while a stored value off
+  // the default (fixed, talking) is a pick the founder made and
+  // stands picked on return. editValue itself is untouched: the
+  // plan, the direction lists and the render keep reading the
+  // effective value exactly as before.
+  const editPick = (key, standingDefault) => {
+    const value = editValue(key, standingDefault);
+    return value === standingDefault ? "" : value;
+  };
+
   // The live script budget: the count that follows the field, and whether it
   // has outgrown what the middle's seconds can speak. The ceiling is the
   // server's own (spoken_check.script), so the warning agrees with the clamp
@@ -2466,6 +2482,14 @@ export default function CreateVideo() {
               <p className="text-sm text-muted-foreground" data-subtitle="">
                 Optional scene picks; the plan's defaults render as-is.
               </p>
+              {/* Camera setup and Voice stand side by side inside the
+                  section (ADR 0360): the reusable .section-pair lays
+                  the section's first two areas in two columns with a
+                  hairline between them on wide widths and stacks
+                  them on narrow ones. The section card itself is
+                  untouched and the pair adds no container around
+                  them — it is a layout, not a section. */}
+              <div className="section-pair">
               <div className="space-y-2">
                 <p className="text-sm font-semibold">Camera setup</p>
                 {/* Two options stand side by side as black buttons (ADR
@@ -2483,7 +2507,7 @@ export default function CreateVideo() {
                     { value: "handheld", label: "Handheld selfie" },
                     { value: "fixed", label: "Fixed camera" },
                   ].map((option) => {
-                    const picked = editValue("camera_setup", "handheld") === option.value;
+                    const picked = editPick("camera_setup", "handheld") === option.value;
                     return (
                       <Button
                         key={option.value}
@@ -2515,10 +2539,13 @@ export default function CreateVideo() {
                   silent and TikTok's text-to-speech carries the
                   lines. It is a render-time pick — the plan's words
                   never move — so it saves through the same draft
-                  edit as the camera setup above it. */}
-              <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+                  edit as the camera setup above it. Inside the pair
+                  the divider is the pair's own, so this block no
+                  longer carries the stacked border. */}
+              <div className="space-y-2">
                 <VoiceModeControl
                   value={editValue("voice_mode", "silent")}
+                  pickedValue={editPick("voice_mode", "silent")}
                   onChange={(value) => {
                     dispatchDraft({ type: "edit-field", field: "voice_mode", value, omitDefault: true, fallback: "silent" });
                   }}
@@ -2529,6 +2556,7 @@ export default function CreateVideo() {
                   silentTextName="the spoken lines"
                   disabled={busy}
                 />
+              </div>
               </div>
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
                 <p className="text-sm font-semibold">Location &amp; wardrobe</p>

@@ -1445,6 +1445,128 @@ async function main() {
     }
   });
 
+  await check("camera setup and voice stand side by side inside the direction section", async (ctx) => {
+    // ADR 0360 (Kasra's order, Nov 25 2026): inside Create's Visual
+    // & audio direction section — the section itself untouched, no
+    // new section or container card — the Camera setup area and the
+    // Voice area stand side by side as the reusable .section-pair,
+    // divided by a hairline with air around it on wide widths and
+    // stacked, hairline on top, on narrow ones. Location & wardrobe
+    // stays full width below the pair.
+    global.__SMOKE_PARAMS = "?project=p1";
+    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld" };
+    try {
+      await withApi({
+        getStudioProject: async () => saved,
+        updateStudioProject: async (_id, patch) => {
+          saved = { ...saved, ...patch };
+          return saved;
+        },
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
+        const section = ctx.container.querySelector('[data-testid="visual-audio-direction"]');
+        if (!section) throw new Error("the direction section is gone");
+        const pairs = section.querySelectorAll(".section-pair");
+        if (pairs.length !== 1) throw new Error("the direction section does not lay its first two areas in the one section pair (ADR 0360)");
+        const cells = [...pairs[0].children];
+        if (cells.length !== 2) throw new Error(`the section pair holds ${cells.length} areas, not two`);
+        if (!cells[0].querySelector('[data-testid="camera-setup"]')) {
+          throw new Error("the pair's first area is not Camera setup");
+        }
+        if (!cells[1].querySelector('[data-testid="voice-mode-talking"]')) {
+          throw new Error("the pair's second area is not Voice");
+        }
+        if (pairs[0].querySelector('[data-testid="review-location-direction"]')) {
+          throw new Error("Location was pulled into the pair — it stays full width below it");
+        }
+        if (!section.querySelector('[data-testid="review-location-direction"]')) {
+          throw new Error("the direction section lost Location & wardrobe");
+        }
+        const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+        const pairAt = css.indexOf(".section-pair");
+        if (pairAt < 0) throw new Error("index.css carries no .section-pair layout (ADR 0360)");
+        const pairCss = css.slice(pairAt, pairAt + 6000);
+        if (!pairCss.includes("grid-template-columns: repeat(2, minmax(0, 1fr))")) {
+          throw new Error("the section pair never stands two columns on a wide width (ADR 0360)");
+        }
+        if (!pairCss.includes("border-left: 1px solid var(--hairline)")) {
+          throw new Error("the section pair's two areas are not divided by the hairline (ADR 0360)");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("no direction button stands picked until the founder picks it", async (ctx) => {
+    // ADR 0361 (Kasra's order, Nov 25 2026): on a fresh project the
+    // direction pairs show their standing defaults as VALUES — the
+    // plan still renders handheld and silent — but no button stands
+    // picked: a button earns the picked face only from a click, and
+    // a saved pick off the default (a click that was stored) stands
+    // picked on return. The write side already defined this: picking
+    // the default stores nothing (omitDefault in the draft reducer).
+    global.__SMOKE_PARAMS = "?project=p1";
+    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", voice_mode: "silent" };
+    try {
+      await withApi({
+        getStudioProject: async () => saved,
+        updateStudioProject: async (_id, patch) => {
+          saved = { ...saved, ...patch };
+          return saved;
+        },
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
+        const camGroup = ctx.container.querySelector('[data-testid="camera-setup"]');
+        if (!camGroup) throw new Error("the camera setup pair is gone");
+        if (camGroup.dataset.value !== "handheld") {
+          throw new Error("the untouched camera value moved off the handheld default (ADR 0361 changes faces, not values)");
+        }
+        for (const btn of camGroup.querySelectorAll("button")) {
+          if (btn.getAttribute("aria-pressed") === "true" || btn.classList.contains("thumb-selected")) {
+            throw new Error("a camera setup button stands picked before any click (ADR 0361)");
+          }
+        }
+        for (const id of ["voice-mode-talking", "voice-mode-silent"]) {
+          const btn = ctx.container.querySelector(`[data-testid="${id}"]`);
+          if (!btn) throw new Error(`the voice pair lost ${id}`);
+          if (btn.getAttribute("aria-pressed") === "true" || btn.classList.contains("thumb-selected")) {
+            throw new Error("a voice button stands picked before any click (ADR 0361)");
+          }
+        }
+        // The default still renders, so its guidance stands: a fresh
+        // project is silent at render (ADR 0248) and the note naming
+        // the text-to-speech line stays under the unpicked pair.
+        if (!ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent default's note vanished with its picked face (ADR 0361)");
+        }
+        await pickPairButton(ctx, "camera-setup", "fixed");
+        if (camGroup.querySelector('[data-value="fixed"]').getAttribute("aria-pressed") !== "true") {
+          throw new Error("the clicked camera pick does not stand picked");
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-talking"]'));
+        if (ctx.container.querySelector('[data-testid="voice-mode-talking"]').getAttribute("aria-pressed") !== "true") {
+          throw new Error("the clicked voice pick does not stand picked");
+        }
+        // A saved pick off the default stands picked on return.
+        await act(async () => ctx.root.render(null));
+        saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "fixed", voice_mode: "talking" };
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
+        if (ctx.container.querySelector('[data-testid="camera-setup"] [data-value="fixed"]').getAttribute("aria-pressed") !== "true") {
+          throw new Error("the saved camera pick does not stand picked on return (ADR 0361)");
+        }
+        if (ctx.container.querySelector('[data-testid="voice-mode-talking"]').getAttribute("aria-pressed") !== "true") {
+          throw new Error("the saved voice pick does not stand picked on return (ADR 0361)");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   await check("Create Video carries no flow switcher — the choice lives in the sidebar", async (ctx) => {
     // ADR 0251 (reversing 0248's placement, Kasra's ruling): the
     // "Make it another way" dropdown is gone from this page. The

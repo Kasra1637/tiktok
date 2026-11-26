@@ -21,6 +21,10 @@ import { GroupLabel } from "../SectionCard";
  *
  * The pick is the project's, saved through the same draft PATCH as
  * every other direction pick; this control only reports the choice.
+ * A caller may pass `pickedValue` to say which choice the buttons
+ * show as picked, separately from the mode `value` the note names
+ * (ADR 0361: Create passes "" while a project stands on its
+ * defaults, so no button reads as chosen before a click).
  * When silence is picked the note below the pills is part of the
  * feature, not decoration: it tells the founder the character will
  * be silent and names the exact text to paste into TikTok's
@@ -34,6 +38,7 @@ const OPTIONS = [
 
 export default function VoiceModeControl({
   value = "silent",
+  pickedValue,
   onChange,
   silentText = "",
   silentTextName = "the line",
@@ -41,6 +46,13 @@ export default function VoiceModeControl({
   testId = "voice-mode",
 }) {
   const current = value === "talking" ? "talking" : "silent";
+  // Which choice the buttons may show as picked (ADR 0361): a
+  // caller that tracks picks separately from the effective mode
+  // passes pickedValue — "" stands for no pick made, so neither
+  // button wears the picked face while the note below still names
+  // the mode that will render. A caller that passes nothing keeps
+  // the original face: the buttons follow the value itself.
+  const pickedCurrent = pickedValue === undefined ? current : pickedValue;
   const text = String(silentText || "").trim();
   return (
     <div className="space-y-2">
@@ -50,7 +62,7 @@ export default function VoiceModeControl({
           thumb-selected on the pick, as the 480p / 768p row stands. */}
       <div className="thumb-pair flex flex-wrap gap-2" role="group" aria-label="Presenter voice">
         {OPTIONS.map((option) => {
-          const picked = current === option.value;
+          const picked = pickedCurrent === option.value;
           return (
             <Button
               key={option.value}

@@ -2444,6 +2444,47 @@ h1,
     box-shadow: 0 0 0 3px var(--indigo-15);
 }
 
+/* ---------- Section pair ----------
+   Two subsections of ONE section standing side by side (ADR 0360):
+   a chrome-less grid a section drops two of its own areas into —
+   no card, no border of its own, nothing a reader would call a
+   container. Stacked, the second area takes the section's own
+   divider (a hairline with the section's 0.75rem rhythm around
+   it). From 1024px the two stand in equal columns with a wide
+   channel between them and the hairline standing in the middle
+   of that channel — the second area's left border plus its left
+   padding are the channel's far half — so the areas read as two
+   columns of one section, divided cleanly, never as two cards.
+   Any section can lay two areas in it; the pair owns only the
+   divider and the spacing, never the areas' insides. */
+.section-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+}
+.section-pair > * + * {
+    border-top: 1px solid var(--hairline);
+    padding-top: 0.75rem;
+}
+@media (min-width: 1024px) {
+    .section-pair {
+        /* The two-column spelling is ADR 0153's own (repeat(2, …)):
+           the History proportion check scans this stylesheet for a
+           literal two-minmax template after the history rules and
+           would read this pair's columns as the History card's —
+           the repeat spelling is the house form for two equal
+           columns and keeps that check reading only its own card. */
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 2rem;
+    }
+    .section-pair > * + * {
+        border-top: none;
+        padding-top: 0;
+        border-left: 1px solid var(--hairline);
+        padding-left: 2rem;
+    }
+}
+
 /* ---------- Shared keyboard focus ring for pressable chips and swatches ----------
    Transport and icon buttons carry their own focus-visible ring inline, but
    the chip grids, swatches, presets and text buttons below had none — keyboard
