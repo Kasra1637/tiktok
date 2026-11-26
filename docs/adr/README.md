@@ -372,3 +372,5 @@ come from the architecture map and code, not an old record's UI description.
 | [0347](0347-a-blurred-render-is-refused-at-delivery.md) | A blurred render is refused at delivery: sharpness measured through the clip, a wall-to-wall blur fails the generation instead of delivering |
 | [0348](0348-the-open-last-line-is-the-demo-handoff.md) | The open last line is the Demo handoff: the script answers in its first clause, lands the shift before the end, and is never a quote, a narration, a hook repeat, or a vague stand-in |
 | [0349](0349-reasoning-returns-to-extra-high.md) | Reasoning returns to extra high: every call and the plan chain run at xhigh, superseding the medium pin |
+| [0350](0350-the-effort-is-a-verb-in-motion.md) | The effort is a verb in motion: the hook opens on the striving itself against the loss, and the cover carries the same race in miniature |
+| [0351](0351-a-hooksnap-video-is-always-five-seconds.md) | A HookSnap video is always five seconds: the 4/5 length pick and its buttons are removed, the hook subtitle states the fixed length, and the server pins every HookSnap generation and render to five |

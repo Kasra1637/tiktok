@@ -5333,8 +5333,11 @@ async function main() {
       }
     }
     const cta = fs.readFileSync(path.join(SRC, "pages/HookCta.jsx"), "utf8");
-    if (cta.includes(' id="hook-cta-frame-length"')) {
-      throw new Error("the hook length is still a dropdown (ADR 0329)");
+    if (cta.includes("hook-cta-frame-length") || cta.includes("Hook length")) {
+      throw new Error("the hook length pick still stands on HookSnap (ADR 0351: always five seconds, no 4/5 buttons)");
+    }
+    if (!cta.includes("One line from your app and your direction, five seconds.")) {
+      throw new Error("the hook subtitle no longer states the fixed five seconds (ADR 0351)");
     }
   });
 
@@ -14854,13 +14857,15 @@ async function runHookCtaChecks() {
     });
   });
 
-  await check("the length pick on a written hook saves, and the render button stays enabled", async (ctx) => {
-    // The other half of the button fix (ADR 0246): the pick rides the
-    // shared studio PATCH, whose wizard duration rules used to clamp
-    // a hook's 4s to 8 or refuse it outright once a hook existed —
-    // the autosave then never settled and the render gate read the
-    // edits as still saving forever. The backend behavior is pinned
-    // in test_hook_cta_api.py; this pins the page's side of the flow.
+  await check("a written hook carries no length pick, and the render submits at five seconds", async (ctx) => {
+    // ADR 0351: the 4/5 length pick is gone — a HookSnap video is
+    // always five seconds, stated in the hook card's subtitle, and
+    // the server pins the length on its side too (test_hook_cta_api.py).
+    // What this pins is the page's side: no length control renders,
+    // nothing needs picking or saving before the render, and the
+    // render submits at five seconds. (The ADR 0246 autosave-settle
+    // hazard this check used to guard rode on the pick's PATCH; with
+    // no pick there is no such save.)
     const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
     let row = hookRow({ id: "hook-cta-1", duration_seconds: 5, hook_line: HOOK, assets: face });
     const patches = [];
@@ -14877,32 +14882,28 @@ async function runHookCtaChecks() {
         getGenerations: async () => ({ generations: [] }),
         generateHookCta: async (_id, payload) => {
           submits.push(payload);
-          return { ...SEGMENT, id: "gen-hook-4", status: "submitted", duration: 4 };
+          return { ...SEGMENT, id: "gen-hook-5", status: "submitted", duration: 5 };
         },
       },
       "",
       async () => {
-        const pill = ctx.container.querySelector('[data-testid="hook-cta-frame-length-4"]');
-        if (!pill) throw new Error("the hook length pills did not render");
-        await clickEl(ctx, pill, "the 4 seconds pill");
-        // The autosave debounce is a second; give the save its time.
-        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
-        if (!patches.some((p) => p.duration_seconds === 4)) {
-          throw new Error(`the length pick never reached the save: ${JSON.stringify(patches)}`);
+        if (ctx.container.querySelector('[data-testid^="hook-cta-frame-length"]')) {
+          throw new Error("a hook length control still renders on the hook card");
         }
-        if (!saveStatus(ctx) || !saveStatus(ctx).textContent.includes("All changes saved")) {
-          throw new Error(`the pick did not settle as saved: ${saveStatus(ctx)?.textContent || ""}`);
+        const hookCard = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
+        if (!hookCard || !(hookCard.textContent || "").includes("five seconds")) {
+          throw new Error("the hook card's subtitle does not state the five seconds");
         }
         const gate = ctx.container.querySelector('[data-testid="hook-render-gate"]');
-        if (gate) throw new Error(`the render is gated after the pick saved: ${gate.textContent}`);
+        if (gate) throw new Error(`the render is gated with nothing picked: ${gate.textContent}`);
         const button = ctx.container.querySelector('[data-testid="hook-render-generate"]');
         if (!button || button.disabled) {
-          throw new Error("the render button is disabled after the length pick saved");
+          throw new Error("the render button is disabled on a written hook");
         }
         await clickEl(ctx, button);
         await act(async () => {});
-        if (submits.length !== 1 || submits[0].duration_seconds !== 4) {
-          throw new Error(`the render did not submit at the picked 4s: ${JSON.stringify(submits)}`);
+        if (submits.length !== 1 || submits[0].duration_seconds !== 5) {
+          throw new Error(`the render did not submit at five seconds: ${JSON.stringify(submits)}`);
         }
       }
     );

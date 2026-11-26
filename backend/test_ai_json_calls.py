@@ -2059,6 +2059,29 @@ class TestDirectionRefreshBudget:
         assert "Grammar words" in block
         assert "synonym" in block
 
+    def test_spoken_rules_open_on_a_verb_in_motion(self):
+        """ADR 0350 (Kasra's rule, from his own line): the shared
+        block opens the hook on the striving itself — a verb of
+        active effort against the loss — never a bare statement
+        of intent, and the verb changes with the scenario."""
+        import ai_service
+        block = ai_service._spoken_line_rules_block()
+        assert "THE EFFORT IS A VERB IN MOTION" in block
+        assert "I'm racing to name" in block
+        assert "only reports that she means to" in block
+        assert "no two hooks open the same way" in block
+
+    def test_cover_rules_carry_the_race_in_miniature(self):
+        """ADR 0350 extended to the cover (Kasra: "let's do that
+        on the cover text too"): the cover block compresses the
+        hook's race — a verb in motion plus the loss — into its
+        3 to 5 words, never a plain question or a topic label."""
+        import ai_service
+        block = ai_service._cover_text_rules_block()
+        assert "THE RACE IN MINIATURE" in block
+        assert "Chasing it before it slips" in block
+        assert "never a plain question" in block
+
     def test_spoken_rules_score_the_open_ending_as_demo_handoff(self):
         """ADR 0348 (Kasra's dictation): the shared block ties the
         script's open last line to the Demo handoff score and bans

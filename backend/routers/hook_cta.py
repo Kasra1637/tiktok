@@ -123,7 +123,10 @@ async def create_hook_cta_project(
     surface marker 'hook_cta' (ADR 0244, migration step 9): same table,
     same PATCH, same reads — only the create path and the hook/generate
     endpoints are page-shaped. The wizard's create cannot be reused:
-    its duration clamp floors at 8 seconds, and a hook runs 4 or 5.
+    its duration clamp floors at 8 seconds, and a hook runs five
+    seconds — always (ADR 0351): the length is not a pick, so the
+    row is born at five whatever frame a legacy client still asks
+    for; a frame outside the old 4/5 pair is still refused.
     hook_seconds is stored at 4, the shared machinery's widest hook
     window: the render counts the hook's words first against that
     window's ceiling, and the line is generated under the frame's own
@@ -137,12 +140,13 @@ async def create_hook_cta_project(
     """
     profile = await _require_profile_for_studio(payload.brand_profile_id, user_id)
 
-    seconds = payload.frame_seconds or 5
-    if seconds not in SHORT_HOOK_SECONDS:
+    requested = payload.frame_seconds or 5
+    if requested not in SHORT_HOOK_SECONDS:
         raise HTTPException(
             status_code=400,
-            detail="A hook runs 4 or 5 seconds.",
+            detail="A hook runs five seconds.",
         )
+    seconds = 5
 
     project_id = str(uuid.uuid4())
     now = now_iso()
@@ -223,12 +227,15 @@ async def generate_hook_cta_hook(
     profile = await _require_profile_for_studio(row.get("brand_profile_id"), user_id)
     _refuse_retired_project_assets(row.get("assets"))
 
-    seconds = payload.frame_seconds or int(row.get("duration_seconds") or 0)
-    if seconds not in SHORT_HOOK_SECONDS:
+    requested = payload.frame_seconds or int(row.get("duration_seconds") or 0)
+    if requested not in SHORT_HOOK_SECONDS:
         raise HTTPException(
             status_code=400,
-            detail="A hook runs 4 or 5 seconds.",
+            detail="A hook runs five seconds.",
         )
+    # ADR 0351: always five seconds — the stored or requested frame
+    # no longer sets the length on this surface.
+    seconds = 5
 
     hook_project = dict(row)
     hook_project["duration_seconds"] = seconds
@@ -336,12 +343,14 @@ async def generate_hook_cta(
     _assert_model_usable(payload.model or "")
     _assert_resolution_offered(payload.model or "", payload.resolution)
 
-    seconds = int(payload.duration_seconds or row.get("duration_seconds") or 0)
-    if seconds not in SHORT_HOOK_SECONDS:
+    requested = int(payload.duration_seconds or row.get("duration_seconds") or 0)
+    if requested not in SHORT_HOOK_SECONDS:
         raise HTTPException(
             status_code=400,
-            detail="A hook runs 4 or 5 seconds.",
+            detail="A hook runs five seconds.",
         )
+    # ADR 0351: the render is always five seconds on this surface.
+    seconds = 5
     _assert_within_single_pass_cap(
         video_providers.resolve(payload.model or None)[0], seconds)
 

@@ -185,7 +185,9 @@ class TestCreateHookCtaProject:
 
     def test_create_accepts_the_four_second_pick(self, api):
         project, _ = _hook_cta(api, "Create Four", frame_seconds=4)
-        assert project["duration_seconds"] == 4
+        # ADR 0351: a legacy 4s ask is accepted and lands at five —
+        # the length is no longer a pick.
+        assert project["duration_seconds"] == 5
 
     def test_create_refuses_a_length_outside_the_pick(self, api):
         from models import CreateHookCtaProjectRequest
@@ -231,7 +233,8 @@ class TestHookEndpoint:
         _stub_hook_model(api, monkeypatch)
         out = _run(api.generate_hook_cta_hook(
             project["id"], GenerateHookLineRequest(frame_seconds=4), ANON))
-        assert out["duration_seconds"] == 4
+        # ADR 0351: generation resolves to five seconds regardless.
+        assert out["duration_seconds"] == 5
 
     def test_hook_refuses_a_wizard_project(self, api):
         from models import CreateStudioProjectRequest, GenerateHookLineRequest
@@ -680,22 +683,24 @@ class TestGenerateHook:
         assert exc.value.status_code == 409
         assert "hook" in exc.value.detail.lower()
 
-    def test_a_four_second_hook_records_a_trim_to_four(self, api, monkeypatch):
+    def test_a_legacy_four_second_ask_still_renders_at_five(self, api, monkeypatch):
         from models import GenerateHookRequest
         project = self._ready(api, monkeypatch, "Generate Four", frame_seconds=4)
         calls = _mock_submit(api, monkeypatch)
         _silence_poster(api, monkeypatch)
         generation = _run(api.generate_hook_cta(
             project["id"], GenerateHookRequest(), ANON))
-        # The submit asks for the pick's own seconds (exact-duration).
-        assert calls[0]["duration"] == 4
+        # ADR 0351: the length is not a pick — the submit asks for
+        # five seconds (exact-duration) whatever the project asked
+        # for when it was created, and at five there is no trim.
+        assert calls[0]["duration"] == 5
         row = _run(api._fetch_one(
             "SELECT trim_to_seconds, duration, requested_duration"
             " FROM generations WHERE id = ?",
             (generation["id"],)))
-        assert row["duration"] == 4
-        assert row["requested_duration"] == 4
-        assert row["trim_to_seconds"] == 4
+        assert row["duration"] == 5
+        assert row["requested_duration"] == 5
+        assert row["trim_to_seconds"] == 0
 
     def test_a_five_second_hook_records_no_trim(self, api, monkeypatch):
         from models import GenerateHookRequest

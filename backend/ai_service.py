@@ -4442,7 +4442,11 @@ def _cover_text_rules_block() -> str:
         "- The ache up front, in plain words, with one concrete felt detail — never the place.\n"
         "- It works WITH the opening image: never repeat what the picture already shows.\n"
         "- It withholds the resolution — the video still has something to answer.\n"
-        "- Never a copy of the spoken hook: a second angle on the same moment, not a duplicate."
+        "- Never a copy of the spoken hook: a second angle on the same moment, not a duplicate.\n"
+        "- THE RACE IN MINIATURE (ADR 0350, Kasra's rule): the cover carries the hook's race "
+        "compressed into its few words — a verb in motion and what she stands to lose "
+        "('Chasing it before it slips'), never a plain question and never a bare topic "
+        "label; the motion and the cost do the stopping."
     )
 
 
@@ -4552,6 +4556,14 @@ def _spoken_line_rules_block() -> str:
         "what keeps going wrong while she tries ('...and I keep losing "
         "count') — because a bare attempt only states a situation, and a "
         "situation does not stop a scroll. "
+        "THE EFFORT IS A VERB IN MOTION (ADR 0350, Kasra's rule): open "
+        "on the striving itself, already moving — 'I'm racing to name "
+        "this tight feeling before it slips' — never a bare statement "
+        "of intent: 'I'm trying to…' only reports that she means to. A "
+        "verb of active effort (racing, catching, holding on, chasing) "
+        "puts her mid-effort from the first word, against the loss the "
+        "line names. Pick the verb the moment earns — it changes with "
+        "the scenario, so no two hooks open the same way. "
         "WITHHOLD THE RESOLUTION: name the problem and stop there — no fix, "
         "no payoff, no what worked — and the last words leave the pain "
         "pointing forward, so the demo that follows lands as the answer "

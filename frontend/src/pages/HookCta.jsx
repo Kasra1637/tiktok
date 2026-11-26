@@ -23,7 +23,7 @@ import { PresenterPhotoControl } from "../components/studio/SelectionPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
 import HookRenderPanel from "../components/studio/HookRenderPanel";
 import VoiceModeControl from "../components/studio/VoiceModeControl";
-import HookPicksControl, { PickPills, profileOutcomeLines, profileOutcomeMenuStale } from "../components/studio/HookPicksControl";
+import HookPicksControl, { profileOutcomeLines, profileOutcomeMenuStale } from "../components/studio/HookPicksControl";
 import PostKitSection from "../components/PostKitSection";
 import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { useWizardDirections } from "./useWizardDirections";
@@ -72,7 +72,6 @@ import {
 
 // The hook's length pick (ADR 0244): the backend's SHORT_HOOK_SECONDS,
 // mirrored — the pick is the whole set, there is no third length.
-const HOOK_FRAME_SECONDS = [4, 5];
 
 function createHookCtaDraft({ profileId = "" } = {}) {
   return { profileId, project: null, edits: {} };
@@ -702,26 +701,12 @@ export default function HookCta() {
             <SectionCard title="The hook" icon={Zap} data-testid="hook-cta-hook-card">
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground" data-subtitle="">
-                  One line, written from your app and the direction you set.
+                  One line from your app and your direction, five seconds.
                 </p>
-                <div className="space-y-2">
-                  <span className="text-sm font-semibold">Hook length</span>
-                  {/* ADR 0329: two options stand side by side as the
-                      page's own pick pills — a dropdown is for four
-                      options or more. */}
-                  <PickPills
-                    testId="hook-cta-frame-length"
-                    ariaLabel="Hook length"
-                    current={String(editValue("duration_seconds", 5))}
-                    onChange={(value) =>
-                      editField("duration_seconds", Number(value), { omitDefault: true })
-                    }
-                    options={HOOK_FRAME_SECONDS.map((seconds) => ({
-                      value: String(seconds),
-                      label: `${seconds} seconds`,
-                    }))}
-                  />
-                </div>
+                {/* ADR 0351: no hook length pick — a HookSnap video is
+                    always five seconds, so there is nothing to choose
+                    and no 4/5 buttons to show. The server pins the
+                    length the same way. */}
                 {/* The steering picks (ADR 0247) stand above the
                     generate action they steer: the focus, tone and
                     shape the hook is written with, each defaulting
