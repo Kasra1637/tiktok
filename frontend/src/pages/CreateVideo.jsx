@@ -61,7 +61,7 @@ import { useDesktopWidth } from "../lib/desktopWidth";
 import { readPieceSeconds } from "../lib/videoLength";
 // FileText was the "Creative plan" step's icon. That step held nothing but a
 // button and is now the top of Review, so the icon went with it.
-import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Smartphone, X, Lock, Play, Camera, MapPin, Shirt } from "lucide-react";
+import { Clapperboard, TriangleAlert as AlertTriangle, Briefcase, Target, Check, Sparkles, RefreshCw, Save, CircleCheck as CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, FileText, AudioLines, ListChecks, ShieldCheck, Smartphone, X, Lock, Play, Camera, MapPin, Shirt, PenLine, Ruler } from "lucide-react";
 // toast left with AttachedPhoto, the only place on this page that raised one.
 // Detaching now happens inside the photo section, which reports its own
 // outcome.
@@ -377,7 +377,7 @@ function CraftCheckCard({ report }) {
           </span>
         </div>
         <div className="min-w-0 space-y-1">
-          <p className="text-sm font-semibold">Craft check</p>
+          <GroupLabel icon={ShieldCheck}>Craft check</GroupLabel>
           <p className="text-sm text-muted-foreground">
             {formatScore10(total10)}/10
           </p>
@@ -2201,9 +2201,6 @@ export default function CreateVideo() {
                because the app list is the panel's content, not a gallery. */
             <div className="inset-panel space-y-4" data-testid="app-profile-picker">
               <GroupLabel icon={ListChecks}>Choose an app</GroupLabel>
-              <p className="text-sm text-muted-foreground" data-subtitle="">
-                Only approved App Profiles can make a video in this studio.
-              </p>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 {approved.map((p) => (
                   <button
@@ -2235,9 +2232,9 @@ export default function CreateVideo() {
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-base font-semibold">
+                  <GroupLabel>
                     {describeUnapprovedCount(unapproved.length)}
-                  </p>
+                  </GroupLabel>
                   <p className="mt-1 text-sm text-muted-foreground" data-subtitle="">
                     Draft profiles need review before a video can use them.
                   </p>
@@ -2451,11 +2448,12 @@ export default function CreateVideo() {
                   >
                     <Sparkles className="h-3.5 w-3.5" /> {tailoring ? "Tailoring your template" : "Generate tailored templates"}
                   </Button>
-                  {!tailoring && (
-                    <p className="text-sm text-muted-foreground">
-                      Tailoring runs only when you click it — switching goals never starts it.
-                    </p>
-                  )}
+                  {/* The helper line that stood under this button,
+                      saying tailoring runs only on its click, is
+                      removed on Kasra's explicit order (ADR 0367) —
+                      display only: tailoring still runs solely from
+                      this click, and switching goals still never
+                      starts it. */}
                 </div>
               )}
             </div>
@@ -2623,24 +2621,13 @@ export default function CreateVideo() {
                   </p>
                 )}
               </div>
-              {(editValue("visual_direction", "") || editValue("voice_direction", "")) && (
-                <div className="inset-panel space-y-1" data-testid="direction-live-preview">
-                  <p className="text-sm font-semibold">What will render</p>
-                  {editValue("visual_direction", "") && (
-                    <p className="text-sm text-muted-foreground">
-                      Scene: {sentenceCase(editValue("visual_direction", ""))}
-                    </p>
-                  )}
-                  {editValue("voice_direction", "") && (
-                    <p className="text-sm text-muted-foreground">
-                      Voice: {sentenceCase(editValue("voice_direction", ""))}
-                    </p>
-                  )}
-                  <p className="text-sm text-muted-foreground" data-subtitle="">
-                    Saved here first; the plan and render read these words.
-                  </p>
-                </div>
-              )}
+              {/* The "What will render" preview that stood here is
+                  removed whole (ADR 0367, Kasra's order folding into
+                  this build): heading, Scene and Voice readouts and
+                  subtitle alike. It was display only — a readout of
+                  the draft's saved direction — so nothing about the
+                  save, the plan or the render changes with it gone;
+                  the picks above remain the section's whole state. */}
             </Disclosure>
 
             {/* Angle, goal, template and photo share one step now: the angle
@@ -2903,9 +2890,6 @@ export default function CreateVideo() {
                 <p className="text-base text-muted-foreground">
                   The plan didn't generate. Fix what's missing below, then try again — still free.
                 </p>
-                <p className="text-sm text-muted-foreground" data-subtitle="">
-                  Writes hook, script, shots, and demo note. Editable below.
-                </p>
               </>
             )}
           </div>
@@ -2944,9 +2928,6 @@ export default function CreateVideo() {
               <Sparkles className="h-4 w-4" />
               Generate your plan
             </Button>
-            <p className="text-base text-muted-foreground">
-              Builds your hook, script, shots, and demo note from your profile, your angle, and your goal.
-            </p>
           </div>
         ) : !project?.script_version ? (
           /* No plan and a profile, a template or the goal is missing. Name
@@ -3037,7 +3018,7 @@ export default function CreateVideo() {
                 words; a plan holding words is never hidden. */}
             {planEmpty ? (
               <div className="inset-panel space-y-2" data-testid="plan-empty-notice">
-                <p className="text-base font-semibold">This plan is empty</p>
+                <GroupLabel>This plan is empty</GroupLabel>
                 <p className="text-sm text-muted-foreground">
                   The plan on file holds no words — the hook, script and cover are
                   blank, so there is nothing to read or render yet. Regenerate the
@@ -3084,10 +3065,7 @@ export default function CreateVideo() {
               <div className="inset-panel">
                 <GroupLabel icon={Target}>What this is aiming to leave them with</GroupLabel>
                 <p className="mt-1 text-base">{sentenceCase(template.outcome.trim())}</p>
-                <p className="mt-1 text-sm text-muted-foreground" data-subtitle="">
-                  The outcome this template is built for, in their terms.
-                </p>
-                {/* Its own line, not a clause of the subtitle above: this is the
+                {/* Its own line, not a clause of a subtitle: this is the
                     honesty guardrail — the outcome is a framing to write toward,
                     never a promise about what the video will do. Folding it into
                     the subtitle is exactly how it got cut once already, and the
@@ -3133,8 +3111,7 @@ export default function CreateVideo() {
               {spokenCountNote(editValue("hook_line", ""), project?.spoken_check?.hook)}
             </p>
             <div className="space-y-4">
-              <label htmlFor="review-script" className="text-sm font-semibold">Script</label>
-              <p className="text-sm text-muted-foreground" data-subtitle="">The spoken story after the hook — demo and CTA stay yours.</p>
+              <GroupLabel as="label" htmlFor="review-script" icon={PenLine}>Script</GroupLabel>
               {/* The script stands in the generated-text highlight too
                   (ADR 0258), the hook's treatment: the same textarea
                   inside, still growing with its words, still counted
@@ -3227,9 +3204,9 @@ export default function CreateVideo() {
                 the render, so correcting it here cannot smuggle a feature
                 instruction back into the video. */}
             <div className="inset-panel space-y-4">
-              <label htmlFor="review-demo-brief" className="text-sm font-semibold">
+              <GroupLabel as="label" htmlFor="review-demo-brief" icon={Clapperboard}>
                 What the demo should show
-              </label>
+              </GroupLabel>
               {/* The demo brief joins the spoken lines' highlight
                   family (ADR 0191, treatment by ADR 0258): the same
                   light wash, fitted to its content by the textarea's
@@ -3248,9 +3225,6 @@ export default function CreateVideo() {
                   placeholder="For example: A spoken recap of one call, then the weekly mood reports screen"
                 />
               </div>
-              <p className="text-sm text-muted-foreground" data-subtitle="">
-                A note about your own recording — never reaches the render.
-              </p>
             </div>
             {/* No direction editing here (ADR 0220): the Visual & audio
                 direction section lives on the Audience & template step,
@@ -3301,7 +3275,7 @@ export default function CreateVideo() {
                 length is a different template and a regenerated plan. */}
             <div className="inset-panel space-y-1" data-testid="piece-length">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-semibold">Length of the generated piece</span>
+                <GroupLabel icon={Ruler}>Length of the generated piece</GroupLabel>
                 <span className="text-base">{pieceSeconds} seconds</span>
               </div>
               <p className="text-sm text-muted-foreground">

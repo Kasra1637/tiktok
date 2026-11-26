@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { GroupLabel } from "../SectionCard";
 
@@ -14,8 +15,9 @@ import { GroupLabel } from "../SectionCard";
  * `labelIcon`, in which case it wears the shared GroupLabel face —
  * the uppercase eyebrow with the icon at its left (ADR 0362:
  * Create's direction section unifies its four group headings on
- * that face; HookSnap passes nothing and keeps the plain label).
- * The "New options" action sits beside the label either way.
+ * that face; ADR 0364: HookSnap's card passes its icons too, so
+ * both pages' Location and Wardrobe wear the face). The "New
+ * options" action sits beside the label either way.
  */
 // Kasra's cap (ADR 0332): a direction button's text never runs
 // past 25 characters, so the row stays a row of buttons instead
@@ -78,20 +80,48 @@ export function DirectionSelect({
   // { onRefresh, refreshing, refreshTestId }.
   refresh = null,
 }) {
-  // Three options stand side by side (ADR 0330, as corrected at
-  // Kasra's live review), wearing the resolution treatment (ADR
-  // 0331): the shared Button in a thumb-pair row, brand and
-  // thumb-selected on the pick, exactly as the render panels'
-  // 480p / 768p row stands — spaced by the row's gap, never stuck
-  // together, and "New options" above brings the next set when
-  // none of the three fits. A saved pick outside the shown three
-  // still applies: it takes the last seat, so what applies is
-  // always on a lit button. The notes beside the control say so,
-  // exactly as they did for the dropdown.
+  // The options stand side by side wearing the resolution
+  // treatment (ADR 0331): the shared Button in a thumb-pair row,
+  // brand and thumb-selected on the pick, exactly as the render
+  // panels' 480p / 768p row stands — spaced by the row's gap,
+  // never stuck together.
+  //
+  // ADR 0365 (Kasra's rule, Nov 26 2026): TWO buttons stand by
+  // default, not three. The rest of the set stands only once the
+  // founder presses "New options": the press reveals the set in
+  // place, and the refreshed set that lands in answer stays
+  // revealed. A set that arrives any other way — a profile or
+  // camera change re-reads the lists — starts at two again. The
+  // last-seat rule survives at the smaller width, reconciled with
+  // it: a saved pick outside the visible two takes the SECOND
+  // seat beside the first option (where the three-wide row seated
+  // it last of three), so what applies is always on a lit button
+  // and never hides behind the reveal.
   const all = options || [];
-  let shown = all.slice(0, 3);
-  if (value && all.includes(value) && !shown.includes(value)) {
-    shown = [...all.slice(0, 2), value];
+  const [revealed, setRevealed] = useState(false);
+  const revealEarnedRef = useRef(false);
+  const optionsSeenRef = useRef(options);
+  useEffect(() => {
+    if (optionsSeenRef.current !== options) {
+      optionsSeenRef.current = options;
+      if (!revealEarnedRef.current) setRevealed(false);
+      revealEarnedRef.current = false;
+    }
+  }, [options]);
+  const wasRefreshingRef = useRef(false);
+  useEffect(() => {
+    // A refresh that fails lands no new set: its press must not
+    // keep a later, unrelated set revealed. Once the flight
+    // settles, the earned reveal is spent — the options effect
+    // above has already honored it if a set landed with it.
+    if (wasRefreshingRef.current && !refresh?.refreshing) {
+      revealEarnedRef.current = false;
+    }
+    wasRefreshingRef.current = Boolean(refresh?.refreshing);
+  }, [refresh?.refreshing]);
+  let shown = revealed ? all : all.slice(0, 2);
+  if (!revealed && value && all.includes(value) && !shown.includes(value)) {
+    shown = [all[0], value];
   }
   return (
     <div className="space-y-2">
@@ -104,7 +134,11 @@ export function DirectionSelect({
         {refresh && (
           <button
             type="button"
-            onClick={refresh.onRefresh}
+            onClick={() => {
+              revealEarnedRef.current = true;
+              setRevealed(true);
+              refresh.onRefresh();
+            }}
             disabled={disabled || refresh.refreshing}
             data-testid={refresh.refreshTestId}
             className="shrink-0 text-sm text-muted-foreground underline disabled:opacity-50"

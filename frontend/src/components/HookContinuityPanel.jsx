@@ -14,7 +14,7 @@ import { plannedSections } from "../lib/videoLength";
 import { sentenceCase } from "../lib/copyCase";
 import { directionDrifted } from "../lib/strategyStaleness";
 import {
-  AlertTriangle, Info, MapPin, ShieldQuestion, Sparkles, Target,
+  AlertTriangle, Info, Lightbulb, ListChecks, MapPin, ShieldQuestion, Sparkles, Target, Zap,
 } from "lucide-react";
 import { Disclosure } from "./Disclosure";
 import { GroupLabel } from "./SectionCard";
@@ -191,10 +191,10 @@ function afterFirstSentence(text) {
  * the Location editor, the rating and the render controls) stay open; the
  * explanations do not have to be read to use the page.
  */
-function CollapsedGroup({ testId, title, digest, expandable = true, children }) {
+function CollapsedGroup({ testId, title, icon, digest, expandable = true, children }) {
   const header = (
     <span className="flex min-w-0 flex-col gap-1 text-left">
-      <GroupLabel>{title}</GroupLabel>
+      <GroupLabel icon={icon}>{title}</GroupLabel>
       {digest && (
         <span className="text-sm font-normal leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
           {digest}
@@ -578,10 +578,9 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
           you have, and what is left"), and once at the page level ("This
           studio creates the Hook + Story clip only..."), which is where the
           app's "nothing is published for you" note lives. A fourth copy in the
-          strategy header said nothing the other three had not. */}
-      <p className="text-sm text-muted-foreground">
-        This strategy guides the Hook + Story render.
-      </p>
+          strategy header said nothing the other three had not. The standing
+          line that named what this panel does is removed too (ADR 0369):
+          the heading above says it, and the panel's content shows it. */}
 
       {error && (
         <Alert variant="destructive" data-testid="strategy-error">
@@ -679,13 +678,10 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
             Pick an audience angle on the Audience &amp; template step first — the strategy is built around it.
           </p>
         )}
-        {!busy && !suggesting && !hasStrategy && !needsAngle && (
-          <p className="text-sm text-muted-foreground">
-            Text only. It fixes the concept, the words and the locked scene so
-            the one render is about this app rather than a generic take with a
-            name in it.
-          </p>
-        )}
+        {/* The standing line that described what a build produces
+            ("Text only. It fixes the concept…") is removed (ADR
+            0369): the empty state below names the shape of what
+            comes back, and the button names the act. */}
       </div>
 
       {suggestion && (
@@ -722,13 +718,13 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
               <div className="space-y-3">
                 <p className="eyebrow">Your saved words</p>
                 <div>
-                  <p className="text-sm font-semibold">Hook</p>
+                  <p className="eyebrow">Hook</p>
                   <p className="text-base leading-relaxed" data-testid="suggestion-current-hook">
                     {suggestion.current?.hook_line}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-semibold">Script</p>
+                  <p className="eyebrow">Script</p>
                   <p className="text-base leading-relaxed" data-testid="suggestion-current-script">
                     {suggestion.current?.script}
                   </p>
@@ -737,7 +733,7 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
               <div className="space-y-3">
                 <p className="eyebrow">Refreshed for the new direction</p>
                 <div>
-                  <p className="text-sm font-semibold">Hook</p>
+                  <p className="eyebrow">Hook</p>
                   <p className="text-base leading-relaxed" data-testid="suggestion-new-hook">
                     {suggestion.suggestion?.hook_line || suggestion.current?.hook_line}
                   </p>
@@ -748,7 +744,7 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
                   )}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold">Script</p>
+                  <p className="eyebrow">Script</p>
                   <p className="text-base leading-relaxed" data-testid="suggestion-new-script">
                     {suggestion.suggestion?.script || suggestion.current?.script}
                   </p>
@@ -787,21 +783,16 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
            SHAPE of what comes back is, and that is what was missing. */
         <div className="space-y-3 rounded-xl border border-dashed border-[color:var(--hairline)] p-3">
           <div className="space-y-1">
-            <GroupLabel>What you get</GroupLabel>
+            <GroupLabel icon={ListChecks}>What you get</GroupLabel>
+            {/* ADR 0369: the list names the shape only — the two
+                role names. Both per-role descriptive lines (the
+                section copy that also serves the readout below, and
+                the role note under it) are removed from this empty
+                state; SectionRow's readout keeps its copy whole. */}
             <ol className="space-y-2 text-base">
               {["hook", "middle"].map((role) => (
                 <li key={role} className="space-y-1">
-                  <span className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold capitalize">{role}</span>
-                    <span className="text-sm text-muted-foreground">{sectionCopy(role, cameraSetup)}</span>
-                  </span>
-                  <p className="text-sm text-muted-foreground">
-                    {role === "hook"
-                      ? "The opening concept and the words, from the plan you approved."
-                      : cameraSetup === "fixed"
-                        ? "What the presenter does next, ending where you would reach for your phone."
-                        : "What the presenter does next, ending on the payoff words and one short physical beat."}
-                  </p>
+                  <span className="font-semibold capitalize">{role}</span>
                 </li>
               ))}
             </ol>
@@ -829,6 +820,7 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
             <CollapsedGroup
               testId="strategy-hook-concept"
               title="Hook concept"
+              icon={Zap}
               digest={summaryLine(strategy.hook_concept)}
             >
               <div className="max-w-3xl space-y-2 border-l-2 border-[color:var(--indigo-35)] pl-4">
@@ -859,6 +851,7 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
             <CollapsedGroup
               testId="strategy-why-it-works"
               title="Why this works for this app"
+              icon={Lightbulb}
               digest={summaryLine(strategy.strategy_summary)}
               expandable={Boolean(summaryRest)}
             >
@@ -880,6 +873,7 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
             <CollapsedGroup
               testId="strategy-viewer-outcome"
               title="What the viewer ends up with"
+              icon={Target}
               digest={summaryLine(strategy.desired_outcome || strategy.mechanism_beat || strategy.payoff_beat)}
               expandable={outcomeRows.length > 0}
             >
@@ -902,6 +896,7 @@ export function HookContinuityPanel({ project, onProjectChange, onActionChange, 
             <CollapsedGroup
               testId="strategy-scene-details"
               title="Scene details"
+              icon={MapPin}
               digest={sceneDigest}
             >
               <StrategyBlock

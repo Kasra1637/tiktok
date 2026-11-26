@@ -18,21 +18,10 @@ import { TriangleAlert as AlertTriangle, Target, Check, Sparkles, RefreshCw, Max
 
 import AssetLibrary from "../../pages/AssetLibrary";
 
-/* The single instruction for the angle picker, shared by the empty state
-   (click generates the four) and the reveal state (click shows the four).
-   One line on purpose: three stacked explanations said the same thing in
-   different words, and the step stalled on reading instead of moving. The
-   verb is deliberately neutral — "get" covers generating fresh angles and
-   revealing pre-generated ones, so the line never disagrees with its button. */
-const ANGLES_CTA_COPY = "Get four audience angles, then pick one to move forward.";
-
-/* The single instruction for the goal picker, shared by the empty state
-   (click generates the six) and the reveal state (click shows the six).
-   One line on purpose: three stacked explanations said the same thing in
-   different words, and the step stalled on reading instead of moving. The
-   verb is deliberately neutral — "get" covers generating fresh goals and
-   revealing pre-generated ones, so the line never disagrees with its button. */
-const GOALS_CTA_COPY = "Get your top three video goals for this angle, then pick one to move forward.";
+/* ADR 0367: the angle and goal pickers' shared CTA copy lines are
+   removed — the gate buttons name their own action, and a standing
+   line under each only restated it. The empty states now stand on
+   their buttons alone. */
 
 function formatTemplateUse(n) {
   if (!n) return "Never used";
@@ -456,11 +445,6 @@ export function AngleSelector({
         <Sparkles className="h-3.5 w-3.5" />
             {gateButtonLabel}
           </Button>
-          {!generating && (
-            <p className="text-sm text-muted-foreground" data-testid="angles-cta-copy" data-subtitle="">
-              {ANGLES_CTA_COPY}
-            </p>
-          )}
         </div>
       ) : (
     <div className="space-y-4" data-testid="audience-angle-list">
@@ -869,11 +853,6 @@ export function AngleGoalPicker({
         <Sparkles className="h-3.5 w-3.5" />
         {gateButtonLabel}
       </Button>
-      {!generating && (
-        <p className="text-sm text-muted-foreground" data-testid="goals-cta-copy" data-subtitle="">
-          {GOALS_CTA_COPY}
-        </p>
-      )}
     </div>
   ) : (
   <div className="space-y-4">
@@ -1046,8 +1025,7 @@ export function AngleGoalPicker({
         <p className="text-sm text-muted-foreground">
           {revealed && featured.length > 0
             ? `${featured.length === 3 ? "Three" : featured.length} suggestions for “${angle.label}”.`
-            : `Goal suggestions for “${angle.label}” are ready when you click.`}{" "}
-          The angle shapes this video — the goal shapes the campaign it serves.
+            : `Goal suggestions for “${angle.label}” are ready when you click.`}
         </p>
       </div>
       {body}

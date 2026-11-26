@@ -14,7 +14,7 @@ import {
 } from "../lib/videoLength";
 import {
   Clapperboard, AlertTriangle, Download, RotateCcw,
-  Play, Info, Clock, Smartphone, Check, Sparkles,
+  Play, Info, Clock, Smartphone, Check, Sparkles, Monitor,
 } from "lucide-react";
 import { GroupLabel } from "./SectionCard";
 import { GenerateAnotherConfirmDialog } from "./studio/GenerateAnotherConfirmDialog";
@@ -918,7 +918,7 @@ const handleGenerate = async () => {
         <div className="space-y-2">
           {(capability?.supported_resolutions || []).some((r) => r !== capability?.resolution) && (
             <div className="space-y-2">
-              <span className="text-sm font-semibold">Resolution</span>
+              <GroupLabel icon={Monitor}>Resolution</GroupLabel>
               <div className="thumb-pair flex flex-wrap items-center gap-2" role="group" aria-label="Resolution" data-testid="gen-resolution">
                 {[capability.resolution, ...(capability.supported_resolutions || []).filter((r) => r !== capability.resolution)].map((r) => {
                   const isDefault = r === capability.resolution;

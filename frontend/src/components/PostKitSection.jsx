@@ -33,7 +33,7 @@ import { BUSY_ETA_SECONDS } from "../lib/busyEta";
  * guidance beside the rest of the post copy. Empty — every talking
  * render, and every caller that does not know the pick — shows nothing.
  */
-export function PostKitSection({ postKit: initialKit, generationId, onUpdated, ttsText = "" }) {
+export function PostKitSection({ postKit: initialKit, generationId, onUpdated, ttsText = "", headingIcon = null }) {
   const { copiedKey, copy } = useCopyButton();
   const [kit, setKit] = useState(initialKit);
   const [regenBusy, setRegenBusy] = useState(false);
@@ -80,7 +80,7 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated, t
   return (
     <div className="space-y-3" data-testid="post-kit">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <GroupLabel>Caption, hashtags, cover</GroupLabel>
+        <GroupLabel icon={headingIcon || undefined}>Caption, hashtags, cover</GroupLabel>
         <div className="flex flex-wrap items-center gap-2">
           {canRegenerate && (
             <Button

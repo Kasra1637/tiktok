@@ -1502,6 +1502,47 @@ async function main() {
     }
   });
 
+  await check("the section pair's divider stands at the container's exact center (ADR 0364)", async () => {
+    // Kasra's live review (Nov 26 2026): the pair's hairline leaned
+    // toward the second area (the Wardrobe / Voice side). The cause
+    // was the mechanism, not a measurement: the desktop pair
+    // carried a 2rem column gap and the divider was the second
+    // area's border-left, so the line painted at the second area's
+    // left edge — half the gap (1rem) right of the container's
+    // center — with the rest of the 4rem channel carried as
+    // one-sided padding inside that same area. The fix takes the
+    // channel out of the gap entirely: the two equal columns meet
+    // AT the center (no column gap), and each area carries half
+    // the channel as its own padding — 2rem right on the first
+    // area, 2rem left on the second — so the second area's left
+    // edge, and the hairline standing on it, sit at exactly 50% of
+    // the container by construction, both halves equal, and the
+    // 4rem content channel is symmetric around the line. This pins
+    // the stylesheet arithmetic because jsdom lays nothing out:
+    // the declarations ARE the geometry.
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const pairAt = css.indexOf(".section-pair {");
+    if (pairAt < 0) throw new Error("index.css carries no .section-pair layout");
+    const mediaAt = css.indexOf("@media (min-width: 1024px)", pairAt);
+    if (mediaAt < 0) throw new Error("the section pair has no desktop media block");
+    const pairDesktop = css.slice(mediaAt, mediaAt + 1600);
+    if (!pairDesktop.includes("grid-template-columns: repeat(2, minmax(0, 1fr))")) {
+      throw new Error("the pair's desktop columns are not two equal halves (ADR 0364)");
+    }
+    if (pairDesktop.includes("gap: 0 2rem")) {
+      throw new Error("the pair still carries its 2rem column gap — any column gap moves the second area's left edge off the container's center (ADR 0364)");
+    }
+    if (!pairDesktop.includes("gap: 0;") && !pairDesktop.includes("column-gap: 0")) {
+      throw new Error("the pair's columns do not meet at the center — a column gap stands between them (ADR 0364)");
+    }
+    if (!/\.section-pair > :first-child \{\s*padding-right: 2rem;/.test(pairDesktop)) {
+      throw new Error("the pair's first area carries no half-channel padding — the channel is one-sided again (ADR 0364)");
+    }
+    if (!pairDesktop.includes("border-left: 1px solid var(--hairline)") || !pairDesktop.includes("padding-left: 2rem")) {
+      throw new Error("the pair's second area lost its divider or its half-channel padding (ADR 0364)");
+    }
+  });
+
   await check("no direction button stands picked until the founder picks it", async (ctx) => {
     // ADR 0361 (Kasra's order, Nov 25 2026): on a fresh project the
     // direction pairs show their standing defaults as VALUES — the
@@ -1592,10 +1633,11 @@ async function main() {
     // title, the two pairs, their headings, buttons and separators.
     // ADR 0363: the title's Optional chip is removed too — Kasra's
     // word was "What's the point of having that button there?" —
-    // so the word stands nowhere in the section. The shared controls' new props are
-    // Create-only: HookSnap passes neither, so its plain labels and
-    // its voice note keep their faces (the HookSnap checks pin the
-    // note there; the last assertion here pins the scoping itself).
+    // so the word stands nowhere in the section. The shared
+    // controls' hideNote prop stays Create-only: HookSnap passes it
+    // never, so its voice note keeps its face (the HookSnap checks
+    // pin the note there; the last assertion here pins that half of
+    // the scoping — ADR 0364 reversed the labelIcon half).
     global.__SMOKE_PARAMS = "?project=p1";
     let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", voice_mode: "silent" };
     try {
@@ -1675,11 +1717,15 @@ async function main() {
         if (saved.visual_direction !== "Wardrobe one") {
           throw new Error(`the Wardrobe pick no longer composes the saved scene: ${JSON.stringify(saved.visual_direction)}`);
         }
-        // The scoping itself: HookSnap passes neither new prop, so
-        // its card keeps the plain labels and the voice note.
+        // The scoping itself: HookSnap keeps the voice note — it
+        // never passes hideNote. ADR 0364 deliberately reverses the
+        // labelIcon half of this pin: HookSnap's card now passes
+        // labelIcon so its Location and Wardrobe wear the same
+        // heading face as Create's pair (the HookSnap checks pin
+        // that card's new face directly).
         const hookSrc = fs.readFileSync(path.join(SRC, "pages", "HookCta.jsx"), "utf8");
-        if (/labelIcon|hideNote/.test(hookSrc)) {
-          throw new Error("HookSnap took the Create-only direction props (ADR 0362 scopes them to Create)");
+        if (/hideNote/.test(hookSrc)) {
+          throw new Error("HookSnap took the Create-only hideNote prop (its voice note stays, ADR 0364)");
         }
       });
     } finally {
@@ -2001,8 +2047,8 @@ async function main() {
         if (!button) throw new Error("the ready-state plan panel does not render its Generate button");
         const panel = button.closest(".inset-panel");
         const panelText = panel ? (panel.textContent || "") : "";
-        if (!panelText.includes("Builds your hook, script, shots, and demo note from your profile, your angle, and your goal.")) {
-          throw new Error("the plan helper does not say what the button does");
+        if (panelText.includes("Builds your hook, script, shots, and demo note from your profile, your angle, and your goal.")) {
+          throw new Error("the plan panel still carries the descriptive line ADR 0368 removed");
         }
         if (panelText.includes("The free plan brings your hook")) {
           throw new Error("the plan panel still carries the old landing-place line");
@@ -2338,6 +2384,296 @@ async function main() {
     );
   });
 
+  await check("the unapproved panels' lead lines wear the eyebrow face on both pages (ADR 0367)", async (ctx) => {
+    // ADR 0367 (F): Create Step 1 loses "Only approved App Profiles
+    // can make a video in this studio." and the unapproved panel's
+    // lead line takes the shared eyebrow face — on BOTH pages' twin
+    // panels. The remedy instruction and every state row stay.
+    const draft = {
+      id: "b2", brand_name: "Draftly", app_category: "productivity", status: "draft",
+      brand_description: "A focus timer for people who stall on starting.",
+      core_features: ["Task timer"],
+    };
+    const leadWearsEyebrow = (panel, where) => {
+      if (!panel) throw new Error(`the unapproved panel did not render ${where}`);
+      if (panel.querySelector(".text-base.font-semibold")) {
+        throw new Error(`the unapproved panel's lead still wears the bold face ${where} (ADR 0367)`);
+      }
+      const lead = panel.querySelector(".eyebrow");
+      if (!lead || !lead.textContent.trim()) {
+        throw new Error(`the unapproved panel's lead does not wear the eyebrow face ${where} (ADR 0367)`);
+      }
+    };
+    global.__SMOKE_PARAMS = "";
+    try {
+      await withApi(
+        { getAppProfiles: async () => ({ profiles: [PROFILE, draft] }) },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await clickEl(ctx, stepPill(ctx, "App Profile"), "the App Profile step");
+          await act(async () => {});
+          if ((ctx.text() || "").includes("Only approved App Profiles can make a video in this studio.")) {
+            throw new Error("Create Step 1 still carries the removed line (ADR 0367)");
+          }
+          leadWearsEyebrow(ctx.container.querySelector('[data-testid="unapproved-profiles-panel"]'), "on Create");
+          const panel = ctx.container.querySelector('[data-testid="unapproved-profiles-panel"]');
+          if (!(panel.textContent || "").includes("Draft profiles need review before a video can use them.")) {
+            throw new Error("Create's unapproved panel lost the remedy instruction (ADR 0367 keeps it)");
+          }
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("Step 2 carries no CTA copy, and the What will render preview is removed whole (ADR 0367)", async (ctx) => {
+    // ADR 0367 (G): ANGLES_CTA_COPY and GOALS_CTA_COPY are removed
+    // with their render blocks, and the goal header keeps only its
+    // state sentence — the descriptive second sentence is gone. In
+    // the direction section, the "What will render" preview block
+    // is removed WHOLE (Kasra's order, superseding this round's
+    // first treatment of it): heading, Scene and Voice readouts
+    // and subtitle alike. It was display only — a readout of the
+    // draft's saved direction — so the save, the plan and the
+    // render behave exactly as before without it.
+    const panels = fs.readFileSync(path.join(SRC, "components/studio/SelectionPanels.jsx"), "utf8");
+    for (const gone of [
+      "ANGLES_CTA_COPY", "GOALS_CTA_COPY",
+      "Get four audience angles, then pick one to move forward.",
+      "Get your top three video goals for this angle, then pick one to move forward.",
+      "The angle shapes this video",
+    ]) {
+      if (panels.includes(gone)) {
+        throw new Error(`SelectionPanels still carries removed Step 2 copy: ${JSON.stringify(gone)} (ADR 0367)`);
+      }
+    }
+    // Kasra's later order in the same round: the helper line under
+    // the Generate tailored templates button is removed too —
+    // display only; the click-to-generate behavior it described
+    // is untouched (ADR 0367 records the override of the audit's
+    // keep classification for this line).
+    const createSrc2 = fs.readFileSync(path.join(SRC, "pages/CreateVideo.jsx"), "utf8");
+    if (createSrc2.includes("Tailoring runs only when you click it")) {
+      throw new Error("the tailoring helper line still stands under its button (ADR 0367, Kasra's order)");
+    }
+    if (!createSrc2.includes('data-testid="templates-generate"')) {
+      throw new Error("the Generate tailored templates button itself is gone — only its helper line was ordered out (ADR 0367)");
+    }
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY }),
+          getHookTemplates: async () => ({ templates: [TEMPLATE] }),
+          getContentAngles: async () => ({ angles: [ANGLE] }),
+        },
+        async () => {
+          await mount(CreateVideo, {})(ctx);
+          await clickEl(ctx, stepPill(ctx, "Audience & template"), "the Audience & template step");
+          await act(async () => {});
+          // The project carries a saved direction, so the preview
+          // would have stood here before this round: it must not.
+          if (ctx.container.querySelector('[data-testid="direction-live-preview"]')) {
+            throw new Error("the What will render preview still stands under the direction section (ADR 0367 removed it whole)");
+          }
+          const sectionText = ctx.text() || "";
+          if (sectionText.includes("What will render") || sectionText.includes("Saved here first")) {
+            throw new Error("the direction section still carries the removed preview's words (ADR 0367)");
+          }
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("Review's field labels wear the one face and its descriptive lines are gone (ADR 0368)", async (ctx) => {
+    // ADR 0368: Review stays one column (ADR 0141) — only the
+    // headings and lines move. The script field's label, the hook
+    // line label (shared HookLineEditor — HookSnap wears it too),
+    // the demo-brief label, the Craft check title and the
+    // piece-length heading take the GroupLabel eyebrow with their
+    // own icons; the section's pure-description lines are removed;
+    // the honesty guardrail under the template outcome stands
+    // untouched — it is an instruction, never description.
+    const report = {
+      version: 1, advisory: true, total: 79, max: 100, grade: "B", band: "strong",
+      dimensions: {
+        hook_stopping_power: { key: "hook_stopping_power", label: "Hook stopping power", score: 13, max: 20, evidence: [], next_step: "" },
+      },
+      next_steps: [],
+    };
+    const project = { ...PROJECT_WITH_STRATEGY, quality_report: report };
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => project,
+          getHookTemplates: async () => ({ templates: [TEMPLATE] }),
+          getContentAngles: async () => ({ angles: [ANGLE] }),
+        },
+        async () => {
+          await mount(CreateVideo)(ctx);
+          await act(async () => {});
+          const text = ctx.text() || "";
+          for (const gone of [
+            "The spoken story after the hook — demo and CTA stay yours.",
+            "A note about your own recording — never reaches the render.",
+            "The opening line spoken in your generated Hook + Story clip.",
+            "The outcome this template is built for, in their terms.",
+          ]) {
+            if (text.includes(gone)) {
+              throw new Error(`Review still carries a removed descriptive line: ${JSON.stringify(gone)} (ADR 0368)`);
+            }
+          }
+          if (!text.includes("A framing to aim at, not a result this video can promise.")) {
+            throw new Error("Review lost the honesty guardrail under the template outcome (ADR 0368 keeps it)");
+          }
+          const eyebrowWithIcon = (el, where) => {
+            if (!el) throw new Error(`the ${where} label did not render`);
+            if (!el.classList.contains("eyebrow")) throw new Error(`the ${where} label does not wear the eyebrow face (ADR 0368)`);
+            if (!el.querySelector("svg")) throw new Error(`the ${where} label carries no icon (ADR 0368)`);
+          };
+          eyebrowWithIcon(ctx.container.querySelector('label[for="review-hook_line"]'), "hook line");
+          eyebrowWithIcon(ctx.container.querySelector('label[for="review-script"]'), "script field");
+          eyebrowWithIcon(ctx.container.querySelector('label[for="review-demo-brief"]'), "demo brief");
+          const craft = ctx.container.querySelector('[data-testid="quality-report"]');
+          if (!craft) throw new Error("the Craft check card did not render");
+          eyebrowWithIcon([...craft.querySelectorAll(".eyebrow")].find((el) => el.textContent.trim() === "Craft check"), "Craft check");
+          const length = ctx.container.querySelector('[data-testid="piece-length"]');
+          if (!length) throw new Error("the piece length panel did not render");
+          eyebrowWithIcon([...length.querySelectorAll(".eyebrow")].find((el) => el.textContent.trim() === "Length of the generated piece"), "piece length");
+        }
+      );
+      // The two state-panel lines never render in a settled review,
+      // so their removal is pinned at the source.
+      const createSrc = fs.readFileSync(path.join(SRC, "pages/CreateVideo.jsx"), "utf8");
+      for (const gone of [
+        "Writes hook, script, shots, and demo note. Editable below.",
+        "Builds your hook, script, shots, and demo note from your profile, your angle, and your goal.",
+      ]) {
+        if (createSrc.includes(gone)) {
+          throw new Error(`CreateVideo still carries a removed plan-panel line: ${JSON.stringify(gone)} (ADR 0368)`);
+        }
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("the empty plan's heading wears the eyebrow face, lite (ADR 0368)", async (ctx) => {
+    // ADR 0368: "This plan is empty" takes the eyebrow face with no
+    // icon — the lite form. Its own check (its own mount): a second
+    // mount inside one check shares the first mount's tree, and the
+    // page would keep the settled plan it already holds.
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, hook_line: "", script: "", cover_text: "" }),
+          getHookTemplates: async () => ({ templates: [TEMPLATE] }),
+          getContentAngles: async () => ({ angles: [ANGLE] }),
+        },
+        async () => {
+          await mount(CreateVideo)(ctx);
+          await act(async () => {});
+          const notice = ctx.container.querySelector('[data-testid="plan-empty-notice"]');
+          if (!notice) throw new Error("the empty-plan notice did not render");
+          const heading = [...notice.querySelectorAll(".eyebrow")].find((el) => el.textContent.trim() === "This plan is empty");
+          if (!heading) throw new Error("the empty-plan heading does not wear the eyebrow face (ADR 0368)");
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("the strategy panel's groups wear the one face and its descriptive lines are gone (ADR 0369)", async (ctx) => {
+    // ADR 0369: "What you get" and the collapsed groups' headers
+    // gain icons, the suggestion modal's Hook/Script mini-labels
+    // take the eyebrow face, and the panel's standing descriptive
+    // lines are removed. Every readout value stays.
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY }),
+          getHookTemplates: async () => ({ templates: [TEMPLATE] }),
+          getContentAngles: async () => ({ angles: [ANGLE] }),
+        },
+        async () => {
+          await mount(CreateVideo)(ctx);
+          await act(async () => {});
+          const text = ctx.text() || "";
+          if (text.includes("This strategy guides the Hook + Story render.")) {
+            throw new Error("the strategy panel still carries its removed lead line (ADR 0369)");
+          }
+          for (const title of ["Hook concept", "Why this works for this app", "What the viewer ends up with", "Scene details"]) {
+            const head = [...ctx.container.querySelectorAll(".eyebrow")].find((el) => el.textContent.trim() === title);
+            if (!head) throw new Error(`the strategy group "${title}" did not render`);
+            if (!head.querySelector("svg")) throw new Error(`the strategy group "${title}" header carries no icon (ADR 0369)`);
+          }
+          // The readout values stay: the two sections render whole.
+          if (!text.includes("The two sections")) {
+            throw new Error("the strategy panel lost its sections readout (ADR 0369 keeps every value)");
+          }
+        }
+      );
+      // The modal's mini-labels, pinned at the source (the modal
+      // needs a live suggestion round-trip to open).
+      const panelSrc = fs.readFileSync(path.join(SRC, "components/HookContinuityPanel.jsx"), "utf8");
+      if (panelSrc.includes('className="text-sm font-semibold">Hook<') || panelSrc.includes('className="text-sm font-semibold">Script<')) {
+        throw new Error("the suggestion modal's Hook/Script labels still wear the bold face (ADR 0369)");
+      }
+      if (!panelSrc.includes('<p className="eyebrow">Hook</p>') || !panelSrc.includes('<p className="eyebrow">Script</p>')) {
+        throw new Error("the suggestion modal's Hook/Script labels do not wear the eyebrow face (ADR 0369)");
+      }
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("the strategy empty state names its shape only (ADR 0369)", async (ctx) => {
+    // ADR 0369: with no strategy built, the panel's empty state
+    // keeps its shape list — the two role names under a "What you
+    // get" heading that now carries an icon — and loses both
+    // per-role descriptive lines and the "Text only…" line above
+    // it. Its own check (its own mount): a second mount inside one
+    // check shares the first mount's tree and its settled project.
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
+    try {
+      await withApi(
+        {
+          getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, strategy: null }),
+          getHookTemplates: async () => ({ templates: [TEMPLATE] }),
+          getContentAngles: async () => ({ angles: [ANGLE] }),
+        },
+        async () => {
+          await mount(CreateVideo)(ctx);
+          await act(async () => {});
+          const text = ctx.text() || "";
+          if (text.includes("It fixes the concept, the words and the locked scene")) {
+            throw new Error("the strategy empty state still carries its removed descriptive line (ADR 0369)");
+          }
+          for (const gone of [
+            "The opening concept and the words, from the plan you approved.",
+            "What the presenter does next, ending",
+          ]) {
+            if (text.includes(gone)) {
+              throw new Error(`the What you get list still carries a per-role descriptive line: ${JSON.stringify(gone)} (ADR 0369)`);
+            }
+          }
+          const head = [...ctx.container.querySelectorAll(".eyebrow")].find((el) => el.textContent.trim() === "What you get");
+          if (!head) throw new Error("the What you get heading did not render");
+          if (!head.querySelector("svg")) throw new Error("the What you get heading carries no icon (ADR 0369)");
+        }
+      );
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
   await check("an inline approval refusal names the gaps and approves nothing", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     const draft = {
@@ -2634,11 +2970,13 @@ async function main() {
           if (!goalPicker) throw new Error("Review does not offer its missing goal picker");
           const gen = goalPicker.querySelector('[data-testid="generate-goals-button"]');
           if (!gen) throw new Error("Review goal gate offers no Generate button");
-          // The gate's instruction line lives here now: Review's recovery
-          // copy is the gated form's only remaining home (Part 3 moved the
-          // angle step's copy assertion here with the gate itself).
+          // The gate's instruction line lived here once: Review's
+          // recovery copy was the gated form's last home for
+          // GOALS_CTA_COPY (Part 3 moved the assertion here with the
+          // gate itself). ADR 0367 removes that copy everywhere —
+          // the gate stands on its button, which names its action.
           const gateCopy = goalPicker.querySelector('[data-testid="goals-cta-copy"]');
-          if (!gateCopy) throw new Error("the Review goal gate shows no instruction line");
+          if (gateCopy) throw new Error("the Review goal gate still carries the removed CTA copy (ADR 0367)");
           await clickEl(ctx, gen);
           await act(async () => {});
           const goalButton = goalPicker.querySelector('[data-testid="recommended-goal-address_user_problem"]');
@@ -4198,11 +4536,13 @@ async function main() {
   // The cover text in Review (ADR 0145): scored with the hook, and
   // regenerable from its own button as a suggestion that saves nothing
   // by itself. It appears ONCE, as plain text in the section's flow,
-  // directly under its subtitle — no box of any kind. The 9:16 preview
+  // directly under its title — no box of any kind. The 9:16 preview
   // frame it used to sit in left the words cramped and clipped, and
   // the boxed field under it repeated them; both are gone, and a new
-  // cover comes only through the suggestion's accept.
-  await check("the cover text shows in review as plain text under its subtitle with no score beside it", async (ctx) => {
+  // cover comes only through the suggestion's accept. ADR 0368: the
+  // subtitle under the title is gone too — the section is its title
+  // (the shared eyebrow face) and the words themselves.
+  await check("the cover text shows in review as plain text under its title with no score beside it", async (ctx) => {
     global.__SMOKE_PARAMS = "?project=p1&step=review";
     const report = {
       version: 1, advisory: true, total: 79, max: 100, grade: "B", band: "strong",
@@ -4228,9 +4568,12 @@ async function main() {
         }
         const section = ctx.container.querySelector('[data-testid="cover-text-section"]');
         if (!section) throw new Error("the cover text section did not render in review");
-        const subtitle = section.querySelector("[data-subtitle]");
-        if (!subtitle || !subtitle.textContent.includes("first two seconds")) {
-          throw new Error("the cover subtitle did not render");
+        if (section.querySelector("[data-subtitle]")) {
+          throw new Error("the cover section still carries its removed subtitle (ADR 0368)");
+        }
+        const title = section.querySelector(".eyebrow");
+        if (!title || !title.textContent.includes("Cover text") || !title.querySelector("svg")) {
+          throw new Error("the cover title does not wear the shared eyebrow face with its icon (ADR 0368)");
         }
         if (section.querySelector("#review-cover_text")) {
           throw new Error("the cover text still renders in a field");
@@ -4242,8 +4585,8 @@ async function main() {
         if (!display.textContent.includes("Bakery queue, words won't come")) {
           throw new Error("the cover text does not carry the project's cover text");
         }
-        if (subtitle.nextElementSibling !== display) {
-          throw new Error("the cover text does not sit directly under its subtitle");
+        if (title.nextElementSibling !== display) {
+          throw new Error("the cover text does not sit directly under its title");
         }
         if (section.querySelector('[data-testid="cover-text-score-note"]')) {
           throw new Error("the cover text area still carries a score note");
@@ -5584,8 +5927,8 @@ async function main() {
     if (cta.includes("hook-cta-frame-length") || cta.includes("Hook length")) {
       throw new Error("the hook length pick still stands on HookSnap (ADR 0351: always five seconds, no 4/5 buttons)");
     }
-    if (!cta.includes("One line from your app and your direction, five seconds.")) {
-      throw new Error("the hook subtitle no longer states the fixed five seconds (ADR 0351)");
+    if (cta.includes("One line from your app and your direction, five seconds.")) {
+      throw new Error("the hook card still carries the subtitle ADR 0366 removed (the five-second rule itself stands, ADR 0351)");
     }
   });
 
@@ -5594,6 +5937,132 @@ async function main() {
   // (the rail-end score and the section chips carry both) — the canvas
   // stacks tighter below lg, and the step card's gutter tightens on
   // phones in index.css. Desktop classes stand untouched.
+  await check("the render panels' Resolution labels and the post kit heading wear the one face (ADR 0366)", async () => {
+    // ADR 0366 (D): the Resolution label in BOTH render panels —
+    // duplicated markup, HookRenderPanel's and GenerationPanel's —
+    // becomes the shared GroupLabel with the Monitor icon. The
+    // resolution pair's own default-lit face is untouched: this
+    // round changes the heading only. (E): PostKitSection's heading
+    // gains an icon only where a caller passes headingIcon —
+    // HookSnap passes Share2, its card's own glyph; History and
+    // every other caller pass nothing and render exactly as
+    // before. The same round removes the HookSnap render, finish
+    // and post kit cards' descriptive lines.
+    const hookPanel = fs.readFileSync(path.join(SRC, "components/studio/HookRenderPanel.jsx"), "utf8");
+    const genPanel = fs.readFileSync(path.join(SRC, "components/GenerationPanel.jsx"), "utf8");
+    for (const [name, src] of [["HookRenderPanel", hookPanel], ["GenerationPanel", genPanel]]) {
+      if (!/<GroupLabel icon=\{Monitor\}>Resolution<\/GroupLabel>/.test(src)) {
+        throw new Error(`${name}'s Resolution label does not wear the eyebrow face with the Monitor icon (ADR 0366)`);
+      }
+      if (src.includes('<span className="text-sm font-semibold">Resolution</span>')) {
+        throw new Error(`${name} still renders the Resolution label as a bold span (ADR 0366)`);
+      }
+    }
+    const kit = fs.readFileSync(path.join(SRC, "components/PostKitSection.jsx"), "utf8");
+    if (!/headingIcon/.test(kit) || !/<GroupLabel icon=\{headingIcon \|\| undefined\}>/.test(kit)) {
+      throw new Error("PostKitSection's heading does not take its icon from the headingIcon prop (ADR 0366)");
+    }
+    const cta = fs.readFileSync(path.join(SRC, "pages/HookCta.jsx"), "utf8");
+    if (!/headingIcon=\{Share2\}/.test(cta)) {
+      throw new Error("HookSnap does not pass its post kit heading icon (ADR 0366)");
+    }
+    const history = fs.readFileSync(path.join(SRC, "pages/GenerationHistory.jsx"), "utf8");
+    if (/headingIcon/.test(history)) {
+      throw new Error("History passes a post kit heading icon — it must render exactly as before (ADR 0366)");
+    }
+    for (const gone of [
+      "One press renders the finished hook at its picked length.",
+      "Your demo and call to action, joined onto the hook",
+      "The caption and hashtags for posting the finished video.",
+      "The post kit is written when the hook finishes rendering",
+    ]) {
+      if (cta.includes(gone)) {
+        throw new Error(`HookSnap still carries a removed card line: ${JSON.stringify(gone)} (ADR 0366)`);
+      }
+    }
+  });
+
+  await check("the Demo + CTA editor's chrome wears the one face and its standing guidance is gone (ADR 0370)", async () => {
+    // ADR 0370: heading-face completion in the shared editor — the
+    // iconless GroupLabel and the local SubLabels gain icons where
+    // a natural one exists, and the two bold Fine-tune framing
+    // disclosure summaries take the eyebrow face. Then the
+    // line-by-line pass: standing guidance out; every operational
+    // and state line (clip names, durations, the crop consequence
+    // with its source size, the reduced-motion readout, the story
+    // window) stays. No pairs, no stage-geometry changes.
+    const src = fs.readFileSync(path.join(SRC, "demoCta/DemoCtaEditor.jsx"), "utf8");
+    for (const gone of [
+      "This render is your base. Add footage after it in Second clip",
+      "Upload one clip to start",
+      "Drag the preview to reframe. Hand Holding picks a scene too.",
+      "Drag to move",
+      "Plays after the base, in its own style",
+      "Each screen sits still unless you give it a motion below",
+      "On-screen overlay only; spoken script unchanged.",
+      "Colors hook text and handle chip.",
+      "Hook, story & end card share this style.",
+      "Drag hook text on preview to reposition",
+      "Uses Opening text style; spoken script unchanged.",
+      "Drag Story text on preview to reposition",
+      "On-screen end card. Write one clear next step.",
+      "Drag the end card up or down on the preview to reposition",
+      "clear of the right icon rail",
+      "Save this hook",
+      "A note from your plan — never part of the generated clip.",
+      "adjust zoom",
+    ]) {
+      if (src.includes(gone)) {
+        throw new Error(`the editor still carries removed standing guidance: ${JSON.stringify(gone)} (ADR 0370)`);
+      }
+    }
+    for (const kept of [
+      "Loading the finished render",
+      "Source replaced; export stays under this Hook + Story.",
+      "Reduced motion is on — transitions play as cuts in preview and export.",
+      "VIDEO_FIT_HINTS[videoFit]",
+      "Auto-keeps clear of hook",
+      "No room for story text.",
+    ]) {
+      if (!src.includes(kept)) {
+        throw new Error(`the editor lost an operational/state line it must keep: ${JSON.stringify(kept)} (ADR 0370)`);
+      }
+    }
+    if (!/<GroupLabel icon=\{Type\}>Text style<\/GroupLabel>/.test(src)) {
+      throw new Error("the Text style heading carries no icon (ADR 0370)");
+    }
+    for (const [pattern, where] of [
+      [/<SubLabel icon=\{Smartphone\}>\{label\}<\/SubLabel>/, "the style pickers"],
+      [/<SubLabel icon=\{Repeat\}>Transition between clips<\/SubLabel>/, "Transition between clips"],
+      [/<SubLabel icon=\{ImageIcon\}>Background<\/SubLabel>/, "Background"],
+      [/<SubLabel icon=\{Sparkles\}>Animation<\/SubLabel>/, "Animation"],
+      [/<SubLabel icon=\{SlidersHorizontal\}>Customize<\/SubLabel>/, "Customize"],
+      [/<SubLabel icon=\{Palette\}>Accent<\/SubLabel>/, "Accent"],
+      [/<SubLabel icon=\{Hand\}>Hand size &amp; position<\/SubLabel>/, "Hand size & position"],
+      [/<SubLabel icon=\{MoveVertical\}>Mockup height<\/SubLabel>/, "Mockup height"],
+      [/<SubLabel icon=\{Move\}>Phone screen position<\/SubLabel>/, "Phone screen position"],
+      [/<SubLabel icon=\{Crop\}>Video crop<\/SubLabel>/, "Video crop"],
+      [/<SubLabel icon=\{Images\}>Image sequence/, "the image sequence"],
+      [/<SubLabel icon=\{MonitorSmartphone\}>Device frame<\/SubLabel>/, "Device frame"],
+      [/<SubLabel icon=\{Heart\}>Happy with your look\?<\/SubLabel>/, "Happy with your look?"],
+      [/<SubLabel icon=\{Bookmark\}>Your looks<\/SubLabel>/, "Your looks"],
+    ]) {
+      if (!pattern.test(src)) {
+        throw new Error(`the editor's ${where} sub-label carries no icon (ADR 0370)`);
+      }
+    }
+    if (src.includes("text-sm font-semibold text-muted-foreground transition-colors group-hover:text-foreground")) {
+      throw new Error("a Fine-tune framing summary still wears the bold face (ADR 0370)");
+    }
+    // The summaries take the eyebrow face through GroupLabel
+    // itself (as="summary") — a hand-built eyebrow class on a
+    // summary is exactly what the icon-system check bans.
+    const summaries = src.match(/<GroupLabel as="summary"/g) || [];
+    if (summaries.length !== 2) {
+      throw new Error(`the editor stands ${summaries.length} GroupLabel Fine-tune summaries, not two (ADR 0370)`);
+    }
+  });
+
   await check("the wizard rail and canvas carry their phone fits", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi({ getAppProfiles: async () => ({ profiles: [{ ...PROFILE, status: "approved" }] }) }, () =>
@@ -7693,8 +8162,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       });
       await act(async () => {});
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
-      if (!step?.textContent.includes("Get four audience angles, then pick one to move forward.")) {
-        throw new Error("the empty angle state does not carry the single CTA copy");
+      if (step?.textContent.includes("Get four audience angles, then pick one to move forward.")) {
+        throw new Error("the empty angle state still carries the CTA copy ADR 0367 removed");
       }
       const button = step.querySelector('[data-testid="generate-angles-button"]');
       if (!button) throw new Error("the empty angle state offers no generate button");
@@ -8027,10 +8496,11 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   await check("delivery comes from the video, never from a direction control", async (ctx) => {
     // Voice direction and Lighting were founder picks; both are set from each
     // video's own plan and scene now (ADR 0102, superseding 0091), so any
-    // delivery control coming back fails here. The value itself still reaches
+    // delivery control coming back fails here. The value itself once reached
     // the founder as read-only copy in the direction section's live preview —
-    // on the Audience & template step since ADR 0220, and Review no longer
-    // carries the section at all.
+    // ADR 0367 removes that preview whole on Kasra's order, so the value is
+    // no longer displayed in the section at all; what this check still pins
+    // is the absence of any delivery CONTROL, on Review and on the step.
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await mount(CreateVideo, {})(ctx);
@@ -8044,7 +8514,9 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         throw new Error("Review still carries the direction section");
       }
       await clickEl(ctx, stepPill(ctx, "Audience & template"));
-      expectText(ctx, "Voice: Calm.", "the video's own voice direction is not shown");
+      if (ctx.container.querySelector('[data-testid="direction-live-preview"]')) {
+        throw new Error("the direction section still carries the live preview ADR 0367 removed whole");
+      }
       // ADR 0362: the umbrella "Location & wardrobe" label is gone —
       // the two scene groups stand under their own unified eyebrow
       // headings, so the labels are asserted on the headings
@@ -8084,15 +8556,15 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         const select = ctx.container.querySelector('[data-testid="camera-setup"]');
         if (!select || select.dataset.value !== "handheld") throw new Error("handheld camera is not the default");
         // ADR 0330 (as corrected at Kasra's live review): the
-        // direction fields stand three options as spaced pills in
+        // direction fields stand their options as spaced pills in
         // the Voice pick's design, and "New options" brings the
-        // next set.
+        // next set. ADR 0365: two stand by default, not three.
         for (const [id, list] of Object.entries({ "review-location-direction": OPTIONS.location, "review-wardrobe": OPTIONS.wardrobe })) {
           const pair = ctx.container.querySelector(`[data-testid="${id}"]`);
           if (!pair) throw new Error(`the step lost the ${id} pair`);
           const buttons = [...pair.querySelectorAll("button")].map((b) => b.dataset.value);
-          if (JSON.stringify(buttons) !== JSON.stringify(list.slice(0, 3))) {
-            throw new Error(`${id} does not stand its first three options as buttons: ${JSON.stringify(buttons)}`);
+          if (JSON.stringify(buttons) !== JSON.stringify(list.slice(0, 2))) {
+            throw new Error(`${id} does not stand its first two options as buttons: ${JSON.stringify(buttons)}`);
           }
           if (pair.dataset.value !== "") throw new Error(`${id} preselected a legacy note it cannot name`);
         }
@@ -8229,12 +8701,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
-        // ADR 0330: the set stands the first three offered places
-        // as buttons; the camera filter still decides what is
-        // offered.
+        // ADR 0330: the set stands its offered places as buttons;
+        // the camera filter still decides what is offered.
+        // ADR 0365: two stand by default — the offered set itself
+        // is unchanged, and New options reveals the rest of it.
         const pairValues = () => [...ctx.container.querySelectorAll('[data-testid="review-location-direction"] button')].map((b) => b.dataset.value);
-        if (JSON.stringify(pairValues()) !== JSON.stringify(ALL_LOCATIONS.slice(0, 3))) {
-          throw new Error(`a handheld camera was not offered every location: ${JSON.stringify(pairValues())}`);
+        if (JSON.stringify(pairValues()) !== JSON.stringify(ALL_LOCATIONS.slice(0, 2))) {
+          throw new Error(`a handheld camera was not offered its first locations: ${JSON.stringify(pairValues())}`);
         }
         // ADR 0337 (Kasra's ruling, Nov 25 2026): a direction
         // button's label stays inside 25 characters, shortened
@@ -8243,7 +8716,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         // shape), never wearing dots. The fixture's long places
         // shorten to their complete cores.
         const pairLabels = [...ctx.container.querySelectorAll('[data-testid="review-location-direction"] button')].map((b) => b.textContent.trim());
-        if (JSON.stringify(pairLabels) !== JSON.stringify(["Quiet garden bench", "Calm living room", "Balcony"])) {
+        if (JSON.stringify(pairLabels) !== JSON.stringify(["Quiet garden bench", "Calm living room"])) {
           throw new Error(`a direction button's label is not the safely shortened phrase: ${JSON.stringify(pairLabels)}`);
         }
         if (pairLabels.some((t) => t.length > 25 || t.includes("…"))) {
@@ -8367,7 +8840,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         }
       }
       // And the field that replaced the second: the founder's own note about
-      // what to record, editable, and clearly not an instruction to the model.
+      // what to record, editable, and never an instruction to the model —
+      // that boundary is structural (the brief is never passed to the
+      // render), and the explanatory line that once stated it under the
+      // field is removed as standing description (ADR 0368).
       const reviewPill = stepPill(ctx, "Review & submit");
       await act(async () => {
         reviewPill.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -8378,8 +8854,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (demo.value !== PROJECT_WITH_STRATEGY.demo_brief) {
         throw new Error(`the demo brief field is empty: ${JSON.stringify(demo.value)}`);
       }
-      if (!ctx.text().includes("never reaches the render")) {
-        throw new Error("the demo brief field does not say it is a note to the founder, not the model");
+      if (ctx.text().includes("A note about your own recording — never reaches the render.")) {
+        throw new Error("the demo brief field still carries the explanatory line ADR 0368 removed");
       }
     } finally {
       global.__SMOKE_PARAMS = "";
@@ -9282,8 +9758,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       await mount(CreateVideo, {})(ctx);
       await openStep(ctx, "Audience & template");
       const step = ctx.container.querySelector('[data-testid="audience-goal-step"]');
-      if (!step?.querySelector('[data-testid="angles-cta-copy"]')
-          || !step.textContent.includes("(required)")) {
+      // ADR 0367: the CTA sentence under the angle gate is removed;
+      // the requirement is named by the goal header's "(required)"
+      // label alone now.
+      if (step?.querySelector('[data-testid="angles-cta-copy"]')) {
+        throw new Error("the angle gate still carries the removed CTA copy (ADR 0367)");
+      }
+      if (!step?.textContent.includes("(required)")) {
         throw new Error("the step does not explain that an audience angle is required");
       }
       const marker = step.querySelector('[data-testid="goal-waits-for-angle"]');
@@ -10719,16 +11200,22 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // unchanged, only the lead's form differs by step.
   await check("every gate leads with its ask above its hint, spaced the same", async (ctx) => {
     const gates = [];
-    const record = (label, lead, { button = false } = {}) => {
+    const record = (label, lead, { button = false, hint = true } = {}) => {
       if (!lead) throw new Error(`no lead on ${label}`);
       if (button) {
         if (lead.tagName !== "BUTTON") throw new Error(`the gate lead on ${label} is not its action`);
         if (!lead.className.includes("bg-[color:var(--brand-indigo)]")) {
           throw new Error(`the gate action on ${label} is not the indigo button`);
         }
-        const hint = lead.nextElementSibling;
-        if (!hint || hint.tagName !== "P") {
-          throw new Error(`no hint directly under the red action on ${label}`);
+        // ADR 0367: the angle gate's hint (its CTA copy) is removed —
+        // that gate now stands on its action alone, so it records
+        // its spacing without a hint under the button. Every other
+        // gate keeps the hint requirement below.
+        if (hint) {
+          const hintEl = lead.nextElementSibling;
+          if (!hintEl || hintEl.tagName !== "P") {
+            throw new Error(`no hint directly under the red action on ${label}`);
+          }
         }
       } else if (lead.tagName === "BUTTON") {
         throw new Error(`the gate lead on ${label} is a jump button again, not a named sentence`);
@@ -10748,7 +11235,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     await withApi({ getContentAngles: async () => ({ angles: [] }) }, async () => {
       await mount(CreateVideo, {})(ctx);
       await openStep(ctx, "Audience & template");
-      record("Audience & template", ctx.container.querySelector('[data-testid="generate-angles-button"]'), { button: true });
+      record("Audience & template", ctx.container.querySelector('[data-testid="generate-angles-button"]'), { button: true, hint: false });
     });
     await openStep(ctx, "Review & submit");
     record("Review & submit", ctx.container.querySelector('[data-testid="first-gap-name"]'));
@@ -10841,12 +11328,16 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     await withApi({ getContentAngles: async () => ({ angles: [] }) }, async () => {
       await mount(CreateVideo, {})(ctx);
       await openStep(ctx, "Audience & template");
-      before(
-        ctx.container,
-        ctx.container.querySelector('[data-testid="generate-angles-button"]'),
-        ctx.container.querySelector('[data-testid="angles-cta-copy"]'),
-        "the angle gate"
-      );
+      // ADR 0367: the angle gate's guidance copy is removed — there
+      // is no copy left to order against its action. What this
+      // check still pins here: the action stands, and the removed
+      // copy stands nowhere on the step.
+      if (!ctx.container.querySelector('[data-testid="generate-angles-button"]')) {
+        throw new Error("no action button for the angle gate");
+      }
+      if (ctx.container.querySelector('[data-testid="angles-cta-copy"]')) {
+        throw new Error("the angle gate still carries the removed CTA copy (ADR 0367)");
+      }
     });
     await openStep(ctx, "Review & submit");
     before(
@@ -14951,6 +15442,72 @@ async function runHookCtaChecks() {
     );
   });
 
+  await check("the HookSnap hook card pairs tone and shape and carries no descriptive lines (ADR 0366)", async (ctx) => {
+    // ADR 0366: Tone and Shape stand in a .section-pair with Focus
+    // full-width above them; the card subtitle, the line under
+    // Focus and the line under Shape are gone, and so is the
+    // spoken-line subtitle inside the shared HookLineEditor. The
+    // Focus pop-up's header wears the eyebrow face with the Focus
+    // icon, and the Caption preview label gains the Captions icon.
+    const PREVIEW = "I quit replaying the whole day in my head and said it out loud instead — you?";
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1", hook_line: HOOK }),
+        getGenerations: async () => ({ generations: [] }),
+        previewHookCtaCaption: async () => ({ caption: PREVIEW, char_count: PREVIEW.length }),
+      },
+      "",
+      async () => {
+        const card = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
+        if (!card) throw new Error("the hook card did not render");
+        for (const gone of [
+          "One line from your app and your direction, five seconds.",
+          "The outcome the hook leads with",
+          "Ask the pain point as a question",
+          "The opening line spoken in your generated",
+        ]) {
+          if (card.textContent.includes(gone)) {
+            throw new Error(`the hook card still carries a removed descriptive line: ${JSON.stringify(gone)} (ADR 0366)`);
+          }
+        }
+        // Focus stands full-width above the pair, never inside it.
+        const pair = card.querySelector(".section-pair");
+        if (!pair) throw new Error("the hook card carries no section pair for tone and shape (ADR 0366)");
+        if (pair.querySelector('[data-testid="hook-picks-focus"]')) {
+          throw new Error("the Focus pick stands inside the pair — it stays full-width above it (ADR 0366)");
+        }
+        const cells = [...pair.children];
+        if (cells.length !== 2) throw new Error("the tone and shape pair does not hold two areas");
+        if (!cells[0].querySelector('[data-testid^="hook-picks-tone"]')) {
+          throw new Error("the pair's first area is not Tone");
+        }
+        if (!cells[1].querySelector('[data-testid^="hook-picks-shape"]')) {
+          throw new Error("the pair's second area is not Shape");
+        }
+        // The Focus pop-up's header wears the one face.
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-picks-focus"]'));
+        const popup = ctx.container.ownerDocument.querySelector('[data-testid="hook-picks-focus-popup"]');
+        if (!popup) throw new Error("the Focus pop-up did not open");
+        const popupHead = [...popup.querySelectorAll(".eyebrow")].find((el) => el.textContent.trim() === "Focus");
+        if (!popupHead || !popupHead.querySelector("svg")) {
+          throw new Error("the Focus pop-up header does not wear the eyebrow face with the Focus icon (ADR 0366)");
+        }
+        await clickEl(ctx, popup.querySelector('button[aria-label="Close"]'));
+        // The caption preview's label carries its icon.
+        const kitCard = ctx.container.querySelector('[data-testid="hook-cta-post-kit"]');
+        await clickEl(ctx, kitCard.querySelector('[data-testid="hook-cta-caption-preview-button"]'));
+        await act(async () => {});
+        const preview = kitCard.querySelector('[data-testid="hook-cta-caption-preview"]');
+        if (!preview) throw new Error("the caption preview did not render");
+        const previewLabel = [...preview.querySelectorAll(".eyebrow")].find((el) => el.textContent.trim() === "Caption preview");
+        if (!previewLabel || !previewLabel.querySelector("svg")) {
+          throw new Error("the Caption preview label carries no icon (ADR 0366)");
+        }
+      }
+    );
+  });
+
   await check("the Hook + CTA tour walks the page's six stages", async () => {
     const { TOURS, getTourIdForPath } = load("lib/onboarding/tours.js");
     if (getTourIdForPath("/hook-cta") !== "hook-cta") {
@@ -15175,13 +15732,15 @@ async function runHookCtaChecks() {
 
   await check("a written hook carries no length pick, and the render submits at five seconds", async (ctx) => {
     // ADR 0351: the 4/5 length pick is gone — a HookSnap video is
-    // always five seconds, stated in the hook card's subtitle, and
-    // the server pins the length on its side too (test_hook_cta_api.py).
-    // What this pins is the page's side: no length control renders,
-    // nothing needs picking or saving before the render, and the
-    // render submits at five seconds. (The ADR 0246 autosave-settle
-    // hazard this check used to guard rode on the pick's PATCH; with
-    // no pick there is no such save.)
+    // always five seconds, and the server pins the length on its
+    // side too (test_hook_cta_api.py). The card subtitle that once
+    // stated the five seconds is removed (ADR 0366) — the rule
+    // stands without the statement. What this pins is the page's
+    // side: no length control renders, nothing needs picking or
+    // saving before the render, and the render submits at five
+    // seconds. (The ADR 0246 autosave-settle hazard this check used
+    // to guard rode on the pick's PATCH; with no pick there is no
+    // such save.)
     const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
     let row = hookRow({ id: "hook-cta-1", duration_seconds: 5, hook_line: HOOK, assets: face });
     const patches = [];
@@ -15207,8 +15766,9 @@ async function runHookCtaChecks() {
           throw new Error("a hook length control still renders on the hook card");
         }
         const hookCard = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
-        if (!hookCard || !(hookCard.textContent || "").includes("five seconds")) {
-          throw new Error("the hook card's subtitle does not state the five seconds");
+        if (!hookCard) throw new Error("the hook card did not render");
+        if ((hookCard.textContent || "").includes("One line from your app and your direction")) {
+          throw new Error("the hook card still carries the subtitle ADR 0366 removed");
         }
         const gate = ctx.container.querySelector('[data-testid="hook-render-gate"]');
         if (gate) throw new Error(`the render is gated with nothing picked: ${gate.textContent}`);
@@ -15506,6 +16066,12 @@ async function runHookCtaChecks() {
     // reducer only omits a pick that restates the SAVED value; this
     // page's now does the same, and this check is the pin: start
     // saved-silent, tap talking, and the pick must show and save.
+    // ADR 0364 changes the READ face only: ADR 0361 lands on this
+    // page, so a saved-silent draft shows NO pill picked — silent
+    // is the standing default, and a stored "silent" reads exactly
+    // like never picked, as on Create. The note still renders (the
+    // value IS silent), and the switch-back path below is the
+    // regression pin, unchanged.
     const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
     let row = hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face, voice_mode: "silent" });
     const patches = [];
@@ -15525,8 +16091,8 @@ async function runHookCtaChecks() {
         const talkingPill = ctx.container.querySelector('[data-testid="voice-mode-talking"]');
         const silentPill = ctx.container.querySelector('[data-testid="voice-mode-silent"]');
         if (!talkingPill || !silentPill) throw new Error("the voice pick did not render in the direction card");
-        if (silentPill.getAttribute("aria-pressed") !== "true") {
-          throw new Error("the saved silent pick does not read as picked");
+        if (silentPill.getAttribute("aria-pressed") === "true" || talkingPill.getAttribute("aria-pressed") === "true") {
+          throw new Error("a saved-silent draft reads as picked — ADR 0364 (ADR 0361 here) stands it unpicked until a click");
         }
         if (!ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
           throw new Error("the silent note did not render for the saved silent pick");
@@ -16280,6 +16846,164 @@ async function runHookCtaChecks() {
       }
     );
   });
+
+  await check("HookSnap's place and wardrobe stand as a pair, two buttons until New options (ADRs 0364-0365)", async (ctx) => {
+    // ADR 0364: the card takes Create's second pair — Location and
+    // Wardrobe side by side in .section-pair, each heading wearing
+    // the GroupLabel eyebrow with its own icon; the card subtitle
+    // and the apply-together sentence are gone; the voice note
+    // stays in both modes; and ADR 0361 lands on this page — a
+    // create-fresh silent project shows NO voice button picked
+    // until a click earns it. ADR 0365: each direction field shows
+    // TWO buttons by default; the full set stands only after New
+    // options is pressed, and a saved pick outside the visible two
+    // still stands as the pick, seated in the second seat. The
+    // ADR 0357 collapse gate reads dirSel only, and this check
+    // walks it end to end over the new pair to prove it.
+    const LOCATIONS = ["Location one", "Location two", "Location three", "Location four"];
+    const WARDROBES = ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"];
+    const FRESH_LOCATIONS = ["Fresh place one", "Fresh place two", "Fresh place three", "Fresh place four"];
+    const directionStubs = {
+      getDirectionOptions: async () => ({
+        group: "default",
+        location: LOCATIONS, wardrobe: WARDROBES,
+        setting: [], lighting: [], voice: [], tone: [],
+      }),
+      getGenerations: async () => ({ generations: [] }),
+    };
+    await inHookCta(
+      ctx,
+      {
+        ...directionStubs,
+        createHookCtaProject: async () => blankRow({ id: "hook-cta-1" }),
+        refreshDirectionOptions: async (_id, { field }) => ({
+          options: field === "location" ? FRESH_LOCATIONS : WARDROBES,
+        }),
+      },
+      "",
+      async () => {
+        const card = ctx.container.querySelector('[data-testid="hook-cta-direction-card"]');
+        if (!card) throw new Error("the direction card did not render");
+        if (card.textContent.includes("the hook is written from these picks")) {
+          throw new Error("the direction card still carries its subtitle (ADR 0364)");
+        }
+        if (card.textContent.includes("apply together")) {
+          throw new Error("the direction card still carries the apply-together sentence (ADR 0364)");
+        }
+        const pairs = card.querySelectorAll(".section-pair");
+        if (pairs.length !== 1) throw new Error(`the direction card stands ${pairs.length} section pairs, not one (ADR 0364)`);
+        const cells = [...pairs[0].children];
+        if (cells.length !== 2) throw new Error("the direction pair does not hold two areas");
+        if (!cells[0].querySelector('[data-testid="hook-cta-location-direction"]')) {
+          throw new Error("the pair's first area is not Location");
+        }
+        if (!cells[1].querySelector('[data-testid="hook-cta-wardrobe"]')) {
+          throw new Error("the pair's second area is not Wardrobe");
+        }
+        for (const [cell, name] of [[cells[0], "Location"], [cells[1], "Wardrobe"]]) {
+          const heading = [...cell.querySelectorAll(".eyebrow")].find((el) => el.textContent.trim() === name);
+          if (!heading) throw new Error(`the ${name} heading does not wear the shared eyebrow face (ADR 0364)`);
+          if (!heading.querySelector("svg")) throw new Error(`the ${name} heading carries no icon (ADR 0364)`);
+        }
+        const silentBtn = ctx.container.querySelector('[data-testid="voice-mode-silent"]');
+        const talkingBtn = ctx.container.querySelector('[data-testid="voice-mode-talking"]');
+        if (!silentBtn || !talkingBtn) throw new Error("the voice pair did not render");
+        if (silentBtn.getAttribute("aria-pressed") === "true" || talkingBtn.getAttribute("aria-pressed") === "true") {
+          throw new Error("a voice button stands picked on a fresh draft before any click (ADR 0364, landing ADR 0361 here)");
+        }
+        if (!ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the voice note is gone from HookSnap — it stays (ADR 0364)");
+        }
+        const shownValues = (group) => [...group.querySelectorAll("button[data-value]")].map((b) => b.dataset.value);
+        const locGroup = ctx.container.querySelector('[data-testid="hook-cta-location-direction"]');
+        const wardGroup = ctx.container.querySelector('[data-testid="hook-cta-wardrobe"]');
+        if (JSON.stringify(shownValues(locGroup)) !== JSON.stringify(LOCATIONS.slice(0, 2))) {
+          throw new Error(`Location shows ${JSON.stringify(shownValues(locGroup))} by default, not the first two (ADR 0365)`);
+        }
+        if (JSON.stringify(shownValues(wardGroup)) !== JSON.stringify(WARDROBES.slice(0, 2))) {
+          throw new Error(`Wardrobe shows ${JSON.stringify(shownValues(wardGroup))} by default, not the first two (ADR 0365)`);
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-cta-location-refresh"]'));
+        await act(async () => {});
+        if (JSON.stringify(shownValues(locGroup)) !== JSON.stringify(FRESH_LOCATIONS)) {
+          throw new Error(`after New options Location shows ${JSON.stringify(shownValues(locGroup))}, not the full refreshed set (ADR 0365)`);
+        }
+        await pickPairButton(ctx, "hook-cta-location-direction", "Fresh place four");
+        if (!bodyCollapsed(ctx, "hook-cta-hook-card")) {
+          throw new Error("the hook section opened on the place pick alone");
+        }
+        await pickPairButton(ctx, "hook-cta-wardrobe", "Wardrobe one");
+        await act(async () => {});
+        if (bodyCollapsed(ctx, "hook-cta-hook-card")) {
+          throw new Error("the hook section did not open once place and wardrobe were both selected");
+        }
+      }
+    );
+  });
+
+await check("a saved direction pick outside the visible two takes the second seat (ADR 0365)", async (ctx) => {
+    // ADR 0365's last-seat reconciliation, on a fresh mount (its own
+    // ctx, so no reveal state can ride in from another check): the
+    // saved place sits fourth in its set, the pair shows two
+    // buttons, and the pick is one of them — in the second seat,
+    // lit — beside the set's first option.
+    const LOCATIONS = ["Location one", "Location two", "Location three", "Location four"];
+    const WARDROBES = ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => blankRow({ id: "hook-cta-1", location: "Location four", visual_direction: "Wardrobe one" }),
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: LOCATIONS, wardrobe: WARDROBES,
+          setting: [], lighting: [], voice: [], tone: [],
+        }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const locGroup = ctx.container.querySelector('[data-testid="hook-cta-location-direction"]');
+        if (!locGroup) throw new Error("the location pair did not render");
+        const shown = [...locGroup.querySelectorAll("button[data-value]")];
+        if (shown.length !== 2) throw new Error(`a saved pick outside the two shows ${shown.length} buttons, not two (ADR 0365)`);
+        const picked = shown.find((b) => b.dataset.value === "Location four");
+        if (!picked) throw new Error("the saved place outside the visible two does not stand in the pair (ADR 0365)");
+        if (picked.getAttribute("aria-pressed") !== "true") throw new Error("the saved place does not stand picked (ADR 0365)");
+        if (shown[1] !== picked) throw new Error("the saved pick does not take the second seat (ADR 0365)");
+        if (shown[0].dataset.value !== "Location one") throw new Error("the first seat does not hold the set's first option (ADR 0365)");
+      }
+    );
+  });
+
+  await check("HookSnap's unapproved panel lead wears the eyebrow face (ADR 0367)", async (ctx) => {
+    // ADR 0367 (F): the twin of Create Step 1's panel — the lead
+    // line takes the shared eyebrow face here too, and the remedy
+    // instruction under it stays.
+    const draft = { id: "p2", brand_name: "Draftly", status: "draft" };
+    await inHookCta(
+      ctx,
+      {
+        getAppProfiles: async () => ({ profiles: [PROFILE, draft] }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const panel = ctx.container.querySelector('[data-testid="hook-cta-unapproved-panel"]');
+        if (!panel) throw new Error("HookSnap's unapproved panel did not render");
+        if (panel.querySelector(".text-base.font-semibold")) {
+          throw new Error("HookSnap's unapproved panel lead still wears the bold face (ADR 0367)");
+        }
+        const lead = panel.querySelector(".eyebrow");
+        if (!lead || !lead.textContent.trim()) {
+          throw new Error("HookSnap's unapproved panel lead does not wear the eyebrow face (ADR 0367)");
+        }
+        if (!(panel.textContent || "").includes("Approve draft profiles first so they can generate hooks.")) {
+          throw new Error("HookSnap's unapproved panel lost the remedy instruction (ADR 0367 keeps it)");
+        }
+      }
+    );
+  });
+
 }
 
 /**
@@ -20870,15 +21594,17 @@ async function runDemoCtaChecks() {
           }
           // "Live preview" moved inside the frame, below the upload button, and
           // the platform label is gone.
-          // Anchored on the JSX element, not the bare word: the comment above the
-          // button explains where the copy used to live, and matching that would
-          // read as "still above the button".
-          const liveIdx = src.indexOf('>Upload one clip to style it.</p>');
+          // ADR 0370: the guidance line that stood below the upload
+          // button is removed — the button names the action itself.
+          // The ordering assertion that anchored on that line is
+          // gone with it; what stays pinned is the button's presence
+          // in the frame and the line's absence from the editor.
           const uploadIdx = src.indexOf('data-testid="demo-cta-frame-upload"');
-          if (liveIdx === -1 || uploadIdx === -1 || liveIdx < uploadIdx) {
-            throw new Error(
-              'The upload guidance must be below the upload button, inside the frame.'
-            );
+          if (uploadIdx === -1) {
+            throw new Error("the frame's upload button is gone");
+          }
+          if (src.includes("Upload one clip to style it.")) {
+            throw new Error("the frame still carries the guidance line ADR 0370 removed");
           }
           // The label was removed from the caption row. The literal string still exists
           // in constants.js as the preset's name — the Output group's radiogroup

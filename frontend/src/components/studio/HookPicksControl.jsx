@@ -278,7 +278,7 @@ export default function HookPicksControl({
                 data-testid={`${testId}-focus-popup`}
               >
                 <div className="flex items-center justify-between gap-2 border-b border-[color:var(--hairline)] row-pad">
-                  <span className="text-sm font-semibold">Focus</span>
+                  <GroupLabel icon={Focus}>Focus</GroupLabel>
                   <button
                     type="button"
                     aria-label="Close"
@@ -323,9 +323,6 @@ export default function HookPicksControl({
             document.body
           )}
         </div>
-        <p className="text-sm text-muted-foreground">
-          The outcome the hook leads with — one of your app&rsquo;s own outcomes.
-        </p>
         {focusStale && !hasHook && (
           <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-focus-stale-note`}>
             {focusRefreshAsLink
@@ -340,32 +337,37 @@ export default function HookPicksControl({
         )}
       </div>
 
-      <div className="space-y-2">
-        <GroupLabel icon={MessagesSquare}>Tone</GroupLabel>
-        <PickPills
-          options={TONE_OPTIONS}
-          current={toneValue}
-          onChange={onToneChange}
-          disabled={disabled}
-          testId={`${testId}-tone`}
-          ariaLabel="Hook tone"
-        />
-      </div>
+      {/* ADR 0366: Tone and Shape are the card's two comparable
+          pick-groups, so they stand side by side in the shared
+          .section-pair under the full-width Focus — the same
+          spread Create's direction section wears. Focus itself is
+          a single wide control and never splits. The descriptive
+          lines under Focus and Shape are removed with this round;
+          the stale notes below are state and stay. */}
+      <div className="section-pair">
+        <div className="space-y-2">
+          <GroupLabel icon={MessagesSquare}>Tone</GroupLabel>
+          <PickPills
+            options={TONE_OPTIONS}
+            current={toneValue}
+            onChange={onToneChange}
+            disabled={disabled}
+            testId={`${testId}-tone`}
+            ariaLabel="Hook tone"
+          />
+        </div>
 
-      <div className="space-y-2">
-        <GroupLabel icon={HelpCircle}>Shape</GroupLabel>
-        <PickPills
-          options={SHAPE_OPTIONS}
-          current={shapeValue}
-          onChange={onShapeChange}
-          disabled={disabled}
-          testId={`${testId}-shape`}
-          ariaLabel="Hook shape"
-        />
-        <p className="text-sm text-muted-foreground">
-          Ask the pain point as a question, or name it as a statement — the answer
-          stays withheld either way, for the demo.
-        </p>
+        <div className="space-y-2">
+          <GroupLabel icon={HelpCircle}>Shape</GroupLabel>
+          <PickPills
+            options={SHAPE_OPTIONS}
+            current={shapeValue}
+            onChange={onShapeChange}
+            disabled={disabled}
+            testId={`${testId}-shape`}
+            ariaLabel="Hook shape"
+          />
+        </div>
       </div>
 
       {stale && (

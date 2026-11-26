@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Type } from "lucide-react";
 import { Button } from "../ui/button";
+import { GroupLabel } from "../SectionCard";
 import { api, getErrorMessage } from "../../lib/api";
 
 /**
  * The cover text in Review (ADR 0145): the words on screen for the
  * opening's first two seconds, appearing ONCE as plain text in the
- * section's flow, directly under its subtitle — no box of any kind,
- * wearing the one generated-text highlight (ADR 0258).
+ * section's flow, directly under its title — no box of any kind,
+ * wearing the one generated-text highlight (ADR 0258). The title
+ * wears the shared eyebrow face with the Type icon and the
+ * subtitle under it is removed (ADR 0368).
  * The 9:16 frame this used to preview in and the boxed field under it
  * are both gone: the founder found the words cramped and clipped in
  * the frame and repeated in the field. The words shown here are
@@ -57,8 +60,7 @@ export default function CoverTextEditor({
 
   return (
     <div className="space-y-4" data-testid="cover-text-section">
-      <p className="text-sm font-semibold">Cover text</p>
-      <p className="text-sm text-muted-foreground" data-subtitle="">The words on screen in the first two seconds of your clip.</p>
+      <GroupLabel icon={Type}>Cover text</GroupLabel>
       {/* The cover itself, as plain text in the flow wearing the
           generated-text highlight (ADR 0258), like every other line
           the app wrote: the words the founder reads here are the

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, Clock, Download, Info, Play, RotateCcw } from "lucide-react";
+import { AlertTriangle, Check, Clock, Download, Info, Monitor, Play, RotateCcw } from "lucide-react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { StatusBadge } from "../StatusBadge";
 import { Alert, AlertTitle, AlertDescription } from "../ui/alert";
 import { CONTROL_CLASS } from "../formControls";
+import { GroupLabel } from "../SectionCard";
 import { GenerateAnotherConfirmDialog } from "./GenerateAnotherConfirmDialog";
 import PlatformPreview from "./PlatformPreview";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl, durableMediaUrl } from "../../lib/api";
@@ -482,7 +483,7 @@ export default function HookRenderPanel({
         <div className="space-y-2">
           {(capability?.supported_resolutions || []).some((r) => r !== capability?.resolution) && (
             <div className="space-y-2">
-              <span className="text-sm font-semibold">Resolution</span>
+              <GroupLabel icon={Monitor}>Resolution</GroupLabel>
               <div className="thumb-pair flex flex-wrap items-center gap-2" role="group" aria-label="Resolution" data-testid="hook-gen-resolution">
                 {[capability.resolution, ...(capability.supported_resolutions || []).filter((r) => r !== capability.resolution)].map((r) => {
                   const isDefault = r === capability.resolution;

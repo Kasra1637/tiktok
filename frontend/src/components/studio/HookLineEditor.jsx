@@ -1,5 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { AudioLines } from "lucide-react";
 import { Input } from "../ui/input";
+import { GroupLabel } from "../SectionCard";
 import LineRewriteAction from "./LineRewriteAction";
 
 /**
@@ -45,14 +47,15 @@ export default function HookLineEditor({ projectId, value, onChange, disabled, c
   }, [text, washed]);
   return (
     <div className="space-y-4">
-      <label htmlFor="review-hook_line" className="text-sm font-semibold">Hook line</label>
-      {/* The helper names the clip the line is spoken in, and the two
-          surfaces' clips differ: Create Video's render is a Hook +
-          Story clip, the Hook + CTA page's is the hook alone — there
-          is no story on that page, so its helper says so (ADR 0248).
-          The caller passes its own clip's name; the default is the
-          wizard's, the editor's original home. */}
-      <p className="text-sm text-muted-foreground" data-subtitle="">The opening line spoken in your generated {clipLabel}.</p>
+      {/* The label wears the shared eyebrow face with the
+          AudioLines icon (ADR 0368 on Create's Review, ADR 0366 on
+          HookSnap — this editor is shared, so both pages take the
+          face from this one seat). The helper line that named the
+          clip is removed with the same rounds: it was standing
+          description, and the two surfaces' clips need no naming
+          here — `clipLabel` stays in the signature for its callers
+          but renders nothing now. */}
+      <GroupLabel as="label" htmlFor="review-hook_line" icon={AudioLines}>Hook line</GroupLabel>
       {/* The line stands in the generated-text highlight (ADR 0258):
           the same light wash every generated line wears, so the words
           read as the finished line, not as a form in a box. No

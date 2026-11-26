@@ -2,23 +2,35 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
+  Bookmark,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   Clapperboard,
+  Crop,
   Download,
   Film,
+  Hand,
+  Heart,
+  Image as ImageIcon,
   ImagePlus,
   Images,
   Megaphone,
+  MonitorSmartphone,
+  Move,
+  MoveVertical,
+  Palette,
   Pause,
   Play,
+  Repeat,
   RotateCcw,
   Undo2,
   Redo2,
+  SlidersHorizontal,
   Smartphone,
+  Sparkles,
   Type,
   Upload,
   Volume2,
@@ -171,8 +183,15 @@ function EditorSection({ title, icon, open, onToggle, testId, children }) {
  *  Uses `.eyebrow` rather than re-stating it. A hand-rolled
  *  `text-[11px] uppercase` copy was both a duplicate of an existing primitive
  *  and below the 12px floor design_guidelines.md:94 sets with no exceptions.
+ *
+ *  ADR 0370: a caller with a natural icon for its block passes it,
+ *  and the label renders through the shared GroupLabel — the one
+ *  eyebrow face with the icon at its left — so the editor's
+ *  sub-labels match the group headings everywhere else. A label
+ *  with no natural icon keeps the plain eyebrow.
  */
-function SubLabel({ children }) {
+function SubLabel({ icon, children }) {
+  if (icon) return <GroupLabel icon={icon}>{children}</GroupLabel>;
   return <span className="eyebrow block">{children}</span>;
 }
 
@@ -202,9 +221,6 @@ function RecordBriefNote({ brief }) {
     <div className="inset-panel" data-testid="demo-cta-record-brief">
       <GroupLabel icon={Clapperboard}>What the demo should show</GroupLabel>
       <p className="mt-3 text-base leading-relaxed">{brief}</p>
-      <p className="mt-2 text-sm text-muted-foreground">
-        A note from your plan — never part of the generated clip.
-      </p>
     </div>
   );
 }
@@ -217,7 +233,7 @@ function RecordBriefNote({ brief }) {
 function StylePicker({ label, hint, value, onChange, prefix }) {
   return (
     <>
-      <SubLabel>{label}</SubLabel>
+      <SubLabel icon={Smartphone}>{label}</SubLabel>
       {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
       <div className="grid grid-cols-3 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
         {[
@@ -255,7 +271,7 @@ function StylePicker({ label, hint, value, onChange, prefix }) {
 function TransitionPicker({ value, onChange }) {
   return (
     <>
-      <SubLabel>Transition between clips</SubLabel>
+      <SubLabel icon={Repeat}>Transition between clips</SubLabel>
       <div className="grid grid-cols-4 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1" role="group" aria-label="Transition between clips">
         {TRANSITIONS.map((t) => (
           <button
@@ -306,7 +322,7 @@ function EnvGrid({ value, onChange, prefix }) {
 function BackgroundPicker({ value, onChange, prefix }) {
   return (
     <div className="space-y-2">
-      <SubLabel>Background</SubLabel>
+      <SubLabel icon={ImageIcon}>Background</SubLabel>
       <div className="flex flex-wrap items-center gap-2">
         {BACKGROUNDS.map((b) => (
           <button
@@ -341,7 +357,7 @@ function BackgroundPicker({ value, onChange, prefix }) {
 function AnimationPicker({ value, onChange, prefix }) {
   return (
     <div className="space-y-2">
-      <SubLabel>Animation</SubLabel>
+      <SubLabel icon={Sparkles}>Animation</SubLabel>
       <div
         role="group"
         aria-label="Animation"
@@ -567,7 +583,7 @@ function AnimDisclosure({ testId, currentLabel, open, onToggle, children }) {
   const panelId = useId();
   return (
     <div className="space-y-2">
-      <SubLabel>Customize</SubLabel>
+      <SubLabel icon={SlidersHorizontal}>Customize</SubLabel>
       <details open={open} data-testid={testId} className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/40 px-3 py-1.5">
         <summary onClick={(event) => { event.preventDefault(); onToggle(); }} role="button" tabIndex={0} aria-expanded={open} aria-controls={panelId} className="focus-ring flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-sm text-muted-foreground [&::-webkit-details-marker]:hidden">
           <span>Animation · <span className="text-foreground">{currentLabel}</span></span>
@@ -611,8 +627,7 @@ function FontDisclosure({ testId, groupLabel, currentLabel, open, onToggle, chil
 function AccentPicker({ testPrefix, accent, onAccentChange }) {
   return (
     <div className="space-y-2">
-      <SubLabel>Accent</SubLabel>
-      <p className="text-sm text-muted-foreground">Colors hook text and handle chip.</p>
+      <SubLabel icon={Palette}>Accent</SubLabel>
       <div className="flex flex-wrap items-center gap-2">
         {ACCENT_SWATCHES.map((c) => (
           <button
@@ -1990,9 +2005,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
         <EditorSection title="Base clip & look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
           {generation ? (
             <>
-              <p className="text-sm text-muted-foreground">
-                This render is your base. Add footage after it in Second clip, or put a phone over it in Real Video.
-              </p>
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <Badge variant="secondary">Hook + Story</Badge>
                 {videoMeta && <span className="text-muted-foreground">{videoMeta.w}x{videoMeta.h} • {baseDuration.toFixed(1)}s{baseStart > 0 ? " used" : ""}</span>}
@@ -2003,11 +2015,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                 </p>
               )}
             </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Upload one clip to start — footage or a finished render.
-            </p>
-          )}
+          ) : null}
           <div className="flex flex-wrap items-center gap-2">
             {/* No picker button here. The frame carries the upload action in
                 both routes, so a second button in this group was two doors to
@@ -2071,7 +2079,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
             <StylePicker
               label="Base clip style"
-              hint="Drag the preview to reframe. Hand Holding picks a scene too."
               value={viewMode}
               onChange={(id) => { invalidateSequence(); setViewMode(id); }}
               prefix="view-mode-"
@@ -2108,18 +2115,17 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               the default path — shoot, trim, text, export — should not wade
               through twelve sliders to reach the Second clip group. */}
           <details className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5" data-testid="fine-tune-framing">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-sm font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
+            <GroupLabel as="summary" className="cursor-pointer list-none justify-between py-1 [&::-webkit-details-marker]:hidden">
               <span>Fine-tune framing</span>
               <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
-            </summary>
+            </GroupLabel>
             <div className="space-y-2 pb-2 pt-1">
           {viewMode === "floating" && (
               <ControlSlider label="Phone size" value={scale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={(phoneScale) => updateZoomDraft({ phoneScale })} testId="phone-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
           )}
           {viewMode === "hand" && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-              <SubLabel>Hand size &amp; position</SubLabel>
-              <p className="text-sm text-muted-foreground">Drag to move • scroll to zoom</p>
+              <SubLabel icon={Hand}>Hand size &amp; position</SubLabel>
               <ControlSlider label="Zoom" value={handZoom} min={RANGES.handZoom.min} max={RANGES.handZoom.max} step={RANGES.handZoom.step} onChange={(handZoom) => updateZoomDraft({ handZoom })} testId="hand-zoom-slider" format={(v) => `${v.toFixed(2)}x`} />
               <ControlSlider label="H position" value={handPanX} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={(handPanX) => updateZoomDraft({ handPanX })} testId="hand-panx-slider" format={(v) => `${Math.round(v * 100)}%`} />
               <ControlSlider label="V position" value={handPanY} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={(handPanY) => updateZoomDraft({ handPanY })} testId="hand-pany-slider" format={(v) => `${Math.round(v * 100)}%`} />
@@ -2129,7 +2135,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             </div>
           )}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-            <SubLabel>Mockup height</SubLabel>
+            <SubLabel icon={MoveVertical}>Mockup height</SubLabel>
             <div className="flex items-center gap-2">
               <Slider
                 value={[mockupStretchY]}
@@ -2153,7 +2159,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               added hand clip, back when one rect drove both. */}
           {viewMode === "hand" && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="screen-position-controls">
-              <SubLabel>Phone screen position</SubLabel>
+              <SubLabel icon={Move}>Phone screen position</SubLabel>
               {[
                 ["Left", screenX, setScreenX, "left"],
                 ["Top", screenY, setScreenY, "top"],
@@ -2182,7 +2188,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           )}
           {videoUrl && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-              <SubLabel>Video crop</SubLabel>
+              <SubLabel icon={Crop}>Video crop</SubLabel>
               <div className="flex items-center justify-between gap-2">
                 <AppSelect value={videoFit} onChange={setVideoFit} className={CONTROL_CLASS} wrapClassName="min-w-0 flex-1" ariaLabel="Video fit"
                   options={[
@@ -2217,7 +2223,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             "before" was the second upload button nobody could place. */}
         {videoUrl && (
         <EditorSection title="Second clip" icon={Smartphone} open={openSections.second} onToggle={() => toggleSection("second")} testId="demo-cta-second">
-          <p className="text-sm text-muted-foreground">Plays after the base, in its own style — a clip, or your app screens as an image sequence. One export covers both.</p>
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
@@ -2263,10 +2268,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           {!appendMeta && !appendError && (appendUrl || !!appendImages?.length) && <p role="status" className="text-sm text-muted-foreground">{appendImages?.length ? "Loading added images…" : "Loading added clip…"}</p>}
           {!!appendImages?.length && (
             <div className="space-y-2" data-testid="append-images-list">
-              <SubLabel>Image sequence · {imageSequenceDuration(appendImages).toFixed(1)}s</SubLabel>
-              <p className="text-sm text-muted-foreground">
-                Each screen sits still unless you give it a motion below — a zoom or a pan — and crossfades into the next, so the sequence plays as one flow. Put them in the order the story walks through the app; the end card can close over the last one.
-              </p>
+              <SubLabel icon={Images}>Image sequence · {imageSequenceDuration(appendImages).toFixed(1)}s</SubLabel>
               {appendImages.map((entry, index) => (
                 <div key={entry.id} className="space-y-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-2" data-testid={`append-image-row-${entry.id}`}>
                   <div className="flex items-center gap-1">
@@ -2328,7 +2330,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             <>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
-                  <SubLabel>Device frame</SubLabel>
+                  <SubLabel icon={MonitorSmartphone}>Device frame</SubLabel>
                   <span className="inline-flex items-center rounded-full border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-2 py-0.5 text-xs font-semibold text-[color:var(--brand-indigo)]">
                     {deviceKindTag(activeDevice)}
                   </span>
@@ -2382,17 +2384,17 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               is set by these sliders alone. */}
           {(appendUrl || !!appendImages?.length) && (
           <details className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5" data-testid="append-fine-tune-framing">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-sm font-semibold text-muted-foreground transition-colors group-hover:text-foreground [&::-webkit-details-marker]:hidden">
+            <GroupLabel as="summary" className="cursor-pointer list-none justify-between py-1 [&::-webkit-details-marker]:hidden">
               <span>Fine-tune framing</span>
               <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
-            </summary>
+            </GroupLabel>
             <div className="space-y-2 pb-2 pt-1">
           {appendMode === "floating" && (
               <ControlSlider label="Phone size" value={appendScale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={setAppendScale} testId="append-phone-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
           )}
           {appendMode === "hand" && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-              <SubLabel>Hand size &amp; position</SubLabel>
+              <SubLabel icon={Hand}>Hand size &amp; position</SubLabel>
               <ControlSlider label="Zoom" value={appendHandZoom} min={RANGES.handZoom.min} max={RANGES.handZoom.max} step={RANGES.handZoom.step} onChange={setAppendHandZoom} testId="append-hand-zoom-slider" format={(v) => `${v.toFixed(2)}x`} />
               <ControlSlider label="H position" value={appendHandPanX} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setAppendHandPanX} testId="append-hand-panx-slider" format={(v) => `${Math.round(v * 100)}%`} />
               <ControlSlider label="V position" value={appendHandPanY} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={setAppendHandPanY} testId="append-hand-pany-slider" format={(v) => `${Math.round(v * 100)}%`} />
@@ -2402,7 +2404,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             </div>
           )}
           <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-            <SubLabel>Mockup height</SubLabel>
+            <SubLabel icon={MoveVertical}>Mockup height</SubLabel>
             <div className="flex items-center gap-2">
               <Slider
                 data-testid="append-mockup-height-slider"
@@ -2422,7 +2424,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           </div>
           {appendMode === "hand" && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="append-screen-position-controls">
-              <SubLabel>Phone screen position</SubLabel>
+              <SubLabel icon={Move}>Phone screen position</SubLabel>
               {[
                 ["Left", appendScreenX, setAppendScreenX, "left"],
                 ["Top", appendScreenY, setAppendScreenY, "top"],
@@ -2460,7 +2462,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               loaded (appendMeta), below the audio and overlay toggles. */}
           {appendMeta && (
             <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="append-video-crop">
-              <SubLabel>Video crop</SubLabel>
+              <SubLabel icon={Crop}>Video crop</SubLabel>
               <div className="flex items-center justify-between gap-2">
                 <AppSelect value={appendVideoFit} onChange={setAppendVideoFit} className={CONTROL_CLASS} wrapClassName="min-w-0 flex-1" ariaLabel="Second clip video fit" testId="append-video-fit"
                   options={[
@@ -2491,7 +2493,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             <Switch data-testid="hook-toggle" checked={hookEnabled} onCheckedChange={(next) => { setHookEnabled(next); if (next) startScopedPreview("hook"); }} />
             Show hook text
           </label>
-          <p className="text-sm text-muted-foreground">On-screen overlay only; spoken script unchanged.</p>
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm text-muted-foreground">Text to show at the opening</span>
@@ -2559,7 +2560,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               the hook so the change is visible without scrubbing. */}
           <Disclosure testId="hook-style-disclosure" summary="Text style & accent">
             <div className="space-y-2 pb-2 pt-1">
-            <GroupLabel>Text style</GroupLabel>
+            <GroupLabel icon={Type}>Text style</GroupLabel>
             <div className="grid grid-cols-3 gap-2" role="group" aria-label="Text style">
               {TEXT_STYLES.map((s) => (
                 <button
@@ -2576,7 +2577,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                 >{s.label}</button>
               ))}
             </div>
-            <p className="text-sm text-muted-foreground">Hook, story &amp; end card share this style.</p>
           </div>
           <AccentPicker testPrefix="hook-accent" accent={overlayAccent} onAccentChange={(c) => { setOverlayAccent(c); startScopedPreview("hook"); }} />
           </Disclosure>
@@ -2591,8 +2591,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               <ControlSlider label="Text size" value={captionScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={(val) => { setCaptionScale(val); ensureScopedPreview("hook"); }} testId="caption-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
               <ScalePresets value={captionScale} onChange={(val) => { setCaptionScale(val); startScopedPreview("hook"); }} testPrefix="caption-size-preset" ariaLabel="Caption size presets" />
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm italic text-muted-foreground">Drag hook text on preview to reposition</p>
+            <div className="flex items-center justify-end gap-2">
               <VerticalNudge label="Hook text position" upTestId="hook-nudge-up" downTestId="hook-nudge-down" onNudge={(dy) => setHookOffsetY((y) => y + dy)} />
             </div>
             {(hookOffsetX !== 0 || hookOffsetY !== 0) && (
@@ -2617,7 +2616,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               className={TEXTAREA_CLASS}
             />
           </label>
-          <p className="text-sm text-muted-foreground">Uses Opening text style; spoken script unchanged.</p>
           {storyAvailable ? (
             <>
               <p className="text-sm text-muted-foreground" data-testid="story-timing-hint">
@@ -2632,8 +2630,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               {videoMeta ? "No room for story text. Shorten hook or end card to free time." : "Upload a clip to time story text."}
             </p>
           )}
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm italic text-muted-foreground">Drag Story text on preview to reposition</p>
+          <div className="flex items-center justify-end gap-2">
             <VerticalNudge label="Story text position" upTestId="story-nudge-up" downTestId="story-nudge-down" onNudge={(dy) => setStoryOffsetY((y) => y + dy)} />
           </div>
           {storyOffsetY !== 0 && <ResetButton onClick={() => setStoryOffsetY(0)}>Reset position</ResetButton>}
@@ -2644,7 +2641,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             <Switch data-testid="cta-toggle" checked={ctaEnabled} onCheckedChange={(next) => { setCtaEnabled(next); if (next) startScopedPreview("cta"); }} />
             Show end card
           </label>
-          <p className="text-sm text-muted-foreground">On-screen end card. Write one clear next step.</p>
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm text-muted-foreground">Call-to-action text</span>
@@ -2754,25 +2750,18 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               <ControlSlider label="Text size" value={ctaScale} min={RANGES.overlayScale.min} max={RANGES.overlayScale.max} step={RANGES.overlayScale.step} onChange={(val) => { setCtaScale(val); ensureScopedPreview("cta"); }} testId="cta-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
               <ScalePresets value={ctaScale} onChange={(val) => { setCtaScale(val); startScopedPreview("cta"); }} testPrefix="cta-size-preset" ariaLabel="CTA size presets" />
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm italic text-muted-foreground">Drag the end card up or down on the preview to reposition</p>
+            <div className="flex items-center justify-end gap-2">
               <VerticalNudge label="End card position" upTestId="cta-nudge-up" downTestId="cta-nudge-down" onNudge={(dy) => setCtaOffsetY((y) => y + dy)} />
             </div>
             {(ctaOffsetX !== 0 || ctaOffsetY !== 0) && (
               <ResetButton onClick={() => { setCtaOffsetX(0); setCtaOffsetY(0); }}>Reset position</ResetButton>
             )}
           <AccentPicker testPrefix="overlay-accent" accent={overlayAccent} onAccentChange={(c) => { setOverlayAccent(c); startScopedPreview("cta"); }} />
-            <p className="text-sm leading-snug text-muted-foreground">
-              Laid out inside TikTok&apos;s safe area — clear of the right icon rail and bottom caption strip.
-            </p>
           </AnimDisclosure>
           <div className="space-y-3 border-t border-[color:var(--hairline)] pt-3" data-testid="look-save-review">
-            <SubLabel>Happy with your look?</SubLabel>
-            <p className="text-sm text-muted-foreground">
-              Save this hook &amp; end card styling for your next video. Video, copy &amp; zoom not included.
-            </p>
+            <SubLabel icon={Heart}>Happy with your look?</SubLabel>
             <div className="space-y-2" data-testid="look-presets-block">
-              <SubLabel>Your looks</SubLabel>
+              <SubLabel icon={Bookmark}>Your looks</SubLabel>
               <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Look presets">
                 {allLookPresets.map((look) => {
                   const active = isLookPresetActive(look);
@@ -3016,7 +3005,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                   <Upload className="h-3.5 w-3.5" />
                   Upload a clip
                 </Button>
-                <p className="mt-2 text-sm text-muted-foreground">Upload one clip to style it.</p>
                 <p className="my-2 text-sm text-muted-foreground">or</p>
                 <Button
                   type="button"
@@ -3341,9 +3329,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                         </div>
                       );
                     })}
-                    <p className="pt-0.5 text-sm text-muted-foreground">
-                      Seek → adjust zoom → Lock. Adjustments pause the preview. Repeat at later times to zoom in or out; Play replays saved locks in preview and export.
-                    </p>
                     </div>
                   </details>
                 )}

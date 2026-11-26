@@ -4,10 +4,13 @@ import {
   AlertTriangle,
   AudioLines,
   Briefcase,
+  Captions,
   Clapperboard,
   Compass,
   Film,
+  MapPin,
   Share2,
+  Shirt,
   Sparkles,
   Zap,
 } from "lucide-react";
@@ -384,6 +387,16 @@ export default function HookCta() {
   // what the autosave is about to write.
   const editValue = (field, fallback = "") =>
     edits[field] !== undefined ? edits[field] : project?.[field] ?? fallback;
+  // Create's editPick read (ADR 0361), the same shape on this
+  // page (ADR 0364): the value a pick control may show as picked —
+  // the field's effective value only when it stands OFF its
+  // standing default, else nothing picked. Generation keeps
+  // reading editValue untouched, so what renders is identical;
+  // only the buttons' lit faces change.
+  const editPick = (field, standingDefault) => {
+    const value = editValue(field, standingDefault);
+    return value === standingDefault ? "" : value;
+  };
   const editField = useCallback(
     (field, value, options = {}) =>
       dispatch({ type: "edit-field", field, value, ...options }),
@@ -704,9 +717,9 @@ export default function HookCta() {
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-base font-semibold">
+                      <GroupLabel>
                         {describeUnapprovedCount(unapproved.length)}
-                      </p>
+                      </GroupLabel>
                       <p className="mt-1 text-sm text-muted-foreground" data-subtitle="">
                         Approve draft profiles first so they can generate hooks.
                       </p>
@@ -723,50 +736,66 @@ export default function HookCta() {
           {project && (
             <SectionCard title="Place and wardrobe" icon={Compass} data-testid="hook-cta-direction-card">
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground" data-subtitle="">
-                  Place and wardrobe — the hook is written from these picks.
-                </p>
-
                 {/* The voice pick sits with the direction controls it
                     belongs with (ADR 0246): the character talks, or
                     stays silent and TikTok's text-to-speech carries
-                    the line instead. */}
+                    the line instead. ADR 0364: it reads pickedValue
+                    the way Create does (ADR 0361) — a create-fresh
+                    project stands silent at the render, so no voice
+                    button stands lit before a click; the note under
+                    the pair stays in both modes, untouched. */}
                 <VoiceModeControl
                   value={editValue("voice_mode", "silent")}
+                  pickedValue={editPick("voice_mode", "silent")}
                   onChange={(value) => editField("voice_mode", value, { omitDefault: true, fallback: "silent" })}
                   silentText={String(editValue("hook_line", "") || "").trim()}
                   silentTextName="the hook line"
                 />
 
-                <DirectionSelect
-                  id="hook-cta-location-direction"
-                  testId="hook-cta-location-direction"
-                  label="Location"
-                  value={dirSel.location}
-                  onPick={pickScenePart("location")}
-                  options={directionOptions?.location}
-                  placeholder="Choose a Location…"
-                  refresh={directionRefreshProps("location", "hook-cta-location-refresh")}
-                />
-                <DirectionSelect
-                  id="hook-cta-wardrobe"
-                  testId="hook-cta-wardrobe"
-                  label="Wardrobe"
-                  value={dirSel.wardrobe}
-                  onPick={pickScenePart("wardrobe")}
-                  options={directionOptions?.wardrobe}
-                  placeholder="Choose wardrobe…"
-                  refresh={directionRefreshProps("wardrobe", "hook-cta-wardrobe-refresh")}
-                />
-                {project?.visual_direction && !edits.visual_direction && (
-                  <p className="text-sm text-muted-foreground">
-                    Plan default: {sentenceCase(project.visual_direction)}
-                  </p>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  Location and wardrobe apply together in the hook written from them. Lighting
-                  is set from this hook&apos;s scene.
-                </p>
+                {/* ADR 0364: Location and Wardrobe stand side by
+                    side in the shared .section-pair — the exact
+                    twin of Create's second pair — each heading in
+                    the one GroupLabel eyebrow face with its own
+                    icon, and the plan-default line rides inside
+                    the Wardrobe area, mirroring Create. The card's
+                    subtitle and the apply-together sentence are
+                    removed: no standing descriptive lines stand in
+                    this card. Below 1024px the pair stacks and the
+                    stylesheet's rhythm puts one hairline between
+                    Location and Wardrobe where none stood before. */}
+                <div className="section-pair">
+                  <div className="space-y-2">
+                    <DirectionSelect
+                      id="hook-cta-location-direction"
+                      testId="hook-cta-location-direction"
+                      label="Location"
+                      labelIcon={MapPin}
+                      value={dirSel.location}
+                      onPick={pickScenePart("location")}
+                      options={directionOptions?.location}
+                      placeholder="Choose a Location…"
+                      refresh={directionRefreshProps("location", "hook-cta-location-refresh")}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <DirectionSelect
+                      id="hook-cta-wardrobe"
+                      testId="hook-cta-wardrobe"
+                      label="Wardrobe"
+                      labelIcon={Shirt}
+                      value={dirSel.wardrobe}
+                      onPick={pickScenePart("wardrobe")}
+                      options={directionOptions?.wardrobe}
+                      placeholder="Choose wardrobe…"
+                      refresh={directionRefreshProps("wardrobe", "hook-cta-wardrobe-refresh")}
+                    />
+                    {project?.visual_direction && !edits.visual_direction && (
+                      <p className="text-sm text-muted-foreground">
+                        Plan default: {sentenceCase(project.visual_direction)}
+                      </p>
+                    )}
+                  </div>
+                </div>
                 {directionRefreshError && (
                   <p role="alert" data-testid="hook-cta-direction-refresh-error" className="text-sm text-destructive-text">
                     {directionRefreshError}
@@ -779,9 +808,6 @@ export default function HookCta() {
           {project && (
             <SectionCard title="The hook" icon={Zap} data-testid="hook-cta-hook-card" collapsed={!hookSectionOpen}>
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground" data-subtitle="">
-                  One line from your app and your direction, five seconds.
-                </p>
                 {/* ADR 0351: no hook length pick — a HookSnap video is
                     always five seconds, so there is nothing to choose
                     and no 4/5 buttons to show. The server pins the
@@ -924,9 +950,6 @@ export default function HookCta() {
           {project && (
             <SectionCard title="Render the hook" icon={Clapperboard} data-testid="hook-cta-render-card" collapsed={!renderSectionOpen}>
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground" data-subtitle="">
-                  One press renders the finished hook at its picked length.
-                </p>
                 <HookRenderPanel
                   project={{
                     ...project,
@@ -945,9 +968,6 @@ export default function HookCta() {
           {project && (
             <SectionCard title="Demo + CTA" icon={Film} data-testid="hook-cta-finish-card" collapsed={!finishSectionOpen}>
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground" data-subtitle="">
-                  Your demo and call to action, joined onto the hook&apos;s end.
-                </p>
                 {hookFinished ? (
                   <>
                     <DemoCtaGenerationEditor key={generation.id} generationId={generation.id} />
@@ -969,12 +989,10 @@ export default function HookCta() {
           {project && (
             <SectionCard title="Post kit" icon={Share2} data-testid="hook-cta-post-kit" collapsed={!postKitSectionOpen}>
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground" data-subtitle="">
-                  The caption and hashtags for posting the finished video.
-                </p>
                 {hookFinished ? (
                   generation.post_kit ? (
                     <PostKitSection
+                      headingIcon={Share2}
                       postKit={generation.post_kit}
                       generationId={generation.id}
                       ttsText={
@@ -996,10 +1014,6 @@ export default function HookCta() {
                   )
                 ) : (
                   <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                      The post kit is written when the hook finishes rendering — the same
-                      caption and hashtags the render carries in History.
-                    </p>
                     {/* ADR 0353: the caption alone can be previewed
                         from the hook line, on this card's own click —
                         nothing generates on its own. The preview is
@@ -1010,7 +1024,7 @@ export default function HookCta() {
                         {livePreview && (
                           <div className="space-y-3" data-testid="hook-cta-caption-preview">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                              <GroupLabel>Caption preview</GroupLabel>
+                              <GroupLabel icon={Captions}>Caption preview</GroupLabel>
                               <span
                                 className="text-sm text-muted-foreground"
                                 data-testid="hook-cta-caption-preview-count"
