@@ -36,7 +36,7 @@ function params(overrides = {}) {
     videoMeta: null,
     device: "s24",
     preset: "tiktok",
-    viewMode: "floating",
+    viewMode: "realistic",
     envBg: "studio",
     captionFont: "anton",
     ctaFont: "anton",

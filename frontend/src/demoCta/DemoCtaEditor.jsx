@@ -226,9 +226,9 @@ function RecordBriefNote({ brief }) {
 }
 
 /**
- * Three-way presentation picker shared by both clips. `prefix` namespaces
- * the testids (`view-mode-*` for the base, `append-mode-*` for the added
- * clip) so the two pickers drive independent state from one component.
+ * Three-way presentation picker. It once served both clips; since
+ * ADR 0374 the base always stands as Real Video, so the picker lives
+ * on the added clip alone (`append-mode-*` testids).
  */
 function StylePicker({ label, hint, value, onChange, prefix }) {
   return (
@@ -1410,7 +1410,9 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     if (!edit.appendImages?.length) clearAppendImages();
     const setters = {
       baseStart: setBaseStart, appendStart: setAppendStart, baseEnd: setBaseEnd, appendEnd: setAppendEnd, sourceReplaced: setSourceReplaced, openingProfileId: setOpeningProfileId,
-      device: setDevice, bg: setBg, anim: setAnim, mockupStretchY: setMockupStretchY, videoFit: setVideoFit, viewMode: setViewMode,
+      device: setDevice, bg: setBg, anim: setAnim, mockupStretchY: setMockupStretchY, videoFit: setVideoFit,
+      // ADR 0374: healed to Real Video at the loop below.
+      viewMode: setViewMode,
       envBg: setEnvBg, screenX: setScreenX, screenY: setScreenY, screenW: setScreenW, screenH: setScreenH,
       hookEnabled: setHookEnabled, hookText: setHookText, hookDuration: setHookDuration, hookOffsetX: setHookOffsetX, hookOffsetY: setHookOffsetY,
       storyEnabled: setStoryEnabled, storyText: setStoryText, storyTiming: setStoryTiming, storyOffsetY: setStoryOffsetY,
@@ -1430,7 +1432,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       appendImages: setAppendImages,
       zoomKeyframes: setZoomKeyframes,
     };
-    Object.entries(setters).forEach(([key, setter]) => { if (key in edit) setter(edit[key]); });
+    // ADR 0374: the base always stands as Real Video — a stored
+    // floating or hand edit heals here, at the one funnel every
+    // restore passes through (draft load, undo, redo), so the
+    // value a snapshot carries no longer drives the base's
+    // presentation. The ADR 0351 pattern, applied at the mouth.
+    Object.entries(setters).forEach(([key, setter]) => { if (key in edit) setter(key === "viewMode" ? "realistic" : edit[key]); });
     const restoreMedia = (next, current, ref, setUrl, setMedia, setName, setMeta) => {
       if (next?.id === current?.id) return;
       if (ref.current) URL.revokeObjectURL(ref.current);
@@ -2046,44 +2053,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               Source replaced; export stays under this Hook + Story.
             </p>
           )}
-          {/* The frame line & picker: names the active frame with its catalog
-              frame-type tag (Phone, Web / Browser, Desktop / Monitor) and
-              lets the founder switch between Phone handsets, Browser / Web
-              Card, Desktop Browser (16:9), and Desktop Monitor. */}
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-muted-foreground">Frame</span>
-                <span className="font-semibold">{activeDevice.label}</span>
-              </div>
-              <span
-                data-testid="demo-cta-frame-tag"
-                className="inline-flex items-center rounded-full border border-[color:var(--indigo-15)] bg-[color:var(--indigo-8)] px-2 py-0.5 text-xs font-semibold text-[color:var(--brand-indigo)]"
-              >
-                {deviceKindTag(activeDevice)}
-              </span>
-            </div>
-            <AppSelect
-              value={device}
-              onChange={(nextId) => { invalidateSequence(); setDevice(nextId); }}
-              className={CONTROL_CLASS}
-              wrapClassName="w-full"
-              ariaLabel="Device frame"
-              testId="device-frame-select"
-              options={DEVICES.map((d) => ({
-                value: d.id,
-                label: `${d.label} · ${deviceKindTag(d)}`,
-              }))}
-            />
-          </div>
-          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-            <StylePicker
-              label="Base clip style"
-              value={viewMode}
-              onChange={(id) => { invalidateSequence(); setViewMode(id); }}
-              prefix="view-mode-"
-            />
-          </div>
+          {/* No frame selection and no style pick stand in this
+              section (ADRs 0374-0375): the base always applies Real
+              Video, and the frame the composition resolves through
+              is the shared device state — its default, a restored
+              draft's value, or the Second clip's own frame picker. */}
           {videoUrl && (
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input type="checkbox" checked={baseMuted} data-testid="base-audio-mute"
@@ -2091,103 +2065,19 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               Mute base clip audio in preview and export
             </label>
           )}
-          {/* Base scene only. The added clip picks its own scene in Second
-              clip, and the painter resolves per segment, so one hand photo
-              can open into a different room. */}
-          {viewMode === "hand" && (
-            <EnvGrid value={envBg} onChange={setEnvBg} prefix="" />
-          )}
-          {/* Floating-only: Real Video must show no background control. */}
-          {viewMode === "floating" && (
-            <Disclosure
-              testId="source-style-details"
-              summary={<>Backdrop &amp; motion · <span className="text-foreground">{(BACKGROUNDS.find((b) => b.id === bg) || {}).label} · {(ANIMATIONS.find((a) => a.id === anim) || {}).label}</span></>}
-            >
-              <div className="space-y-2 pb-2 pt-1">
-                <BackgroundPicker value={bg} onChange={setBg} prefix="" />
-                <AnimationPicker value={anim} onChange={setAnim} prefix="" />
-              </div>
-            </Disclosure>
-          )}
-          {/* Fine-tuning discloses inside Base clip & look rather than standing
-              as its own group: phone size, hand framing, mockup height,
-              screen position and crop all modify the look chosen above, and
-              the default path — shoot, trim, text, export — should not wade
-              through twelve sliders to reach the Second clip group. */}
+          {/* Fine-tuning discloses inside Base clip & look rather than
+              standing as its own group. Since ADR 0374 the crop is the
+              only framing left here — the one framing a full-frame
+              clip has — and the disclosure stands only once a clip is
+              loaded, since the crop is all it holds. */}
+          {videoUrl && (
           <details className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5" data-testid="fine-tune-framing">
             <GroupLabel as="summary" className="cursor-pointer list-none justify-between py-1 [&::-webkit-details-marker]:hidden">
               <span>Fine-tune framing</span>
               <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
             </GroupLabel>
             <div className="space-y-2 pb-2 pt-1">
-          {viewMode === "floating" && (
-              <ControlSlider label="Phone size" value={scale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={(phoneScale) => updateZoomDraft({ phoneScale })} testId="phone-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
-          )}
-          {viewMode === "hand" && (
-            <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-              <SubLabel icon={Hand}>Hand size &amp; position</SubLabel>
-              <ControlSlider label="Zoom" value={handZoom} min={RANGES.handZoom.min} max={RANGES.handZoom.max} step={RANGES.handZoom.step} onChange={(handZoom) => updateZoomDraft({ handZoom })} testId="hand-zoom-slider" format={(v) => `${v.toFixed(2)}x`} />
-              <ControlSlider label="H position" value={handPanX} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={(handPanX) => updateZoomDraft({ handPanX })} testId="hand-panx-slider" format={(v) => `${Math.round(v * 100)}%`} />
-              <ControlSlider label="V position" value={handPanY} min={RANGES.handPan.min} max={RANGES.handPan.max} step={RANGES.handPan.step} onChange={(handPanY) => updateZoomDraft({ handPanY })} testId="hand-pany-slider" format={(v) => `${Math.round(v * 100)}%`} />
-              <ResetButton testId="hand-transform-reset-btn" onClick={() => updateZoomDraft({ handZoom: 1, handPanX: 0, handPanY: 0 })}>
-                Reset hand framing
-              </ResetButton>
-            </div>
-          )}
-          <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
-            <SubLabel icon={MoveVertical}>Mockup height</SubLabel>
-            <div className="flex items-center gap-2">
-              <Slider
-                value={[mockupStretchY]}
-                min={RANGES.mockupStretchY.min}
-                max={RANGES.mockupStretchY.max}
-                step={RANGES.mockupStretchY.step}
-                onValueChange={([next]) => setMockupStretchY(next)}
-                className="flex-1"
-                aria-label="Mockup height"
-              />
-              <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-foreground">
-                {Math.round(mockupStretchY * 100)}%
-              </span>
-              <ResetButton onClick={() => setMockupStretchY(1)}>Reset</ResetButton>
-            </div>
-          </div>
-          {/* The base's rect governs the base hand shot alone (ADR
-              0266): the added clip's hand shot reads its own rect from
-              its own Fine-tune framing, so this control stands exactly
-              when the base is hand-held — it used to also stand for an
-              added hand clip, back when one rect drove both. */}
-          {viewMode === "hand" && (
-            <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="screen-position-controls">
-              <SubLabel icon={Move}>Phone screen position</SubLabel>
-              {[
-                ["Left", screenX, setScreenX, "left"],
-                ["Top", screenY, setScreenY, "top"],
-                ["Width", screenW, setScreenW, "width"],
-                ["Height", screenH, setScreenH, "height"],
-              ].map(([label, val, setter, key]) => (
-                <div key={key} className="space-y-2">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <FieldLabel>{label}</FieldLabel>
-                    <span className="font-mono text-xs tabular-nums text-foreground">{(val * 100).toFixed(1)}</span>
-                  </div>
-                  <Slider
-                    data-testid={`screen-${key}-slider`}
-                    value={[val]}
-                    min={RANGES.screen.min}
-                    max={RANGES.screen.max}
-                    step={RANGES.screen.step}
-                    onValueChange={([next]) => setter(next)}
-                  />
-                </div>
-              ))}
-              <ResetButton testId="screen-reset-btn" onClick={() => { setScreenX(DEFAULT_SCREEN.x); setScreenY(DEFAULT_SCREEN.y); setScreenW(DEFAULT_SCREEN.w); setScreenH(DEFAULT_SCREEN.h); }}>
-                Reset to photo screen
-              </ResetButton>
-            </div>
-          )}
-          {videoUrl && (
-            <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
+            <div className="space-y-2">
               <SubLabel icon={Crop}>Video crop</SubLabel>
               <div className="flex items-center justify-between gap-2">
                 <AppSelect value={videoFit} onChange={setVideoFit} className={CONTROL_CLASS} wrapClassName="min-w-0 flex-1" ariaLabel="Video fit"
@@ -2212,15 +2102,17 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               <ControlSlider label="H offset" value={videoOffsetX} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => updateZoomDraft({ offX: Math.round(v) })} format={(v) => `${Math.round(v)}%`} />
               <ControlSlider label="V offset" value={videoOffsetY} min={RANGES.videoOffset.min} max={RANGES.videoOffset.max} step={RANGES.videoOffset.step} onChange={(v) => updateZoomDraft({ offY: Math.round(v) })} format={(v) => `${Math.round(v)}%`} />
             </div>
-          )}
             </div>
           </details>
+          )}
         </EditorSection>
 
         {/* The appended clip lives in its own group so Base clip & look stays
-            about the base: one clip per group, one style picker per clip.
-            Gated on a loaded base — offering an "after" before there is a
-            "before" was the second upload button nobody could place. */}
+            about the base: one clip per group, and the style picker lives
+            in this group alone — the base always stands as Real Video
+            (ADR 0374). Gated on a loaded base — offering an "after"
+            before there is a "before" was the second upload button
+            nobody could place. */}
         {videoUrl && (
         <EditorSection title="Second clip" icon={Smartphone} open={openSections.second} onToggle={() => toggleSection("second")} testId="demo-cta-second">
           <div className="flex flex-wrap items-center gap-2">

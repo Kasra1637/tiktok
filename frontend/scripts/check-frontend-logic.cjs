@@ -723,11 +723,11 @@ check("the animation catalog holds nine motions, without Aurora or the six retir
     && !["float", "pulse", "rays", "orbit", "surge", "cascade"].some((id) => DC.ANIMATIONS.some((a) => a.id === id))
     && new Set(DC.ANIMATIONS.map((a) => a.id)).size === 9,
   DC.ANIMATIONS && DC.ANIMATIONS.map((a) => a.id).join(","));
-check("defaults match the standalone app",
+check("defaults match the standalone app, the base look pinned to Real Video (ADR 0374)",
   DC.DEFAULTS.device === "s24_ultra" && DC.DEFAULTS.preset === "tiktok" && DC.DEFAULTS.bg === "lavender"
     && DC.DEFAULTS.anim === "bloom" && DC.DEFAULTS.scale === 0.82
     && DC.DEFAULTS.hookDuration === 1.8 && DC.DEFAULTS.ctaDuration === 2
-    && DC.DEFAULTS.overlayAccent === "#c8ff2e" && DC.DEFAULTS.viewMode === "floating");
+    && DC.DEFAULTS.overlayAccent === "#c8ff2e" && DC.DEFAULTS.viewMode === "realistic");
 check("slider ranges match the standalone app",
   DC.RANGES.scale.min === 0.3 && DC.RANGES.videoScale.max === 3
     && DC.RANGES.handPan.step === 0.005 && DC.RANGES.screen.step === 0.001

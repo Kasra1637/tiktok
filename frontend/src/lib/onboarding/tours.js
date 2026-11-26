@@ -325,10 +325,15 @@ export const TOURS = {
           "Upload footage or choose a finished render from History. Add a Second clip to play after the base, with its own look. Real Video also supports a separate upload in a phone over the base. Export the result together."
       },
       {
-        target: '[data-testid="demo-cta-source"] button[aria-pressed]',
-        title: "Mockup or full-frame",
+        // ADR 0374: the base has no look to pick — it always stands
+        // as Real Video — so this step points at the one picker that
+        // remains, the second clip's. Optional: the group only
+        // stands once a base exists.
+        target: '[data-testid="demo-cta-second"] button[aria-pressed]',
+        title: "The second clip picks its look",
+        optional: true,
         body:
-          "Floating phone, hand-held mockup, or full-frame Real Video — pick the look. Drag the preview to frame it; the hand-held option also lets you set a scene."
+          "The base always stands as the real video, full-frame. A second clip still picks its own look — floating phone, hand-held mockup, or Real Video — with its own framing, and the hand-held option lets you set its scene."
       },
       {
         target: '[data-testid="hook-controls"]',

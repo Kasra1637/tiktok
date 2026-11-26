@@ -18874,19 +18874,25 @@ async function runDemoCtaChecks() {
     }
   );
 
-  // The frame line & picker: the editor names its active frame with
-  // the catalog's frame-type tag, resolved through the shared helper, and
-  // lets the founder switch between Phone, Web / Browser, and Desktop / Monitor.
-  await check("the Demo + CTA editor names its frame with its type tag", async () => {
+  // ADR 0375: Base clip & look carries no frame selection — the frame
+  // line, its type tag and the base's device picker are gone from that
+  // section. The Second clip's floating presentation keeps its own
+  // frame picker, and its tag still resolves from the active frame's
+  // catalog kind through the shared helper (ADR 0260's discipline on
+  // the control that remains).
+  await check("Base clip & look carries no frame selection; the second clip keeps its own (ADR 0375)", async () => {
     const src = fs.readFileSync(path.join(SRC, "demoCta", "DemoCtaEditor.jsx"), "utf8");
-    if (!src.includes('data-testid="demo-cta-frame-tag"')) {
-      throw new Error("the editor carries no frame-type tag");
+    if (src.includes('data-testid="demo-cta-frame-tag"')) {
+      throw new Error("the base section still carries the frame-type tag");
+    }
+    if (src.includes('testId="device-frame-select"')) {
+      throw new Error("the base section still carries the device frame picker");
     }
     if (!src.includes("deviceKindTag(activeDevice)")) {
-      throw new Error("the frame tag is not resolved from the active frame's catalog kind");
+      throw new Error("the remaining frame tag is not resolved from the active frame's catalog kind");
     }
-    if (!src.includes('testId="device-frame-select"') || !src.includes('testId="append-device-frame-select"')) {
-      throw new Error("the editor does not expose the device frame picker on base and second clip");
+    if (!src.includes('testId="append-device-frame-select"')) {
+      throw new Error("the second clip lost its device frame picker");
     }
   });
 
@@ -20263,7 +20269,8 @@ async function runDemoCtaChecks() {
       await clip.loadClip(ctx);
       const base = ctx.container.querySelector("video");
       Object.defineProperty(base, "readyState", { configurable: true, value: 4 });
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="view-mode-realistic"]'), "select Real Video view");
+      // No view pick to make: the base always stands in Real Video
+      // (ADR 0374), so its default cover below is the full-frame one.
       // The added clip: a square 720×720 upload, so its fits land on
       // different boxes from the landscape base's.
       await clickEl(ctx, ctx.container.querySelector('[data-testid="demo-cta-second"] button'), "open the second clip group");
@@ -20389,6 +20396,11 @@ async function runDemoCtaChecks() {
     // see them (Floating paints the phone; Hand's photo never loads
     // under jsdom, so hand and screen independence is pinned at the
     // sliders — the same limit the base's own hand checks live with).
+    // ADR 0374 re-scoped the base side: the base no longer carries
+    // framing of its own (it always stands in Real Video), so the
+    // base-side assertions below now pin that absence — no look
+    // sliders, no style picker — while every second-clip assertion
+    // keeps its full strength.
     const draws = [];
     const clip = installLoadedClipStubs({ width: 1920, height: 1080, onDraw: (...args) => draws.push(args) });
     const disclosure = () => ctx.container.querySelector('[data-testid="append-fine-tune-framing"]');
@@ -20471,8 +20483,8 @@ async function runDemoCtaChecks() {
       };
 
       // Floating: the added clip's own Phone size. Its painted phone
-      // grows by exactly the slider's ratio; the base's phone — painted
-      // through the same painter — does not move.
+      // grows by exactly the slider's ratio; the base's full-frame
+      // picture — painted through the same painter — does not move.
       await clickEl(ctx, ctx.container.querySelector('[data-testid="append-mode-floating"]'), "float the second clip");
       if (!thumb("append-phone-size-slider")) throw new Error("the second clip's floating framing has no Phone size slider");
       if (value("append-phone-size-slider") !== 0.82) throw new Error("the second clip's Phone size does not start at the base's default");
@@ -20487,7 +20499,7 @@ async function runDemoCtaChecks() {
         throw new Error(`the second clip's phone grew by ${grew.toFixed(3)}x, expected the slider's ${(1 / 0.82).toFixed(3)}x`);
       }
       const baseBox1 = await paintBase();
-      if (baseBox1[3] !== baseBox0[3] || baseBox1[4] !== baseBox0[4]) throw new Error("the base's phone moved with the second clip's Phone size");
+      if (baseBox1[3] !== baseBox0[3] || baseBox1[4] !== baseBox0[4]) throw new Error("the base's picture moved with the second clip's Phone size");
 
       // Mockup height is the added clip's own too, and its Reset
       // returns it to 100%.
@@ -20498,14 +20510,17 @@ async function runDemoCtaChecks() {
       await clickEl(ctx, mockReset, "reset the second clip's mockup height");
       if (value("append-mockup-height-slider") !== 1) throw new Error("reset did not return the second clip's Mockup height to 100%");
 
-      // The base's own Phone size is untouched by the added clip's,
-      // and driving it never reaches the added clip either.
+      // The base has no Phone size of its own to be moved (ADR
+      // 0374): no look sliders and no style picker stand in Base
+      // clip & look at all, and the added clip's Phone size is
+      // still standing where its own slider left it.
       await openBaseFraming();
-      if (value("phone-size-slider") !== 0.82) throw new Error("the base's Phone size moved with the second clip's slider");
-      await press("phone-size-slider", "Home");
-      if (value("phone-size-slider") !== 0.3) throw new Error("the base's Phone size slider did not take the Home press");
+      if (thumb("phone-size-slider")) throw new Error("the base still offers a Phone size slider");
+      if (thumb("hand-zoom-slider")) throw new Error("the base still offers hand framing sliders");
+      if (ctx.container.querySelector('[data-testid="screen-position-controls"]')) throw new Error("the base still offers screen position controls");
+      if (ctx.container.querySelector('[data-testid^="view-mode-"]')) throw new Error("the base still offers a style picker");
       await openAppendFraming();
-      if (value("append-phone-size-slider") !== 1) throw new Error("the second clip's Phone size moved with the base's slider");
+      if (value("append-phone-size-slider") !== 1) throw new Error("the second clip's Phone size moved while the base was inspected");
 
       // Hand Holding: the added clip's own hand framing and screen
       // rect stand, the phone size leaves.
@@ -20520,21 +20535,15 @@ async function runDemoCtaChecks() {
       await press("append-screen-left-slider", "End");
       if (value("append-screen-left-slider") !== 1) throw new Error("the second clip's screen Left slider did not take the End press");
 
-      // The base's hand framing and screen rect never moved: put the
-      // base in Hand Holding and read its own sliders back.
+      // The base never grew hand framing of its own to be moved:
+      // no hand sliders and no screen rect stand on its side at all
+      // (ADR 0374), while the added clip's own screen control
+      // stands untouched beside it.
       await openBaseFraming();
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="view-mode-hand"]'), "hand-hold the base clip");
-      if (value("hand-zoom-slider") !== 1) throw new Error("the base's hand Zoom moved with the second clip's slider");
-      if (Math.abs(value("screen-left-slider") - 0.3275) > 0.001) throw new Error("the base's screen rect moved with the second clip's slider");
-      if (!ctx.container.querySelector('[data-testid="screen-position-controls"]')) throw new Error("the base lost its own screen position controls");
-
-      // The base's screen control governs the base alone now: with the
-      // base back in Floating it leaves, even though the added clip is
-      // still hand-held — the added clip's own control stays.
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="view-mode-floating"]'), "float the base clip");
-      if (ctx.container.querySelector('[data-testid="screen-position-controls"]')) throw new Error("the base's screen position still stands for a clip that is not hand-held");
+      if (thumb("hand-zoom-slider")) throw new Error("the base grew hand framing sliders beside the second clip's");
+      if (ctx.container.querySelector('[data-testid="screen-position-controls"]')) throw new Error("the base grew screen position controls beside the second clip's");
       await openAppendFraming();
-      if (!ctx.container.querySelector('[data-testid="append-screen-position-controls"]')) throw new Error("the second clip lost its screen position when the base floated");
+      if (!ctx.container.querySelector('[data-testid="append-screen-position-controls"]')) throw new Error("the second clip lost its screen position beside the modeless base");
 
       // The added clip's resets return its own framing, not the base's.
       await clickEl(ctx, ctx.container.querySelector('[data-testid="append-screen-reset-btn"]'), "reset the second clip's screen rect");
@@ -20543,6 +20552,151 @@ async function runDemoCtaChecks() {
       if (value("append-hand-zoom-slider") !== 1) throw new Error("reset did not return the second clip's hand Zoom to 1x");
     } finally {
       clip.restore();
+    }
+  });
+
+  await check("the base clip always stands as a Real Video: no style or frame pick in Base clip & look (ADRs 0374-0375)", async (ctx) => {
+    // ADR 0374: the base clip style picker is gone — the base always
+    // applies Real Video — and with it go the look controls that only
+    // served the floating phone and the hand-held photo (backdrop &
+    // motion, the scene grid, phone size, hand framing, the screen
+    // rect). ADR 0375: the Frame line and device picker leave the
+    // same section. What survives in Base clip & look is the Video
+    // crop — the one framing a full-frame clip genuinely has — and
+    // the Second clip's own style picker keeps switching its modes.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    try {
+      await clip.loadClip(ctx);
+      const section = () => ctx.container.querySelector('[data-testid="demo-cta-source"]');
+      const toggle = ctx.container.querySelector('[data-testid="demo-cta-source"] > button');
+      if (toggle && toggle.getAttribute("aria-expanded") !== "true") {
+        await clickEl(ctx, toggle, "open Base clip & look");
+      }
+      if (!section()) throw new Error("Base clip & look is missing");
+      // (a) No style pick, no frame pick, no look controls.
+      if (ctx.container.querySelector('[data-testid^="view-mode-"]')) throw new Error("the base still offers a style picker");
+      if (section().textContent.includes("Base clip style")) throw new Error("the Base clip style label still stands");
+      if (ctx.container.querySelector('[data-testid="device-frame-select"]')) throw new Error("the base still offers a frame picker");
+      if (ctx.container.querySelector('[data-testid="demo-cta-frame-tag"]')) throw new Error("the base still carries the frame-type tag");
+      if ([...section().querySelectorAll("span")].some((s) => s.textContent.trim() === "Frame")) throw new Error("the Frame line still stands in Base clip & look");
+      if (ctx.container.querySelector('[data-testid="source-style-details"]')) throw new Error("the base still offers backdrop & motion");
+      if (ctx.container.querySelector('[data-testid="env-living_room"]')) throw new Error("the base still offers a scene grid");
+      if (ctx.container.querySelector('[data-testid="phone-size-slider"]')) throw new Error("the base still offers a Phone size slider");
+      if (ctx.container.querySelector('[data-testid="hand-zoom-slider"]')) throw new Error("the base still offers hand framing");
+      if (ctx.container.querySelector('[data-testid="screen-position-controls"]')) throw new Error("the base still offers screen position controls");
+      // (c) Fine-tune framing stands (a clip is loaded) and carries
+      // the Video crop: the app-drawn fit menu and its Zoom slider.
+      const details = ctx.container.querySelector('[data-testid="fine-tune-framing"]');
+      if (!details) throw new Error("a loaded base has no Fine-tune framing");
+      if (!details.open) await clickEl(ctx, details.querySelector("summary"), "open fine-tune framing");
+      const fit = details.querySelector('[aria-label="Video fit"]');
+      if (!fit || fit.getAttribute("aria-haspopup") !== "listbox") throw new Error("the base's Video crop lost its fit menu");
+      if (!details.querySelector('[role="slider"]')) throw new Error("the base's Video crop lost its sliders");
+      // (d) The Second clip's style picker still switches its modes.
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="demo-cta-second"] button'), "open the second clip group");
+      const input = ctx.container.querySelector('[data-testid="append-upload-input"]');
+      Object.defineProperty(input, "files", { configurable: true, value: [new dom.window.File(["phone"], "phone.mp4", { type: "video/mp4" })] });
+      await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
+      await clip.flush();
+      const overlay = ctx.container.querySelector('[data-testid="append-video"]');
+      if (!overlay) throw new Error("the added clip never mounted its preview element");
+      Object.defineProperty(overlay, "readyState", { configurable: true, value: 4 });
+      await act(async () => overlay.dispatchEvent(new dom.window.Event("loadeddata")));
+      await clip.flush();
+      for (const mode of ["hand", "floating", "realistic"]) {
+        const pick = ctx.container.querySelector(`[data-testid="append-mode-${mode}"]`);
+        if (!pick) throw new Error(`the second clip's style picker lost its ${mode} option`);
+        await clickEl(ctx, pick, `switch the second clip to ${mode}`);
+        if (pick.getAttribute("aria-pressed") !== "true") throw new Error(`the second clip's style did not take the ${mode} pick`);
+      }
+    } finally {
+      clip.restore();
+    }
+  });
+
+  await check("a stored floating or hand edit restores with the base as Real Video (ADR 0374)", async (ctx) => {
+    // Drafts saved before ADR 0374 can carry viewMode "floating" or
+    // "hand" for the base. Restore heals the value to "realistic"
+    // (the ADR 0351 pattern: the stored value no longer drives
+    // anything), so the base paints full-frame and the next save
+    // carries the healed value — no migration, no founder action.
+    const draws = [];
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920, onDraw: (...args) => draws.push(args) });
+    const GEN = { id: "gen-real-video", brand_profile_id: "b1" };
+    global.__SMOKE_DRAFTS = new Map();
+    const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    const near = (a, b) => Math.abs(a - b) <= 2;
+    try {
+      await mount(Editor, { generation: GEN })(ctx);
+      const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
+      if (!input) throw new Error("no file input");
+      const file = new dom.window.File([new Uint8Array(16)], "clip.mp4", { type: "video/mp4" });
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      await act(async () => {
+        input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      });
+      await clip.flush();
+      const probe = clip.createdVideos.find((v) => v.onloadedmetadata);
+      if (!probe) throw new Error("the uploaded clip was never probed");
+      await act(async () => {
+        probe.onloadedmetadata();
+      });
+      await clip.flush();
+      await clip.flush();
+      await act(async () => ctx.root.unmount());
+      const saved = global.__SMOKE_DRAFTS.get("anonymous:gen-real-video");
+      if (!saved) throw new Error("no draft was saved");
+      if (saved.viewMode !== "realistic") throw new Error(`a fresh draft stored viewMode=${saved.viewMode}, expected the Real Video default`);
+
+      // A legacy floating draft: tamper the stored edit the way a
+      // pre-0374 save would have written it, reload, and read the
+      // painted base back — full-frame, not a phone.
+      global.__SMOKE_DRAFTS.set("anonymous:gen-real-video", { ...saved, viewMode: "floating" });
+      ctx.root = createRoot(ctx.container);
+      await mount(Editor, { generation: GEN })(ctx);
+      await clip.flush();
+      await clip.flush();
+      const restoredProbe = [...clip.createdVideos].reverse().find((v) => v.onloadedmetadata);
+      if (restoredProbe) {
+        await act(async () => {
+          restoredProbe.onloadedmetadata();
+        });
+        await clip.flush();
+      }
+      const base = ctx.container.querySelector("video");
+      if (!base) throw new Error("the restored base never mounted its preview element");
+      Object.defineProperty(base, "readyState", { configurable: true, value: 4 });
+      const seek = ctx.container.querySelector('[aria-label="Seek"]');
+      await act(async () => seek.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+      await act(async () => base.dispatchEvent(new dom.window.Event("seeked")));
+      draws.length = 0;
+      await clip.flush();
+      const hits = draws.filter((a) => a[0] === base);
+      const box = hits[hits.length - 1];
+      if (!box) throw new Error("the restored base never painted");
+      const got = { dx: box[1], dy: box[2], dw: box[3], dh: box[4] };
+      for (const [key, want] of [["dx", 0], ["dy", 0], ["dw", 1080], ["dh", 1920]]) {
+        if (!near(got[key], want)) {
+          throw new Error(`a stored floating edit painted the base as ${JSON.stringify(got)}, expected the full-frame Real Video box`);
+        }
+      }
+      await act(async () => ctx.root.unmount());
+      const healed = global.__SMOKE_DRAFTS.get("anonymous:gen-real-video");
+      if (!healed || healed.viewMode !== "realistic") throw new Error(`the floating edit re-saved as viewMode=${healed?.viewMode}, expected the healed realistic`);
+
+      // A legacy hand draft heals the same way.
+      global.__SMOKE_DRAFTS.set("anonymous:gen-real-video", { ...healed, viewMode: "hand" });
+      ctx.root = createRoot(ctx.container);
+      await mount(Editor, { generation: GEN })(ctx);
+      await clip.flush();
+      await clip.flush();
+      await act(async () => ctx.root.unmount());
+      const healedHand = global.__SMOKE_DRAFTS.get("anonymous:gen-real-video");
+      if (!healedHand || healedHand.viewMode !== "realistic") throw new Error(`the hand edit re-saved as viewMode=${healedHand?.viewMode}, expected the healed realistic`);
+    } finally {
+      await act(async () => ctx.root.unmount());
+      clip.restore();
+      delete global.__SMOKE_DRAFTS;
     }
   });
 
@@ -21124,139 +21278,130 @@ async function runDemoCtaChecks() {
     }
   });
 
-  for (const mode of ["hand", "floating"]) {
-    await check(`multiple ${mode} zoom locks preview new edits and replay zoom-in/out`, async (ctx) => {
-      const clip = installLoadedClipStubs({ width: 1280, height: 720 });
-      const zoom = load("demoCta/zoom.js");
-      const originalResolve = zoom.getEffectiveZoom;
-      let paintedZoom;
-      zoom.getEffectiveZoom = (args) => {
-        paintedZoom = originalResolve(args);
-        return paintedZoom;
+  // The lock lifecycle — capture, preview-over-lock, replay, export
+  // resolution, replace, remove, clear — used to run once per base
+  // presentation (hand, then floating). ADR 0374 leaves the base one
+  // presentation, so the lifecycle now runs on its surviving framing
+  // channel: the Real Video crop zoom, which the canvas wheel and the
+  // crop slider both drive. Every lifecycle assertion keeps its
+  // strength; the hand/phone snapshot fields still ride in every lock
+  // (zoom.js is unchanged) and the second clip's hand/floating
+  // painting is pinned by the framing-independence check above.
+  await check("multiple Real Video zoom locks preview new edits and replay zoom-in/out", async (ctx) => {
+    const clip = installLoadedClipStubs({ width: 1280, height: 720 });
+    const zoom = load("demoCta/zoom.js");
+    const originalResolve = zoom.getEffectiveZoom;
+    let paintedZoom;
+    zoom.getEffectiveZoom = (args) => {
+      paintedZoom = originalResolve(args);
+      return paintedZoom;
+    };
+    try {
+      await clip.loadClip(ctx);
+      const video = ctx.container.querySelector("video");
+      const canvas = ctx.container.querySelector("canvas");
+      Object.defineProperty(video, "paused", { configurable: true, value: true, writable: true });
+      const click = async (el) => {
+        if (!el) throw new Error("required zoom control missing");
+        await act(async () => el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
+        await clip.flush();
       };
-      try {
-        await clip.loadClip(ctx);
-        const video = ctx.container.querySelector("video");
-        const canvas = ctx.container.querySelector("canvas");
-        Object.defineProperty(video, "paused", { configurable: true, value: true, writable: true });
-        const click = async (el) => {
-          if (!el) throw new Error("required zoom control missing");
-          await act(async () => el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
-          await clip.flush();
-        };
-        const seek = async (time) => {
-          const slider = ctx.container.querySelector('[data-testid="demo-cta-scrubber"] [role="slider"]');
-          await act(async () => slider.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Home", bubbles: true })));
-          for (let t = 0; t < time; t++) {
-            await act(async () => slider.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
-          }
-          await act(async () => video.dispatchEvent(new dom.window.Event("seeked")));
-          await clip.flush();
-        };
-        const wheel = async (deltaY) => {
-          await act(async () => canvas.dispatchEvent(new dom.window.WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true })));
-          await clip.flush();
-        };
-        const lock = async () => click([...ctx.container.querySelectorAll("button")].find((b) => b.textContent.trim() === "+ Lock"));
-        const value = () => mode === "hand" ? paintedZoom.hZoom : paintedZoom.phoneScale;
-        if (mode === "hand") await click(ctx.container.querySelector('[data-testid="view-mode-hand"]'));
-        // Fine-tuning discloses: the lock flow opens it before touching a slider.
-        await click(ctx.container.querySelector('[data-testid="fine-tune-framing"] summary'));
-        await seek(0);
-        await lock();
-        const baseline = value();
-        await seek(2);
-        if (mode === "hand") {
-          await wheel(-200);
-        } else {
-          const thumb = ctx.container.querySelector('[data-testid="phone-size-slider"] [role="slider"]');
-          await act(async () => thumb.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "End", bubbles: true })));
-          await clip.flush();
+      const seek = async (time) => {
+        const slider = ctx.container.querySelector('[data-testid="demo-cta-scrubber"] [role="slider"]');
+        await act(async () => slider.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+        for (let t = 0; t < time; t++) {
+          await act(async () => slider.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
         }
-        const zoomedIn = value();
-        if (!(zoomedIn > baseline)) throw new Error(`new ${mode} zoom is hidden behind the first lock: ${zoomedIn} <= ${baseline}`);
-        if (video.currentTime !== 2 || !video.paused) throw new Error("framing edits must hold their timestamp");
-        await lock();
-        await seek(5);
-        if (mode === "hand") {
-          await wheel(400);
-        } else {
-          const thumb = ctx.container.querySelector('[data-testid="phone-size-slider"] [role="slider"]');
-          await act(async () => thumb.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Home", bubbles: true })));
-          await clip.flush();
-        }
-        const zoomedOut = value();
-        if (!(zoomedOut < baseline)) throw new Error(`new ${mode} zoom-out is hidden: ${zoomedOut} >= ${baseline}`);
-        await lock();
-        if (!ctx.container.textContent.includes("3 locked segments")) throw new Error("three distinct locks were not saved");
-        for (const [time, expected] of [[0, baseline], [1, baseline], [2, zoomedIn], [4, zoomedIn], [5, zoomedOut], [7, zoomedOut]]) {
-          await seek(time);
-          // Exercise actual playing paint, not just a paused seek.
-          await act(async () => {
-            video.paused = false;
-            video.dispatchEvent(new dom.window.Event("play"));
-          });
-          await clip.flush();
-          if (Math.abs(value() - expected) > 1e-9) throw new Error(`${mode} playback at ${time}s painted ${value()}, expected ${expected}`);
-          await act(async () => {
-            video.paused = true;
-            video.dispatchEvent(new dom.window.Event("pause"));
-          });
-        }
-        await seek(2);
-        if (mode === "hand") {
-          const thumb = ctx.container.querySelector('[data-testid="hand-zoom-slider"] [role="slider"]');
-          if (Number(thumb.getAttribute("aria-valuenow")) !== zoomedIn) throw new Error("hand controls do not reflect the active lock");
-        }
-        // The actual export callback must resolve saved locks too, even if a
-        // paused draft is still being auditioned. No codec/network is needed.
-        await wheel(-10);
-        const encoder = load("demoCta/exportTikTok.js");
-        const originalEncode = encoder.exportTikTok;
-        const originalFetch = global.fetch;
-        const handAssets = load("demoCta/handView.js");
-        const originalPrepare = handAssets.prepareHandViewImages;
-        handAssets.prepareHandViewImages = async () => {};
-        const rendered = [];
-        encoder.exportTikTok = async ({ canvas: target, drawFrame }) => {
-          for (const time of [0, 2, 5, 7]) {
-            drawFrame(time, document.createElement("canvas"));
-            rendered.push(mode === "hand" ? paintedZoom.hZoom : paintedZoom.phoneScale);
-          }
-          throw new Error("Zoom export callback verified");
-        };
-        global.fetch = async () => ({ ok: true, blob: async () => new Blob() });
-        try {
-          await click(ctx.container.querySelector('[data-testid="demo-cta-export"]'));
-          if (JSON.stringify(rendered) !== JSON.stringify([baseline, zoomedIn, zoomedOut, zoomedOut])) {
-            throw new Error(`export did not render the saved ${mode} locks: ${JSON.stringify(rendered)}`);
-          }
-          if (!ctx.container.textContent.includes("Zoom export callback verified")) throw new Error("the export callback was not exercised");
-        } finally {
-          encoder.exportTikTok = originalEncode;
-          global.fetch = originalFetch;
-          handAssets.prepareHandViewImages = originalPrepare;
-        }
-        // Updating the same timestamp replaces one lock; removing it reveals
-        // the preceding lock again instead of leaving a stale live draft.
-        await seek(2);
-        await wheel(-20);
-        const replacement = value();
-        await lock();
-        if (!ctx.container.textContent.includes("3 locked segments")) throw new Error("updating a lock duplicated its timestamp");
-        await seek(3);
-        if (Math.abs(value() - replacement) > 1e-9) throw new Error("updated lock did not play back");
-        const remove = ctx.container.querySelectorAll('[title="Remove this keyframe"]')[1];
-        await click(remove);
-        if (Math.abs(value() - baseline) > 1e-9) throw new Error("removing a lock did not restore its predecessor");
-        await click([...ctx.container.querySelectorAll("button")].find((b) => b.textContent.trim() === "Clear"));
-        if (ctx.container.querySelector('[data-testid="demo-cta-keyframes"]')) throw new Error("Clear did not remove locks");
-      } finally {
-        zoom.getEffectiveZoom = originalResolve;
-        clip.restore();
+        await act(async () => video.dispatchEvent(new dom.window.Event("seeked")));
+        await clip.flush();
+      };
+      const wheel = async (deltaY) => {
+        await act(async () => canvas.dispatchEvent(new dom.window.WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true })));
+        await clip.flush();
+      };
+      const lock = async () => click([...ctx.container.querySelectorAll("button")].find((b) => b.textContent.trim() === "+ Lock"));
+      const value = () => paintedZoom.vScale;
+      // Fine-tuning discloses: the lock flow opens it before reading a slider.
+      await click(ctx.container.querySelector('[data-testid="fine-tune-framing"] summary'));
+      await seek(0);
+      await lock();
+      const baseline = value();
+      await seek(2);
+      await wheel(-200);
+      const zoomedIn = value();
+      if (!(zoomedIn > baseline)) throw new Error(`new Real Video zoom is hidden behind the first lock: ${zoomedIn} <= ${baseline}`);
+      if (video.currentTime !== 2 || !video.paused) throw new Error("framing edits must hold their timestamp");
+      await lock();
+      await seek(5);
+      await wheel(400);
+      const zoomedOut = value();
+      if (!(zoomedOut < baseline)) throw new Error(`new Real Video zoom-out is hidden: ${zoomedOut} >= ${baseline}`);
+      await lock();
+      if (!ctx.container.textContent.includes("3 locked segments")) throw new Error("three distinct locks were not saved");
+      for (const [time, expected] of [[0, baseline], [1, baseline], [2, zoomedIn], [4, zoomedIn], [5, zoomedOut], [7, zoomedOut]]) {
+        await seek(time);
+        // Exercise actual playing paint, not just a paused seek.
+        await act(async () => {
+          video.paused = false;
+          video.dispatchEvent(new dom.window.Event("play"));
+        });
+        await clip.flush();
+        if (Math.abs(value() - expected) > 1e-9) throw new Error(`Real Video playback at ${time}s painted ${value()}, expected ${expected}`);
+        await act(async () => {
+          video.paused = true;
+          video.dispatchEvent(new dom.window.Event("pause"));
+        });
       }
-    });
-  }
+      await seek(2);
+      // The crop Zoom is the fine-tune disclosure's first slider; the
+      // transport mirrors the lock under the playhead into it.
+      const cropZoomThumb = ctx.container.querySelector('[data-testid="fine-tune-framing"]').querySelectorAll('[role="slider"]')[0];
+      if (!cropZoomThumb) throw new Error("the base Video crop has no Zoom slider to reflect the lock");
+      if (Number(cropZoomThumb.getAttribute("aria-valuenow")) !== zoomedIn) throw new Error("crop controls do not reflect the active lock");
+      // The actual export callback must resolve saved locks too, even if a
+      // paused draft is still being auditioned. No codec/network is needed.
+      await wheel(-10);
+      const encoder = load("demoCta/exportTikTok.js");
+      const originalEncode = encoder.exportTikTok;
+      const originalFetch = global.fetch;
+      const rendered = [];
+      encoder.exportTikTok = async ({ canvas: target, drawFrame }) => {
+        for (const time of [0, 2, 5, 7]) {
+          drawFrame(time, document.createElement("canvas"));
+          rendered.push(paintedZoom.vScale);
+        }
+        throw new Error("Zoom export callback verified");
+      };
+      global.fetch = async () => ({ ok: true, blob: async () => new Blob() });
+      try {
+        await click(ctx.container.querySelector('[data-testid="demo-cta-export"]'));
+        if (JSON.stringify(rendered) !== JSON.stringify([baseline, zoomedIn, zoomedOut, zoomedOut])) {
+          throw new Error(`export did not render the saved Real Video locks: ${JSON.stringify(rendered)}`);
+        }
+        if (!ctx.container.textContent.includes("Zoom export callback verified")) throw new Error("the export callback was not exercised");
+      } finally {
+        encoder.exportTikTok = originalEncode;
+        global.fetch = originalFetch;
+      }
+      // Updating the same timestamp replaces one lock; removing it reveals
+      // the preceding lock again instead of leaving a stale live draft.
+      await seek(2);
+      await wheel(-20);
+      const replacement = value();
+      await lock();
+      if (!ctx.container.textContent.includes("3 locked segments")) throw new Error("updating a lock duplicated its timestamp");
+      await seek(3);
+      if (Math.abs(value() - replacement) > 1e-9) throw new Error("updated lock did not play back");
+      const remove = ctx.container.querySelectorAll('[title="Remove this keyframe"]')[1];
+      await click(remove);
+      if (Math.abs(value() - baseline) > 1e-9) throw new Error("removing a lock did not restore its predecessor");
+      await click([...ctx.container.querySelectorAll("button")].find((b) => b.textContent.trim() === "Clear"));
+      if (ctx.container.querySelector('[data-testid="demo-cta-keyframes"]')) throw new Error("Clear did not remove locks");
+    } finally {
+      zoom.getEffectiveZoom = originalResolve;
+      clip.restore();
+    }
+  });
 
   // Paused idle schedules zero frames; one settings change or seek paints
   // exactly one frame.
@@ -22221,6 +22366,10 @@ async function runDemoCtaChecks() {
   // above, so they live at the bottom of that group — not in a sixth
   // Advanced drawer. One group per concern: the text groups stay text, and
   // the stored one-open shape has exactly the five living groups.
+  // ADR 0374 narrows the base's share: its fine-tuning is the Video
+  // crop alone (the only framing a Real Video base has), while Mockup
+  // height and Phone screen position live on in the Second clip's
+  // mirrored disclosure — the markers below follow that split.
   await check("no Advanced group: fine-tuning lives in Base clip & look", async () => {
     const src = fs.readFileSync(
       path.join(SRC, "demoCta", "DemoCtaEditor.jsx"),
@@ -22234,7 +22383,7 @@ async function runDemoCtaChecks() {
     if (keys.length !== 5 || keys.includes("advanced")) {
       throw new Error(`the section order is not the five living groups: ${JSON.stringify(keys)}`);
     }
-    for (const marker of ["Mockup height", 'data-testid="screen-position-controls"', "Phone screen position", "Video crop"]) {
+    for (const marker of ["Mockup height", 'data-testid="append-screen-position-controls"', "Phone screen position", "Video crop"]) {
       if (!src.includes(marker)) {
         throw new Error(`fine-tuning lost on the move: ${marker} is nowhere in the editor`);
       }
@@ -22243,9 +22392,14 @@ async function runDemoCtaChecks() {
       throw new Error("the ambiguous Screen position label is back — it must name the phone screen");
     }
     const sourceBlock = src.split('testId="demo-cta-second"')[0];
-    for (const marker of ["Mockup height", "Video crop"]) {
+    for (const marker of ["Video crop"]) {
       if (!sourceBlock.includes(marker)) {
         throw new Error(`${marker} is not inside Base clip & look (before the Second clip group)`);
+      }
+    }
+    for (const marker of ["Mockup height", "Phone screen position"]) {
+      if (sourceBlock.includes(marker)) {
+        throw new Error(`${marker} is back inside Base clip & look — it belongs to the Second clip's framing alone (ADR 0374)`);
       }
     }
   });
@@ -22270,6 +22424,14 @@ async function runDemoCtaChecks() {
     const beforeSecond = src.indexOf('testId="demo-cta-second"');
     if (at === -1 || beforeSecond === -1 || at > beforeSecond) {
       throw new Error("the disclosure is not inside Base clip & look (before the Second clip group)");
+    }
+    // ADR 0374: the Video crop is the disclosure's only content, so
+    // the disclosure itself stands only once a clip is loaded — an
+    // empty Fine-tune framing shell on the empty frame would be a
+    // drawer to nothing.
+    const gateAt = src.lastIndexOf("videoUrl &&", at);
+    if (gateAt === -1 || at - gateAt > 200) {
+      throw new Error("the Fine-tune framing disclosure is not gated on a loaded clip (ADR 0374)");
     }
   });
 
@@ -22904,13 +23066,13 @@ async function runDemoCtaChecks() {
         // No base, no second clip: the follow-up upload only appears once a
         // base exists, so the panel never shows two upload buttons at once.
         if (ctx.container.querySelector('[data-testid="demo-cta-second"]')) throw new Error("Second clip offered before any base exists");
-        const mode = ctx.container.querySelector('[data-testid="view-mode-realistic"]');
-        if (!mode) throw new Error("Real Video view style is missing");
-        await clickEl(ctx, mode, "select Real Video view");
-        if (mode.getAttribute("aria-pressed") !== "true") throw new Error("Real Video did not take the view selection");
-        // Phone-only controls leave with the phone: no scene, background or size.
-        // The disclosure opens first so the absence is real, not a closed drawer.
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="fine-tune-framing"] summary'), "open fine-tune framing");
+        // ADR 0374: there is no view style to select — the base always
+        // stands in Real Video, so no view-mode control exists at all,
+        // and the phone-only controls are not hidden by a mode but gone:
+        // no scene, background or size anywhere in the editor. (No
+        // fine-tune disclosure stands yet either: it waits for a clip.)
+        if (ctx.container.querySelector('[data-testid^="view-mode-"]')) throw new Error("a base view style picker still stands");
+        if (ctx.container.querySelector('[data-testid="fine-tune-framing"]')) throw new Error("fine-tune framing stands before any clip is loaded");
         if (ctx.container.querySelector('[data-testid="background-lavender"]')) throw new Error("background picker leaked into Real Video");
         if (ctx.container.querySelector('[data-testid="phone-size-slider"]')) throw new Error("phone size leaked into Real Video");
         if (ctx.container.querySelector('[data-testid="hand-zoom-slider"]')) throw new Error("hand controls leaked into Real Video");
@@ -22949,8 +23111,10 @@ async function runDemoCtaChecks() {
         "open Opening text");
       await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-toggle"]'), "turn hook text on");
       await clip.flush();
-      // Turning the hook on swapped the open group; Base clip & look owns the
-      // view-mode picker this check drives next.
+      // Turning the hook on swapped the open group; reopen Base clip
+      // & look for the base controls this check drives next. The base
+      // itself needs no mode pick: it always stands in Real Video
+      // (ADR 0374).
       await clickEl(ctx,
         [...ctx.container.querySelectorAll("button[aria-expanded]")].find((b) => (b.textContent || "").trim() === "Base clip & look"),
         "reopen Base clip & look");
@@ -22961,7 +23125,6 @@ async function runDemoCtaChecks() {
       };
       const base = ctx.container.querySelector("video");
       Object.defineProperty(base, "readyState", { configurable: true, value: 4 });
-      await click('[data-testid="view-mode-realistic"]');
       global.fetch = async () => ({ ok: true, blob: async () => new Blob(["clip"], { type: "video/mp4" }) });
       // No History toggle beside a loaded clip: swap via Remove, which
       // returns to the empty frame and its in-frame History door.
@@ -23060,22 +23223,22 @@ async function runDemoCtaChecks() {
       await click('[data-testid="demo-cta-export"]');
       if (!encodedOverlay || !handCalls.length) throw new Error("hand added clip never reached the hand painter");
       if (!handCalls.some((args) => args[4] === "bedroom")) throw new Error("added clip did not paint its own scene");
-      // The base keeps its own presentation too: a hand base plus a hand
-      // upload still exports both segments instead of dropping the second.
-      // Base clip & look closed when Second clip opened (single-open
-      // accordion), so reopen it for the base style picker.
+      // The base has no presentation to keep (ADR 0374): beside a
+      // hand-held upload it still exports both segments, and only the
+      // added segment ever reaches the hand painter — the base paints
+      // full-frame. Base clip & look closed when Second clip opened
+      // (single-open accordion), so reopen it for the mute toggle.
       await click('[data-testid="demo-cta-source"] button');
       if (!ctx.container.querySelector('[data-testid="base-audio-mute"]')) throw new Error("base mute toggle missing from Base clip & look");
       if (ctx.container.querySelector('[data-testid="base-audio-mute"]').checked) throw new Error("base mute must default off");
       await click('[data-testid="base-audio-mute"]');
       if (!ctx.container.querySelector('[data-testid="base-audio-mute"]').checked) throw new Error("base mute did not take");
       await click('[data-testid="base-audio-mute"]');
-      await click('[data-testid="view-mode-hand"]');
+      if (ctx.container.querySelector('[data-testid^="view-mode-"]')) throw new Error("the base still offers a style picker");
       handCalls.length = 0;
       await click('[data-testid="demo-cta-export"]');
-      if (!encodedOverlay || handCalls.length < 2) throw new Error("base style change dropped the added clip or its presentation");
-      if (!handCalls.some((args) => args[4] === "living_room")) throw new Error("base lost its own scene once the added clip picked another");
-      await click('[data-testid="view-mode-realistic"]');
+      if (!encodedOverlay) throw new Error("the modeless base dropped the added clip or its presentation");
+      if (handCalls.length !== 1 || !handCalls.some((args) => args[4] === "bedroom")) throw new Error("the hand painter painted something besides the added clip's own scene");
       await click('[data-testid="demo-cta-second"] button');
       await click('[data-testid="append-mode-realistic"]');
       await act(async () => overlay.dispatchEvent(new dom.window.Event("error")));

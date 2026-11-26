@@ -253,7 +253,11 @@ export const DEFAULTS = {
   videoScale: 1,
   videoOffsetX: 0,
   videoOffsetY: 0,
-  viewMode: "floating",
+  // ADR 0374: the base clip has no look pick — it always applies
+  // Real Video. The field stays in the snapshot (the painter and the
+  // export still resolve the base segment through it), pinned here
+  // and healed on restore in the editor.
+  viewMode: "realistic",
   transition: "whip",
   envBg: "living_room",
   handZoom: 1,
