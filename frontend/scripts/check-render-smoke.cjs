@@ -15717,10 +15717,13 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("the HookSnap presenter photo section stands at the very bottom", async (ctx) => {
-    // ADR 0326: the presenter photo section moved out of the direction
-    // card to the very bottom of HookSnap, after the Post kit — the same
-    // end-of-flow spot it holds in the Create wizard.
+  await check("the HookSnap sections stand in order — photo above the render, post kit last", async (ctx) => {
+    // ADR 0355 (superseding ADR 0326's placement): Kasra reordered
+    // the page — the presenter photo section stands above Render
+    // the hook, and Demo + CTA and the Post kit close the page.
+    // The first three sections keep their seats, and ADR 0326's
+    // other half stands untouched: the photo section lives outside
+    // the direction card, faces only.
     await inHookCta(
       ctx,
       {
@@ -15737,19 +15740,29 @@ async function runHookCtaChecks() {
       },
       "",
       async () => {
+        const ORDER = [
+          "hook-cta-setup-card",
+          "hook-cta-direction-card",
+          "hook-cta-hook-card",
+          "template-photo",
+          "hook-cta-render-card",
+          "hook-cta-finish-card",
+          "hook-cta-post-kit",
+        ];
+        // querySelectorAll walks in document order, so the matched
+        // testids read back the page's standing order directly.
+        const found = [...ctx.container.querySelectorAll(
+          ORDER.map((testid) => `[data-testid="${testid}"]`).join(", ")
+        )].map((el) => el.getAttribute("data-testid"));
+        if (JSON.stringify(found) !== JSON.stringify(ORDER)) {
+          throw new Error(
+            `the sections stand as ${found.join(", ") || "none"}, expected ${ORDER.join(", ")}`
+          );
+        }
         const photo = ctx.container.querySelector('[data-testid="template-photo"]');
-        if (!photo) throw new Error("the presenter photo section never rendered");
         const direction = ctx.container.querySelector('[data-testid="hook-cta-direction-card"]');
         if (direction && direction.contains(photo)) {
           throw new Error("the presenter photo section still sits inside the direction card");
-        }
-        const postKit = ctx.container.querySelector('[data-testid="hook-cta-post-kit"]');
-        if (!postKit) throw new Error("the post kit card never rendered");
-        // querySelectorAll walks in document order: the post kit must
-        // come first, the photo section after it.
-        const ordered = [...ctx.container.querySelectorAll('[data-testid="hook-cta-post-kit"], [data-testid="template-photo"]')];
-        if (ordered[0] !== postKit || ordered[ordered.length - 1] !== photo) {
-          throw new Error("the presenter photo section does not stand after the post kit");
         }
       }
     );

@@ -861,6 +861,24 @@ export default function HookCta() {
             </SectionCard>
           )}
 
+          {/* ADR 0355: the presenter photo section stands above the
+              Render the hook card — Kasra's reorder, superseding ADR
+              0326's bottom placement — and Demo + CTA and the Post
+              kit close the page. Its list is faces only: the embedded
+              library keeps character_reference assets (see
+              AssetLibrary, ADR 0326). The control keeps its own
+              panel and label, as in the wizard. */}
+          {project && (
+            <PresenterPhotoControl
+              project={project}
+              profileId={profileId}
+              busy={false}
+              onEnsureProject={async () => project}
+              onProjectChanged={(updated) => dispatch({ type: "project-received", project: updated || project })}
+              onRefreshProject={refreshProject}
+            />
+          )}
+
           {project && (
             <SectionCard title="Render the hook" icon={Clapperboard} data-testid="hook-cta-render-card">
               <div className="space-y-4">
@@ -993,23 +1011,6 @@ export default function HookCta() {
                 )}
               </div>
             </SectionCard>
-          )}
-
-          {/* ADR 0326: the presenter photo section stands at the very
-              bottom of the page — the same end-of-flow spot it holds in
-              the Create wizard — moved out of the Place and wardrobe
-              card. Its list is faces only: the embedded library keeps
-              character_reference assets (see AssetLibrary). The control
-              keeps its own panel and label, as in the wizard. */}
-          {project && (
-            <PresenterPhotoControl
-              project={project}
-              profileId={profileId}
-              busy={false}
-              onEnsureProject={async () => project}
-              onProjectChanged={(updated) => dispatch({ type: "project-received", project: updated || project })}
-              onRefreshProject={refreshProject}
-            />
           )}
 
         </>

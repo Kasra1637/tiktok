@@ -1,7 +1,9 @@
 # 0326 — HookSnap's presenter photo section stands at the bottom, faces only
 
-Status: accepted. Kasra's order on the Nov 24 2026 call, in the same
-round as ADRs 0324–0325.
+Status: accepted in part. Kasra's order on the Nov 24 2026 call, in
+the same round as ADRs 0324–0325. The placement half — the section
+at the very bottom — is superseded by 0355; the faces-only half
+stands.
 
 ## Context
 
