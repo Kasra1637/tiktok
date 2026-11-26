@@ -11,6 +11,12 @@ after the previous section's requirement is done, successfully,
 the expansion running in sequence down the page. Once expanded,
 a section displays everything it displays today.
 
+Update, Nov 25 2026 (later the same night): the gate for The
+hook named below — the settled direction read — is superseded
+by ADR 0357, Kasra's correction at his live review: The hook
+reveals only when place and wardrobe stand selected. Every
+other gate in this record stands as written.
+
 ## Context
 
 After ADR 0355 the page stands in work order — Choose an app,

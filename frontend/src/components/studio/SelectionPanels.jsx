@@ -6,7 +6,7 @@ import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Alert, AlertDescription } from "../ui/alert";
 
-import { GroupLabel } from "../SectionCard";
+import { GroupLabel, SectionHeading } from "../SectionCard";
 
 import { FitBadge } from "../FitBadge";
 
@@ -1078,6 +1078,7 @@ export function PresenterPhotoControl({
   profileId,
   busy = false,
   collapsed = false,
+  card = false,
   onEnsureProject,
   onProjectChanged,
   onRefreshProject,
@@ -1087,6 +1088,14 @@ export function PresenterPhotoControl({
   // and everything under it stands in a hidden wrapper, mounted and
   // unchanged, simply not shown. No toggle, no new chrome; callers
   // that never pass it (the Create wizard) render as before.
+  // ADR 0358 (HookSnap only): `card` stands the panel as a section
+  // card in its own right — the same `.surface` size and shape,
+  // the same spacing rhythm and the same section heading (16px
+  // glyph) its sibling sections wear — because on that page it IS
+  // one of the sections, and the inset aside it wears inside the
+  // Create wizard's step card read thinner and smaller beside
+  // them. The wizard never passes it: inside a step card the
+  // inset panel is the matching level, and it renders as before.
   const body = (
     <>
       <p className="text-sm text-muted-foreground" data-subtitle="">
@@ -1119,8 +1128,20 @@ export function PresenterPhotoControl({
     </>
   );
   return (
-    <div id={TEMPLATE_PHOTO_ID} data-testid="template-photo" className="inset-panel scroll-mt-4 space-y-4">
-      <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
+    <div
+      id={TEMPLATE_PHOTO_ID}
+      data-testid="template-photo"
+      className={card ? "surface rounded-2xl scroll-mt-4 space-y-5" : "inset-panel scroll-mt-4 space-y-4"}
+    >
+      {card ? (
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 space-y-1">
+            <SectionHeading as="h2" icon={ImageIcon}>Presenter photo</SectionHeading>
+          </div>
+        </div>
+      ) : (
+        <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
+      )}
       {collapsed ? <div hidden data-collapsed-body="">{body}</div> : body}
     </div>
   );

@@ -15790,17 +15790,19 @@ async function runHookCtaChecks() {
       },
       "",
       async () => {
-        // The first three sections stand open: the app is picked,
-        // the draft exists, and the direction read has settled —
-        // the place and wardrobe picks are optional refinements
-        // the page defaults, so the hook's turn has come.
-        for (const testid of ["hook-cta-setup-card", "hook-cta-direction-card", "hook-cta-hook-card"]) {
+        // The first two sections stand open: the app is picked and
+        // the draft exists. The hook still waits (ADR 0357): the
+        // direction read settling is not progress — place and
+        // wardrobe stand unselected on a fresh draft, so The hook
+        // shows only its headline, like the four below it.
+        for (const testid of ["hook-cta-setup-card", "hook-cta-direction-card"]) {
           if (bodyCollapsed(ctx, testid)) {
             throw new Error(`the ${testid} body is collapsed on a fresh draft whose setup is done`);
           }
         }
-        // The later four show only their headlines.
+        // The later five show only their headlines.
         const headlines = {
+          "hook-cta-hook-card": "The hook",
           "template-photo": "Presenter photo",
           "hook-cta-render-card": "Render the hook",
           "hook-cta-finish-card": "Demo + CTA",
@@ -15820,6 +15822,25 @@ async function runHookCtaChecks() {
         const finishBody = ctx.container.querySelector('[data-testid="hook-cta-finish-card"] [data-collapsed-body]');
         if (!finishBody || !finishBody.textContent.includes("Render the hook above first")) {
           throw new Error("the collapsed Demo + CTA body lost the content it shows when open");
+        }
+        // ADR 0358: the presenter photo stands as a section card —
+        // the same surface the render card wears, and a heading
+        // glyph the same size as the render card's, not the inset
+        // aside's smaller group label.
+        const photoPanel = ctx.container.querySelector('[data-testid="template-photo"]');
+        if (!photoPanel.className.includes("surface") || photoPanel.className.includes("inset-panel")) {
+          throw new Error("the presenter photo panel does not wear the section card's surface");
+        }
+        const photoGlyph = photoPanel.querySelector("h2 svg");
+        const renderGlyph = ctx.container.querySelector('[data-testid="hook-cta-render-card"] h2 svg');
+        const glyphSize = (svg) => {
+          const cls = (svg && svg.getAttribute("class")) || "";
+          if (cls.includes("h-4") && cls.includes("w-4")) return "section";
+          if (cls.includes("h-3") && cls.includes("w-3")) return "group";
+          return "other";
+        };
+        if (!photoGlyph || !renderGlyph || glyphSize(photoGlyph) !== "section" || glyphSize(renderGlyph) !== "section") {
+          throw new Error("the presenter photo heading glyph does not match the render card's in size");
         }
       }
     );
@@ -15847,6 +15868,12 @@ async function runHookCtaChecks() {
       ctx,
       {
         createHookCtaProject: async () => blankRow({ id: "hook-cta-1" }),
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: ["A quiet bedroom in the evening", "A riverside path at dawn"],
+          wardrobe: ["Wardrobe one", "Wardrobe two"],
+          setting: [], lighting: [], voice: [], tone: [],
+        }),
         generateHookLine: async () => {
           hooked = true;
           return hookRow({ id: "hook-cta-1", hook_line: HOOK });
@@ -15867,17 +15894,28 @@ async function runHookCtaChecks() {
       },
       "",
       async () => {
-        // Fresh: the first three sections stand open, the later
-        // four collapsed.
-        if (bodyCollapsed(ctx, "hook-cta-hook-card")) {
-          throw new Error("the hook section starts collapsed on a fresh draft");
-        }
-        for (const testid of ["template-photo", "hook-cta-render-card", "hook-cta-finish-card", "hook-cta-post-kit"]) {
+        // Fresh: the app and direction sections stand open; The
+        // hook and the later four show only their headlines — the
+        // hook waits for the place and wardrobe picks (ADR 0357),
+        // not for the direction read settling behind the scenes.
+        for (const testid of ["hook-cta-hook-card", "template-photo", "hook-cta-render-card", "hook-cta-finish-card", "hook-cta-post-kit"]) {
           if (!bodyCollapsed(ctx, testid)) {
             throw new Error(`the ${testid} section stands open before any work is done`);
           }
         }
-        // Step one: write the hook. The presenter photo opens,
+        // Step one: select place and wardrobe. One pick alone is
+        // not the step done — The hook reveals only once both
+        // stand selected.
+        await pickPairButton(ctx, "hook-cta-location-direction", "A quiet bedroom in the evening");
+        if (!bodyCollapsed(ctx, "hook-cta-hook-card")) {
+          throw new Error("the hook section opened on the place pick alone, before wardrobe was picked");
+        }
+        await pickPairButton(ctx, "hook-cta-wardrobe", "Wardrobe one");
+        await act(async () => {});
+        if (bodyCollapsed(ctx, "hook-cta-hook-card")) {
+          throw new Error("the hook section did not open once place and wardrobe were both selected");
+        }
+        // Step two: write the hook. The presenter photo opens,
         // and the post kit with it — its first work, the caption
         // preview, is written from the hook line alone (ADR
         // 0353). The render and the finish still wait.
@@ -15895,7 +15933,7 @@ async function runHookCtaChecks() {
         if (!bodyCollapsed(ctx, "hook-cta-finish-card")) {
           throw new Error("the Demo + CTA section opened before the render finished");
         }
-        // Step two: attach the photo. The render opens; the
+        // Step three: attach the photo. The render opens; the
         // finish still waits.
         const useButton = [...ctx.container.querySelectorAll("button")].find((b) => (b.textContent || "").includes("Use this photo"));
         if (!useButton) throw new Error("the library's use-this-photo button did not render");
@@ -15908,7 +15946,7 @@ async function runHookCtaChecks() {
         if (!bodyCollapsed(ctx, "hook-cta-finish-card")) {
           throw new Error("the Demo + CTA section opened before the render finished");
         }
-        // Step three: render the hook to completion. The finish
+        // Step four: render the hook to completion. The finish
         // opens, and the post kit shows the frozen kit.
         const renderButton = ctx.container.querySelector('[data-testid="hook-render-generate"]');
         if (!renderButton) throw new Error("the render button did not render");

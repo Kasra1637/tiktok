@@ -467,7 +467,6 @@ export default function HookCta() {
   const dispatchDraft = useCallback((action) => dispatch(action), []);
   const {
     directionOptions,
-    directionSettled,
     dirSel,
     pickScenePart,
     refreshError: directionRefreshError,
@@ -575,11 +574,13 @@ export default function HookCta() {
   // chrome, and the signals are this page's existing state only.
   // Choose an app stands open when the page is ready, and Place
   // and wardrobe opens with the draft it rides on. The hook opens
-  // when the direction read for the picked app has settled: the
-  // place and wardrobe picks are optional refinements the page
-  // defaults (the hook generates from them empty), so a settled
-  // read — landed or failed — is that section's work done, and a
-  // hook already on file proves the step was passed either way.
+  // when place and wardrobe stand SELECTED (ADR 0357, Kasra's
+  // correction to 0356 at his live review): the direction read
+  // settling on its own opened it too early — the founder makes
+  // the two picks first, then The hook reveals. The picks the
+  // read matched in from the saved draft count, so a returning
+  // project opens from its own state, and a hook already on file
+  // proves the step was passed either way.
   // The presenter photo opens when a hook line exists; the render
   // opens when a presenter photo is attached; Demo + CTA opens
   // when the render has finished. The post kit opens with the
@@ -593,7 +594,10 @@ export default function HookCta() {
   const photoAttached = (project?.assets || []).some(
     (asset) => Boolean(asset) && asset.kind === "character_reference"
   );
-  const hookSectionOpen = directionSettled || hasHook;
+  const directionPicked =
+    Boolean(String(dirSel.location || "").trim()) &&
+    Boolean(String(dirSel.wardrobe || "").trim());
+  const hookSectionOpen = directionPicked || hasHook;
   const presenterSectionOpen = hasHook || photoAttached;
   const renderSectionOpen = photoAttached || hookFinished;
   const finishSectionOpen = hookFinished;
@@ -672,13 +676,29 @@ export default function HookCta() {
               <p className="text-sm text-muted-foreground" data-subtitle="">
                 Pick an approved app to start a fresh hook.
               </p>
-              <AppPicker
-                profiles={approved}
-                value={profileId}
-                onChange={selectProfile}
-                placeholder="Choose an app"
-                testId="hook-cta-app-picker"
-              />
+              {/* The pick and its save status share one row (ADR
+                  0359): the status used to stand alone under the
+                  card's wider rhythm, a full row of height for a
+                  whisper of text, and the card read as mostly air
+                  spread over four stacked rows. */}
+              <div className="flex flex-wrap items-center gap-3">
+                <AppPicker
+                  profiles={approved}
+                  value={profileId}
+                  onChange={selectProfile}
+                  placeholder="Choose an app"
+                  testId="hook-cta-app-picker"
+                />
+                {(project || saveStatus) && (
+                  <p
+                    role="status"
+                    data-testid="hook-cta-autosave-status"
+                    className="text-sm text-muted-foreground"
+                  >
+                    {saveStatus}
+                  </p>
+                )}
+              </div>
               {unapproved.length > 0 && (
                 <div className="inset-panel" data-testid="hook-cta-unapproved-panel">
                   <div className="flex items-start gap-2">
@@ -698,16 +718,6 @@ export default function HookCta() {
                 </div>
               )}
             </div>
-
-            {(project || saveStatus) && (
-              <p
-                role="status"
-                data-testid="hook-cta-autosave-status"
-                className="text-sm text-muted-foreground"
-              >
-                {saveStatus}
-              </p>
-            )}
           </SectionCard>
 
           {project && (
@@ -903,6 +913,7 @@ export default function HookCta() {
               project={project}
               profileId={profileId}
               busy={false}
+              card
               collapsed={!presenterSectionOpen}
               onEnsureProject={async () => project}
               onProjectChanged={(updated) => dispatch({ type: "project-received", project: updated || project })}
