@@ -1349,11 +1349,11 @@ async function main() {
     try {
       await mount(CreateVideo, {})(ctx);
       await openStep(ctx, "Audience & template");
-      if (ctx.container.querySelector('[data-testid="angle-popover-a2"]')) {
+      if (ctx.container.ownerDocument.querySelector('[data-testid="angle-popover-a2"]')) {
         throw new Error("a popover stands before any angle is picked");
       }
       await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a2"]'), "no angle row to pick");
-      const popover = ctx.container.querySelector('[data-testid="angle-popover-a2"]');
+      const popover = ctx.container.ownerDocument.querySelector('[data-testid="angle-popover-a2"]');
       if (!popover) throw new Error("picking an angle did not open its popover");
       if (!popover.querySelector('[data-testid="angle-details-a2"]')) {
         throw new Error("the popover does not carry the angle's spec sheet");
@@ -1375,11 +1375,18 @@ async function main() {
       if (
         !layer
         || !layer.className.includes("fixed")
-        || !layer.className.includes("z-50")
+        || !layer.className.includes("z-[100]")
         || !layer.className.includes("items-center")
         || !layer.className.includes("justify-center")
       ) {
         throw new Error("the angle details do not stand in the centered top layer (ADR 0330)");
+      }
+      // ADR 0341: the layer stands on the document body itself,
+      // through a portal like the tour's — a fixed layer mounted
+      // inside the step stays trapped in whichever ancestor
+      // carries a transform, and dims only that section.
+      if (layer.parentElement !== layer.ownerDocument.body) {
+        throw new Error("the angle pop-up does not stand on the document body (ADR 0341)");
       }
       // The rest of the screen wears the Show me around dim while
       // the pop-up stands (ADR 0335): the backdrop is the shared
@@ -1387,8 +1394,8 @@ async function main() {
       if (!layer.firstElementChild || !layer.firstElementChild.className.includes("pop-scrim")) {
         throw new Error("the angle pop-up does not dim the screen with the tour's scrim (ADR 0335)");
       }
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-popover-close-a2"]'), "no popover close button");
-      if (ctx.container.querySelector('[data-testid="angle-popover-a2"]')) {
+      await clickEl(ctx, ctx.container.ownerDocument.querySelector('[data-testid="angle-popover-close-a2"]'), "no popover close button");
+      if (ctx.container.ownerDocument.querySelector('[data-testid="angle-popover-a2"]')) {
         throw new Error("the popover did not close");
       }
     } finally {
@@ -9129,7 +9136,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       // row keeps its title and its fit pill), so the field that used to
       // summarize it must not be on screen before the pick — the open panel
       // is what shows it now.
-      const detail = step.querySelector('[data-testid="angle-details-a3"]');
+      const detail = step.ownerDocument.querySelector('[data-testid="angle-details-a3"]');
       if (!detail) throw new Error("the parked angle did not show its fields");
       const shown = detail.textContent;
       for (const field of [
@@ -9144,15 +9151,15 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           throw new Error(`the picked angle does not show ${JSON.stringify(field)}: ${shown}`);
         }
       }
-      if (step.querySelectorAll('[data-testid^="angle-details-"]').length !== 1) {
+      if (step.ownerDocument.querySelectorAll('[data-testid^="angle-details-"]').length !== 1) {
         throw new Error("more than one angle is open at once");
       }
 
       await clickEl(ctx, step.querySelector('[data-testid="angle-option-a1"]'), "no second angle row to pick");
-      if (step.querySelector('[data-testid="angle-details-a3"]')) {
+      if (step.ownerDocument.querySelector('[data-testid="angle-details-a3"]')) {
         throw new Error("the previously picked angle stayed open after another was picked");
       }
-      const secondDetail = step.querySelector('[data-testid="angle-details-a1"]');
+      const secondDetail = step.ownerDocument.querySelector('[data-testid="angle-details-a1"]');
       if (!secondDetail?.textContent.includes("Busy professionals")) {
         throw new Error("the newly picked angle does not show its own audience");
       }
@@ -9562,7 +9569,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
-          const details = ctx.container.querySelector('[data-testid="angle-details-a1"]');
+          const details = ctx.container.ownerDocument.querySelector('[data-testid="angle-details-a1"]');
           if (!details) throw new Error("the picked angle shows no detail panel");
           if (!details.textContent.includes("Outcome")) {
             throw new Error("the angle card names the feature but not the outcome");
@@ -9600,7 +9607,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await openStep(ctx, "Audience & template");
           await passAngleGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-a1"]'), "no angle row to pick");
-          const details = ctx.container.querySelector('[data-testid="angle-details-a1"]');
+          const details = ctx.container.ownerDocument.querySelector('[data-testid="angle-details-a1"]');
           if (!details) throw new Error("the picked angle shows no detail panel");
           const rows = [...details.querySelectorAll(":scope > div")];
           if (!rows.length) throw new Error("the detail panel has no rows");
@@ -15467,15 +15474,20 @@ async function runHookCtaChecks() {
         if (trigger.getAttribute("aria-haspopup") === "listbox") {
           throw new Error("the Focus pick is still a dropdown (ADR 0334)");
         }
-        if (card.querySelector('[data-testid="hook-picks-focus-popup"]')) {
+        if (ctx.container.ownerDocument.querySelector('[data-testid="hook-picks-focus-popup"]')) {
           throw new Error("the Focus pop-up stands open before the trigger is touched");
         }
         await clickEl(ctx, trigger);
-        const popup = card.querySelector('[data-testid="hook-picks-focus-popup"]');
+        const popup = ctx.container.ownerDocument.querySelector('[data-testid="hook-picks-focus-popup"]');
         if (!popup) throw new Error("the Focus trigger did not open the pop-up");
         const layer = popup.closest(".fixed");
-        if (!layer || !layer.classList.contains("inset-0") || !layer.classList.contains("z-50")) {
+        if (!layer || !layer.classList.contains("inset-0") || !layer.classList.contains("z-[100]")) {
           throw new Error("the Focus pop-up is not the centered overlay layer");
+        }
+        // ADR 0341: the Focus pop-up stands on the document body
+        // too, through the same portal as the angle pop-up.
+        if (layer.parentElement !== layer.ownerDocument.body) {
+          throw new Error("the Focus pop-up does not stand on the document body (ADR 0341)");
         }
         // The Focus pop-up dims the screen with the same shared
         // scrim as every pop-up (ADR 0335).
@@ -15488,7 +15500,7 @@ async function runHookCtaChecks() {
           throw new Error("the Focus pop-up does not offer the profile's outcome lines in full");
         }
         await clickEl(ctx, rows.find((o) => o.dataset.value === OUTCOME));
-        if (card.querySelector('[data-testid="hook-picks-focus-popup"]')) {
+        if (ctx.container.ownerDocument.querySelector('[data-testid="hook-picks-focus-popup"]')) {
           throw new Error("the Focus pop-up stayed open after the pick");
         }
       }
@@ -15514,6 +15526,15 @@ async function runHookCtaChecks() {
     const dialog = read("src/components/ui/dialog.jsx");
     if (!dialog.includes("pop-scrim")) {
       throw new Error("the shared dialog overlay does not wear the pop-up scrim (ADR 0335)");
+    }
+    // ADR 0341: the angle and Focus pop-ups render through a
+    // portal on the document body, like the tour overlay, so
+    // their dim covers the whole screen.
+    for (const rel of ["src/components/studio/SelectionPanels.jsx", "src/components/studio/HookPicksControl.jsx"]) {
+      const src = read(rel);
+      if (!src.includes("createPortal") || !src.includes("document.body")) {
+        throw new Error(`a pop-up does not render through the body portal (ADR 0341): ${rel}`);
+      }
     }
     const button = read("src/components/ui/button.jsx");
     if (button.includes("outline:") || button.includes("ghost:")) {
@@ -26155,13 +26176,23 @@ async function withApi(overrides, fn) {
   }
 }
 
+/** The option rows an open control offers. Most menus render inside
+ * the control's own subtree; the Focus pop-up renders through a portal
+ * on the document body (ADR 0341, like the tour), so when the scope
+ * holds none, read them from the document. */
+function openMenuOptions(control, scope) {
+  const scoped = [...scope.querySelectorAll('[role="option"]')];
+  if (scoped.length > 0) return scoped;
+  return [...control.ownerDocument.querySelectorAll('[role="option"]')];
+}
+
 /** Choose a value from an app-drawn dropdown (ADRs 0162/0163): open its
  * menu with a click, then click the option carrying the value. */
 async function chooseOption(ctx, control, value) {
   if (!control) throw new Error("no dropdown to choose from");
   await clickEl(ctx, control);
   const scope = control.closest(".app-select") || control.parentElement;
-  const option = [...scope.querySelectorAll('[role="option"]')].find(
+  const option = openMenuOptions(control, scope).find(
     (o) => o.dataset.value === String(value)
   );
   if (!option) throw new Error(`the open menu has no option for "${value}"`);
@@ -26188,7 +26219,7 @@ async function offeredOptionValues(ctx, control) {
   if (!control) throw new Error("no dropdown to open");
   await clickEl(ctx, control);
   const scope = control.closest(".app-select") || control.parentElement;
-  return [...scope.querySelectorAll('[role="option"]')].map((o) => o.dataset.value);
+  return openMenuOptions(control, scope).map((o) => o.dataset.value);
 }
 
 

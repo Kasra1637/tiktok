@@ -2338,7 +2338,11 @@ h1,
    and spotlight ring use, so the pop-up alone holds the eye.
    Every pop-up backdrop in the app wears this one class — the
    angle pop-up, the Focus pop-up, and the shared dialog
-   overlay behind every confirm dialog. */
+   overlay behind every confirm dialog. ADR 0341: the angle
+   and Focus pop-ups render through a portal on the document
+   body, like the tour, so this dim covers the whole screen —
+   a fixed layer mounted inside a transformed ancestor dims
+   only that ancestor's section. */
 .pop-scrim {
     /* The tour's full dim (ADR 0338): Show me around stacks its
        55% backdrop under the spotlight ring's 55% shadow, which

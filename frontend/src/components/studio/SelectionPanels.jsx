@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { Button } from "../ui/button";
 
@@ -617,7 +618,7 @@ export function AngleSelector({
         );
       })}
       </div>
-      {openAngle && openDetails.length > 0 && (
+      {openAngle && openDetails.length > 0 && createPortal(
         /* The spec sheet as a centered pop-up (ADR 0330, as corrected
            at Kasra's live review): a fixed layer over the whole page,
            the sheet wide and centered, standing above every other
@@ -625,9 +626,13 @@ export function AngleSelector({
            card's own stacking layer — every card in the step arrives
            with a fade-up transform — so the goal cards and badges
            after the angles painted straight over it. A backdrop
-           click puts it away, with the close button and Escape. */
+           click puts it away, with the close button and Escape.
+           ADR 0341: the layer renders through a portal on the
+           document body, like the tour overlay — a fixed layer
+           alone stays trapped inside whichever ancestor carries
+           a transform, and dims only that section of the screen. */
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
           data-angle-popover-root=""
         >
           <div
@@ -671,7 +676,8 @@ export function AngleSelector({
               ))}
             </dl>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

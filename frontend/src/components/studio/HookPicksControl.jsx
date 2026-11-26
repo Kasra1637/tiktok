@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, Focus, HelpCircle, Maximize2, MessagesSquare, RefreshCw, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { CONTROL_CLASS } from "../formControls";
@@ -259,9 +260,9 @@ export default function HookPicksControl({
             <span className="min-w-0 truncate">{focusValue || "Let the app choose"}</span>
             <Maximize2 className="h-4 w-4 shrink-0 opacity-70" aria-hidden="true" />
           </button>
-          {focusOpen && (
+          {focusOpen && createPortal(
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4"
               role="dialog"
               aria-modal="true"
               aria-label="Focus"
@@ -318,7 +319,8 @@ export default function HookPicksControl({
                   })}
                 </div>
               </div>
-            </div>
+            </div>,
+            document.body
           )}
         </div>
         <p className="text-sm text-muted-foreground">

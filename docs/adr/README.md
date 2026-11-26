@@ -363,3 +363,4 @@ come from the architecture map and code, not an old record's UI description.
 | [0338](0338-focus-pop-up-matches-the-angle-pop-up-and-the-tour-dim.md) | The Focus pop-up takes the angle pop-up's display, and the pop-up scrim matches the tour's combined dim |
 | [0339](0339-location-labels-name-only-the-place.md) | Location labels name only the place — two or three words, no adjectives, in the library and the refresh writer |
 | [0340](0340-the-generator-lands-the-verb.md) | The generator lands the verb: a hook arrives as a finished sentence, never a fragment |
+| [0341](0341-pop-ups-render-on-the-body-like-the-tour.md) | Pop-ups render on the body, like the tour: a portal, so the dim covers the whole screen |
