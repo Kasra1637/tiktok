@@ -19,37 +19,37 @@ const FEATURES = [
     icon: Briefcase,
     title: "Facts you approve",
     description:
-      "Paste your site or store link once to lock in real product facts. Every video stays accurate and on-brand, so you never waste time rewriting from scratch again.",
+      "Drop your site or store link in once. HookForge pulls the real facts from it, so every video stays true to your product and your brand.",
   },
   {
     icon: Target,
     title: "One clear outcome",
     description:
-      "Target one specific buyer and one clear goal per clip. Instead of generic promos people scroll past, every second of your video is built to earn real attention.",
+      "One buyer, one goal, one clip. Nothing generic, nothing people scroll past — each second is shaped to hold a real viewer's attention.",
   },
   {
     icon: FileText,
     title: "Your voice, one script",
     description:
-      "Get a hook and script written in your own voice, graded on craft before you spend a cent. Fix the weak lines early — no grade ever blocks your renders. Ship it.",
+      "Your hook and script arrive in your voice, graded on craft before any render. Weak lines flagged — no grade ever blocks your renders.",
   },
   {
     icon: Clapperboard,
     title: "Never filmed",
     description:
-      "Turn your script and one photo into a finished presenter video in minutes. No camera, no studio, and no reshoots when a line changes—just edit and render again.",
+      "Your photo and script become a finished presenter video in minutes. No camera, no studio, no reshoots — change a line, render again.",
   },
   {
     icon: Film,
     title: "Demo, finished",
     description:
-      "Drop your real screen recording into a clean phone or browser frame with smooth zoom, captions, and a strong closing CTA—exported as one ready-to-post MP4 file.",
+      "Your screen recording lands in a clean phone or browser frame — smooth zoom, captions, and a strong closing CTA, exported as one MP4.",
   },
   {
     icon: Video,
     title: "Results that teach",
     description:
-      "Log your views, retention, saves, and shares after posting. Once three clips are in, HookForge learns what holds viewers and steers your next clips to win more.",
+      "Post, then log the views, retention, saves, and shares. Three clips in, HookForge sees what holds people and steers your next ones.",
   },
 ];
 
@@ -336,14 +336,14 @@ function HeroStory() {
  */
 const WEEK_WITHOUT = [
   "Rewrite your app’s story from scratch every time you try to post.",
-  "Guess which hook might stop the scroll — and watch views stall.",
+  "Hunt other brands’ winning posts and bend your product to fit.",
   "Spend hours filming, retaking, and editing instead of shipping.",
   "Post inconsistently with no clear idea which angles actually worked.",
 ];
 
 const WEEK_WITH = [
   "Start every video from your approved product facts in seconds.",
-  "Compare suggested openings by fit scores, reasons, limitations.",
+  "Openings drawn from your own product, reasons and limitations.",
   "Edit a finished script and render in minutes — zero filming required.",
   "Ship consistently and let your real post results sharpen the next clip.",
 ];

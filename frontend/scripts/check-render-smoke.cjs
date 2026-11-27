@@ -12443,12 +12443,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   });
 
   // Kasra's rule for the What you get grid (ADR 0156): exactly six cards —
-  // facts, aim, plan, render, demo, results — with the six titles he picked,
-  // and every description still exactly 160 chars so no card ends with
-  // ragged empty space. The templates and craft-grade beats fold into the
-  // plan card; their old standalone titles must never come back. The titles
-  // and lengths are pinned here so a future copy edit cannot silently drift.
-  await check("Landing feature cards are the six Kasra picked, descriptions uniform", async (ctx) => {
+  // facts, aim, plan, render, demo, results — with the six titles he picked.
+  // The templates and craft-grade beats fold into the plan card; their old
+  // standalone titles must never come back. The titles and lengths are
+  // pinned here so a future copy edit cannot silently drift. ADR 0380
+  // supersedes the exact-160 length rule: on Kasra's order the six
+  // descriptions were shortened into a 130-135 char band (his reworked
+  // lines), close enough that no card ends with ragged empty space.
+  await check("Landing feature cards are the six Kasra picked, descriptions in the 130 to 135 band", async (ctx) => {
     await mount(Landing)(ctx);
     const headings = [...ctx.container.querySelectorAll('[data-testid="landing-features"] h3')];
     if (headings.length !== 6) throw new Error("expected six feature cards");
@@ -12467,7 +12469,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     for (const h of headings) {
       const title = h.textContent;
       const description = h.parentElement.querySelector("p")?.textContent ?? "";
-      if (description.length !== 160) throw new Error(`feature description under "${title}" is ${description.length} chars, not 160`);
+      if (description.length < 130 || description.length > 135) throw new Error(`feature description under "${title}" is ${description.length} chars, outside the 130-135 band`);
     }
   });
 
@@ -13579,7 +13581,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     if (with_.length === 0) throw new Error("found no check-marked rows to compare");
     const expectedLengths = [
       [65, 62],
-      [63, 63],
+      [62, 62],
       [63, 69],
       [68, 71],
     ];

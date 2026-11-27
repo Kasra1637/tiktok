@@ -146,8 +146,9 @@ One render path, single-pass video generation via OpenRouter.
   "Everything between idea and posted" grid carries SIX feature cards
   (ADR 0156) — facts, aim, plan, render, demo, results; the templates
   and craft-grade beats fold into the plan card, whose description
-  carries all three. Card descriptions are uniformly 160 chars,
-  smoke-pinned with the six exact titles; titles are short and no
+  carries all three. Card descriptions sit in a 130–135 char band
+  (ADR 0380, superseding ADR 0156's uniform 160), smoke-pinned with
+  the six exact titles; titles are short and no
   longer share one length. The hero figure carries the story
   animation (ADRs 0165/0168, refined by 0172/0175/0176/0178) — inside a
   phone frame the process plays across two pages (page one
@@ -322,7 +323,7 @@ One render path, single-pass video generation via OpenRouter.
 
 ## Before changing provider behavior
 
-Read `docs/adr/README.md` first. Three hundred and seventy-eight decisions (0001–0378; two
+Read `docs/adr/README.md` first. Three hundred and eighty decisions (0001–0380; two
 share the number 0263, written in parallel on Nov 21–22 2026) now
 exist; `docs/adr/README.md` index is the source of truth if this line drifts.
 the submit-path canon is 0001–0006 (identity, temperature, single-pass, prompt
