@@ -733,7 +733,10 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
               (ADR 0137): one flush block in the media column — clip,
               Download, then the two things you do with the render — while
               the record column keeps the facts and the verdict. */}
-          <div className="space-y-2 border-t border-[color:var(--hairline)] px-3 py-3">
+          {/* ADR 0381: the Work group centers in the media column
+              — label over its buttons, the pair areas' placement —
+              while the column's rail structure itself is untouched. */}
+          <div className="center-area space-y-2 border-t border-[color:var(--hairline)] px-3 py-3">
             <GroupLabel icon={Clapperboard}>Work with this render</GroupLabel>
             <div
               className="flex flex-wrap gap-2"
@@ -1054,7 +1057,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                 </Button>
               )}
               {(retryRenderButton || recheckButton || retryStorageButton) && (
-                <div className="flex flex-wrap gap-2">{retryRenderButton}{recheckButton}{retryStorageButton}</div>
+                <div className="flex flex-wrap justify-center gap-2">{retryRenderButton}{recheckButton}{retryStorageButton}</div>
               )}
               {/* The Results & actions disclosure belongs to compact
                   cards: their feedback block still lives here, behind
@@ -1470,7 +1473,9 @@ export default function GenerationHistory() {
         description="Review finished clips, copy post kits, and log real results."
       />
       <div className="history-filters space-y-2" aria-label="History filters">
-        <div className="flex flex-wrap items-center gap-2">
+        {/* ADR 0381: the filter row centers in its area, like
+            every other control row in the app. */}
+        <div className="flex flex-wrap items-center justify-center gap-2">
           <label className="sr-only" htmlFor="history-search">Search by hook text</label>
           <input
             id="history-search"

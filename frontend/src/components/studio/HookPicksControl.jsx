@@ -199,7 +199,10 @@ export default function HookPicksControl({
     ...focusOptions.map((line) => ({ value: line, label: line })),
   ];
   return (
-    <div className="space-y-4">
+    // ADR 0381: the pick groups center in their area the way the
+    // pair cells center theirs; each group's own rows keep their
+    // internal order (the Buffet still stands beside its label).
+    <div className="center-area space-y-4">
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <GroupLabel icon={Focus}>Focus</GroupLabel>
@@ -233,18 +236,21 @@ export default function HookPicksControl({
             </button>
           )}
           {onRefreshFocus && !focusRefreshAsLink && (hasHook || focusStale) && (
-            <Button
+            // ADR 0382: on the Create surface the Buffet is a
+            // regenerate too, so it stands as an icon + text link
+            // like its HookSnap "New options" twin above — same
+            // spot beside the Focus label, same staging.
+            <button
               type="button"
-              variant="secondary"
-              size="sm"
+              className="inline-flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground underline disabled:opacity-50"
               onClick={onRefreshFocus}
               disabled={disabled || focusRefreshing}
-              busy={focusRefreshing}
+              aria-busy={focusRefreshing || undefined}
               data-testid={`${testId}-focus-refresh`}
             >
               <RefreshCw className="h-3.5 w-3.5" />
               Buffet
-            </Button>
+            </button>
           )}
         </div>
         <div>

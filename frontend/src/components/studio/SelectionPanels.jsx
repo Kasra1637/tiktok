@@ -453,14 +453,15 @@ export function AngleSelector({
           cannot discard founder work. */}
       <div className="pt-1">
         {/* ADR 0372 (Kasra's order): the freshness-and-hint line
-            stands ABOVE the Regenerate button, right under the
+            stands at the head of the list, right under the
             "Audience angle (required)" heading, and the hint is
             rewritten punchier and plainer — same meaning (pick a
             goal first; regenerating aims the fresh angles at it),
             58 chars inside the data-subtitle budget. The stamp,
             the separator and the one-line shape (ADR 0291) are
             unchanged, and the fixed-camera indoor note still
-            stands below the button. */}
+            stands below the line. ADR 0382 moved the Regenerate
+            control itself up beside the heading, as a link. */}
         {(angleSetFreshness || !objective) && !generating && (
           <div className="flex flex-wrap items-baseline gap-x-2">
             {angleSetFreshness && (
@@ -478,19 +479,6 @@ export function AngleSelector({
             )}
           </div>
         )}
-        <Button
-          variant="secondary"
-          size="sm"
-          className="gap-1.5"
-          onClick={onRegenerate}
-          disabled={generating}
-          busy={generating}
-          etaSeconds={BUSY_ETA_SECONDS.angles}
-          data-testid="regenerate-angles-button"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          {generating ? "Regenerating angles" : "Regenerate angles"}
-        </Button>
         {cameraSetup === "fixed" && !generating && (
           <p className="text-sm text-muted-foreground" data-testid="angles-fixed-indoor-note">
             With the fixed camera, these angles are staged indoors — an outdoor place shows as its indoor version.
@@ -676,10 +664,36 @@ export function AngleSelector({
   );
 
   return (
-    <div className="inset-panel space-y-4">
-      <GroupLabel as="label" icon={Target}>
-        Audience angle <span className="text-muted-foreground">(required)</span>
-      </GroupLabel>
+    // ADR 0381: the panel's groups center in its area the way the
+    // pair cells center theirs — the gate's action centers under
+    // the heading, and the angle list keeps the panel's full width
+    // (its rows' own width), so the two-up list reads as before.
+    <div className="inset-panel center-area space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <GroupLabel as="label" icon={Target}>
+          Audience angle <span className="text-muted-foreground">(required)</span>
+        </GroupLabel>
+        {/* ADR 0382 (Kasra's order): a regenerate is a third-tier
+            control, so it stands as an icon + text link beside its
+            section heading — the "New options" treatment — never
+            as a pill. It stands only while a list stands (the same
+            condition that picks the list face below); the gate
+            face's first generation keeps its button. The busy
+            wording stays on the link, disabled while it runs. */}
+        {angles.length > 0 && !(landingGate && !showAngles) && (
+          <button
+            type="button"
+            className="inline-flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground underline disabled:opacity-50"
+            onClick={onRegenerate}
+            disabled={generating}
+            aria-busy={generating || undefined}
+            data-testid="regenerate-angles-button"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            {generating ? "Regenerating angles" : "Regenerate angles"}
+          </button>
+        )}
+      </div>
       {body}
     </div>
   );
@@ -1012,21 +1026,22 @@ export function AngleGoalPicker({
               {/* Only Shuffle rides beside the revealed list now: the
                   small duplicate Generate action is gone (the six
                   suggestions are already here). The gated Review copies
-                  keep their Generate action as the gate button below. */}
+                  keep their Generate action as the gate button below.
+                  ADR 0382: Shuffle stands here as an icon + text link,
+                  not a pill — it already sat beside its heading. */}
               {onRegenerate && revealed && featured.length > 0 && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="gap-1.5 shrink-0"
+                <button
+                  type="button"
+                  className="inline-flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground underline disabled:opacity-50"
                   onClick={onRegenerate}
                   disabled={regenerating}
-                  busy={regenerating}
+                  aria-busy={regenerating || undefined}
                   title="Same suggestions, a different ranking — which three sit on top changes. Shuffling never changes the set itself — regenerate angles for genuinely new direction. Your selection is kept."
                   data-testid="regenerate-goals-button"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   {regenerating ? "Shuffling goals" : "Shuffle"}
-                </Button>
+                </button>
               )}
             </div>
           )}

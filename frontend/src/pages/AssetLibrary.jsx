@@ -404,7 +404,9 @@ function AssetSearchList({ assets, query, onQueryChange, renderRow }) {
   return (
     <div className="space-y-4">
       {(assets.length > 1 || q) && (
-        <div className="flex flex-wrap items-center gap-2">
+        // ADR 0381: the search row centers in its area; the field
+        // keeps its own pill width, only its placement moves.
+        <div className="flex flex-wrap items-center justify-center gap-2">
           <label className="sr-only" htmlFor="asset-search">Search assets</label>
           <input
             id="asset-search"

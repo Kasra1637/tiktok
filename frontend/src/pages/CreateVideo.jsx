@@ -2692,25 +2692,32 @@ export default function CreateVideo() {
               </div>
             )}
             {objective && !tailoring && recommendationsVisible && visibleRecommendations.length > 0 && (
-              <div className="space-y-4">
-                <GroupLabel icon={Target}>
-                  {tailoredReady ? "Tailored template for this app" : "Recommended templates"}
-                </GroupLabel>
-                {profileId && objective && (
-                  <div className="pt-1">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="gap-1.5"
+              // ADR 0381: the template area's heading and its
+              // regenerate group center in the step; the template
+              // grid below keeps the step's full width (its cards'
+              // own width), so the grid reads as before.
+              <div className="center-area space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <GroupLabel icon={Target}>
+                    {tailoredReady ? "Tailored template for this app" : "Recommended templates"}
+                  </GroupLabel>
+                  {/* ADR 0382: the templates Regenerate stands as an
+                      icon + text link beside its heading, not as a
+                      pill on its own row under it. */}
+                  {profileId && objective && (
+                    <button
+                      type="button"
+                      className="inline-flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground underline disabled:opacity-50"
                       onClick={() => runTailoring(true)}
                       disabled={tailoring}
+                      aria-busy={tailoring || undefined}
                       title="Replace this goal's tailored templates with a fresh set"
                       data-testid="regenerate-templates-button"
                     >
                       <RefreshCw className="h-3.5 w-3.5" /> Regenerate
-                    </Button>
-                  </div>
-                )}
+                    </button>
+                  )}
+                </div>
                 {/* Shared fit notes, read once: the scorer reasons per factor
                     (goal, category, angle kind), so every card in this set can
                     earn identical bullets. Repeating those on each card turned
@@ -2997,7 +3004,12 @@ export default function CreateVideo() {
             )}
           </div>
         ) : (
-          <div className={effectiveReviewTab === "plan" ? "space-y-4" : "hidden"}>
+          <div className={effectiveReviewTab === "plan" ? "center-area space-y-4" : "hidden"}>
+            {/* ADR 0381: the plan stack's groups center in the step
+                the way the pair cells center theirs — the regenerate
+                row and the section labels center, while paragraphs
+                stretch and the editors keep the step's full width
+                (the .center-area field rule). */}
             {/* Regenerating replaces a plan that may have been edited and
                 approved, so it asks first — the same rule as the strategy
                 rebuild, and for the same reason. The status beside it names
@@ -3006,20 +3018,25 @@ export default function CreateVideo() {
                 rather than wearing a check it did not earn. */}
             {project?.script_version > 0 && (
               <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
+                {/* ADR 0382: Regenerate plan stands as an icon + text
+                    link on the plan stack's first line, beside the
+                    version status — the stack has no heading line of
+                    its own, so its first line is its heading line.
+                    The empty-plan invite glow (ADR 0290) rides the
+                    link while an empty plan waits, as it rode the
+                    pill; the busy wording stays, disabled while it
+                    runs. */}
+                <button
+                  type="button"
+                  className={`inline-flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground underline disabled:opacity-50${planEmpty && !busy ? " generate-invite" : ""}`}
                   disabled={busy}
-                  busy={busy}
-                  etaSeconds={BUSY_ETA_SECONDS.planStrategy}
-                  busyStartedAt={planFlightStartedAt}
+                  aria-busy={busy || undefined}
                   onClick={confirmRegeneratePlan}
                   data-testid="plan-regenerate-button"
-                  className={planEmpty && !busy ? "generate-invite" : undefined}
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   {busy ? "Regenerating plan" : "Regenerate plan"}
-                </Button>
+                </button>
                 {!busy && (
                   <p className="text-sm text-muted-foreground" data-testid="plan-version-status">
                     Plan v{project.script_version}

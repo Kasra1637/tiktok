@@ -706,7 +706,10 @@ export default function HookCta() {
       {loadState === "ready" && approved.length > 0 && (
         <>
           <SectionCard title="Choose an app" icon={Briefcase} data-testid="hook-cta-setup-card">
-            <div className="space-y-4">
+            {/* ADR 0381: the pick row centers in the card the way
+                the pair areas center their groups; the subtitle
+                still stretches (the .center-area paragraph rule). */}
+            <div className="center-area space-y-4">
               <p className="text-sm text-muted-foreground" data-subtitle="">
                 Pick an approved app to start a fresh hook.
               </p>
@@ -756,7 +759,11 @@ export default function HookCta() {
 
           {project && (
             <SectionCard title="Place and wardrobe" icon={Compass} data-testid="hook-cta-direction-card">
-              <div className="space-y-4">
+              {/* ADR 0381: the body centers its groups; the pair
+                  itself keeps the body's full width (the
+                  .center-area pair rule), so its divider still
+                  stands at the card's exact center. */}
+              <div className="center-area space-y-4">
                 {/* The voice pick sits with the direction controls it
                     belongs with (ADR 0246): the character talks, or
                     stays silent and TikTok's text-to-speech carries
@@ -875,7 +882,11 @@ export default function HookCta() {
                   on this page: the editor now renders only once a
                   hook line exists, so no blank field stands in the
                   area before the first generate. */}
-              <div className="space-y-4" data-testid="hook-editors">
+              {/* ADR 0381: the spoken-line area centers its label
+                  and its button row; the editor keeps the area's
+                  full width (the .center-area field rule) and the
+                  subtitle still stretches. */}
+              <div className="center-area space-y-4" data-testid="hook-editors">
                 <GroupLabel icon={AudioLines}>The spoken line</GroupLabel>
                 <p className="text-sm text-muted-foreground" data-subtitle="">
                   The hook line, checked as you edit — sharpen it if you like.
@@ -911,20 +922,26 @@ export default function HookCta() {
                     button (ADR 0205 untouched). The generate busy
                     state is plain: no countdown rides this wait
                     (Kasra's order) — the plan and angle countdowns
-                    elsewhere keep theirs. */}
+                    elsewhere keep theirs. ADR 0382: once a line
+                    exists, the re-roll is a third-tier control, so
+                    Generate a new hook stands as an icon + text
+                    link in this row; the first generation below
+                    keeps its accent button, because a first
+                    generation is a step action, not a regenerate. */}
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-start gap-2">
                   {hasHook ? (
-                    <Button
-                      variant="accent"
+                    <button
+                      type="button"
+                      className="inline-flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground underline disabled:opacity-50"
                       onClick={generateHook}
                       disabled={hookBusy}
-                      busy={hookBusy}
+                      aria-busy={hookBusy || undefined}
                       data-testid="hook-generate-new"
                     >
                       <Sparkles className="h-4 w-4" />
                       {hookBusy ? "Writing the hook" : "Generate a new hook"}
-                    </Button>
+                    </button>
                   ) : (
                     <Button
                       variant="accent"

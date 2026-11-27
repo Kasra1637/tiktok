@@ -43,13 +43,18 @@ export default function LineRewriteAction({
   return (
     <div className="space-y-3">
       {!live && (
-        <Button type="button" variant="secondary" size="sm" onClick={suggest}
+        // ADR 0382: the rewrite trigger is a re-roll assist, so it
+        // stands as an icon + text link, not a pill. The suggestion's
+        // own Accept/Dismiss actions below keep their buttons.
+        <button type="button"
+          className="inline-flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground underline disabled:opacity-50"
+          onClick={suggest}
           disabled={busy || disabled || !projectId || !String(line || "").trim()}
-          busy={busy}
+          aria-busy={busy || undefined}
           data-testid={`${testIdPrefix}-button`}>
-          <Sparkles className="mr-2 h-3.5 w-3.5" />
+          <Sparkles className="h-3.5 w-3.5" />
           {busy ? busyLabel : buttonLabel}
-        </Button>
+        </button>
       )}
       {error && <p className="text-sm text-destructive-text" role="alert" data-testid={`${testIdPrefix}-error`}>{error}</p>}
       {live && (

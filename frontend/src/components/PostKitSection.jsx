@@ -5,7 +5,6 @@ import { GroupLabel } from "./SectionCard";
 import { FactChip, FactList } from "./FactChip";
 import { useCopyButton } from "../lib/copyClipboard";
 import { api, getErrorMessage } from "../lib/api";
-import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 
 /**
  * The frozen post copy for one render: 1 caption, a hashtag set, cover text.
@@ -83,18 +82,20 @@ export function PostKitSection({ postKit: initialKit, generationId, onUpdated, t
         <GroupLabel icon={headingIcon || undefined}>Caption, hashtags, cover</GroupLabel>
         <div className="flex flex-wrap items-center gap-2">
           {canRegenerate && (
-            <Button
-              variant="secondary"
-              size="sm"
+            // ADR 0382: a regenerate stands as an icon + text link
+            // beside its section heading, never a pill — it already
+            // sat on this heading line, beside Copy all.
+            <button
+              type="button"
+              className="inline-flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground underline disabled:opacity-50"
               onClick={handleRegenerate}
               disabled={regenBusy}
-              busy={regenBusy}
-              etaSeconds={BUSY_ETA_SECONDS.postKit}
+              aria-busy={regenBusy || undefined}
               data-testid="postkit-regenerate"
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
               {regenBusy ? "Regenerating copy" : "Regenerate"}
-            </Button>
+            </button>
           )}
           <CopyButton
             testId="postkit-copy-all"

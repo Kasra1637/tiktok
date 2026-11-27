@@ -1548,23 +1548,27 @@ async function main() {
     }
   });
 
-  await check("the section pair's areas center their contents in their halves (ADR 0371)", async () => {
-    // ADR 0364 put the divider at the container's exact center, and
-    // Kasra's live review still read it as leaning toward the
-    // right-hand group (Voice, Wardrobe): the line's geometry was
-    // centered, but each area's contents stood left-aligned, so a
-    // short left area left a wide empty pool beside the line while
-    // the right area's contents started close to it. The correction
-    // is in the areas, not the line (Kasra's order, Nov 26 2026:
-    // centralize it, across every side-by-side section): from
-    // 1024px each area becomes a flex column with its contents
-    // centered in its half, so the whitespace mirrors on both
-    // sides of the divider and the centered line reads centered.
-    // The divider mechanism itself does not move — ADR 0364's
-    // check above still pins it — the areas' insides keep their
-    // own layout, and the stacked layout below 1024px carries
-    // none of this. Stylesheet arithmetic again: jsdom lays
-    // nothing out, so the declarations ARE the geometry.
+  await check("the section pair's areas align their contents on one start line (ADR 0381)", async () => {
+    // ADR 0371 centered each pair area's contents in its half so
+    // ADR 0364's centered divider would read centered. Kasra's
+    // live review of the result (Nov 26 2026, the same evening)
+    // found the four areas still did not read as one system: a
+    // centered group starts wherever its own width puts it, so
+    // the wide Camera setup and Voice groups read at their areas'
+    // edges while the short Location and Wardrobe groups stood
+    // indented — four areas, four starting offsets. His order:
+    // in each pair area the heading, its icon and its buttons
+    // start at the same place, on one line. ADR 0381 therefore
+    // supersedes the centering INSIDE the pair areas: from
+    // 1024px each area is a flex column whose contents align to
+    // the area's start, and the pair's own overrides carry the
+    // same line into the stacked layout (a full-width thumb-pair
+    // row starts its buttons on the heading's line) and into a
+    // centered group standing inside a pair (Create's Voice
+    // group). The divider mechanism itself does not move — ADR
+    // 0364's check above still pins it. Stylesheet arithmetic
+    // again: jsdom lays nothing out, so the declarations ARE
+    // the geometry.
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     const pairAt = css.indexOf(".section-pair {");
     if (pairAt < 0) throw new Error("index.css carries no .section-pair layout");
@@ -1572,18 +1576,24 @@ async function main() {
     if (mediaAt < 0) throw new Error("the section pair has no desktop media block");
     const stacked = css.slice(pairAt, mediaAt);
     if (stacked.includes("align-items: center")) {
-      throw new Error("the pair's stacked layout centers its areas — the centering belongs to the desktop halves only (ADR 0371)");
+      throw new Error("the pair's stacked layout centers its areas — no pair area centers its contents (ADR 0381)");
+    }
+    if (!stacked.includes(".section-pair .thumb-pair") || !stacked.includes(".section-pair .center-area")) {
+      throw new Error("the pair's one-line overrides are missing — inside a pair, rows and centered groups take the start line (ADR 0381)");
     }
     const pairDesktop = css.slice(mediaAt, mediaAt + 3200);
     const cellRule = /\.section-pair > \* \{([^}]*)\}/.exec(pairDesktop);
     if (!cellRule) {
-      throw new Error("the pair's desktop areas carry no shared cell rule (ADR 0371)");
+      throw new Error("the pair's desktop areas carry no shared cell rule (ADR 0381)");
     }
     if (!cellRule[1].includes("display: flex") || !cellRule[1].includes("flex-direction: column")) {
-      throw new Error("the pair's desktop areas are not flex columns (ADR 0371)");
+      throw new Error("the pair's desktop areas are not flex columns (ADR 0381)");
     }
-    if (!cellRule[1].includes("align-items: center")) {
-      throw new Error("the pair's desktop areas do not center their contents in their halves (ADR 0371)");
+    if (!cellRule[1].includes("align-items: flex-start")) {
+      throw new Error("the pair's desktop areas do not align their contents to the area's start (ADR 0381)");
+    }
+    if (cellRule[1].includes("align-items: center")) {
+      throw new Error("the pair's desktop areas center their contents again — the one-line rule superseded it (ADR 0381)");
     }
   });
 
@@ -1986,7 +1996,7 @@ async function main() {
         }
       });
 
-      await check("the angle refresh line stands above Regenerate in its new words (ADR 0372)", async (ctx) => {
+      await check("the angle refresh line stands under the heading row in its new words (ADR 0372, placement ADR 0382)", async (ctx) => {
         // Kasra's order (Nov 26 2026): the freshness-and-hint line
         // moves ABOVE the Regenerate angles button — right under
         // the "Audience angle (required)" heading — and the hint is
@@ -1997,6 +2007,13 @@ async function main() {
         // stamp, the separator and the one-line rule (ADR 0291,
         // the check above) are unchanged, and the fixed-camera
         // indoor note still stands below the button.
+        // ADR 0382 then moved the Regenerate control itself up
+        // beside the heading, as an icon + text link: the line now
+        // stands under that heading row instead of above the
+        // control. Its words, stamp, separator and one-line shape
+        // are exactly as ADR 0372 left them — only the control's
+        // seat and face changed — and the indoor note still stands
+        // below the heading row, in the list.
         const threeDays = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
         const rows = [ANGLE, ANGLE_B].map((a) => ({ ...a, created_at: threeDays }));
         try {
@@ -2013,9 +2030,9 @@ async function main() {
                 throw new Error(`the aim hint does not carry its new words: ${JSON.stringify(hint.textContent)}`);
               }
               const button = ctx.container.querySelector('[data-testid="regenerate-angles-button"]');
-              if (!button) throw new Error("the Regenerate angles button is gone");
-              if (!(hint.compareDocumentPosition(button) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
-                throw new Error("the refresh line does not stand above the Regenerate button (ADR 0372)");
+              if (!button) throw new Error("the Regenerate angles link is gone");
+              if (!(button.compareDocumentPosition(hint) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+                throw new Error("the refresh line does not stand under the heading row (ADR 0372's line, ADR 0382's placement)");
               }
             }
           );
@@ -2038,14 +2055,100 @@ async function main() {
               const note = ctx.container.querySelector('[data-testid="angles-fixed-indoor-note"]');
               if (!note) throw new Error("the fixed-camera indoor note is missing");
               const button = ctx.container.querySelector('[data-testid="regenerate-angles-button"]');
-              if (!button) throw new Error("the Regenerate angles button is gone beside the indoor note");
+              if (!button) throw new Error("the Regenerate angles link is gone beside the indoor note");
               if (!(button.compareDocumentPosition(note) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
-                throw new Error("the fixed-camera indoor note no longer stands below the button (ADR 0372)");
+                throw new Error("the fixed-camera indoor note no longer stands below the heading row (ADR 0372)");
               }
             }
           );
         } finally {
           global.__SMOKE_PARAMS = "";
+        }
+      });
+
+      await check("regenerates stand as icon + text links beside their headings (ADR 0382)", async (ctx) => {
+        // Kasra's order (Nov 26 2026): a regenerate is a third-tier
+        // control, not even a secondary button — every regenerate
+        // loses its pill and stands as an icon + text link wearing
+        // the "New options" treatment (muted, underlined, no
+        // btn-studio surface), beside its section heading. First
+        // generations (Generate angles, Generate the hook) keep
+        // their buttons; only re-rolls convert. Two DOM legs pin
+        // the shape where the controls stand on Create; a source
+        // leg pins the rest of the family — Shuffle, the post
+        // kit's Regenerate, the templates Regenerate, HookSnap's
+        // Generate a new hook, the rewrite assists and Create's
+        // Buffet — so none of their testids rides the shared
+        // Button again.
+        const assertLink = (el, name) => {
+          if (!el) throw new Error(`${name} is gone`);
+          if (el.classList.contains("btn-studio")) throw new Error(`${name} still wears the shared Button's pill`);
+          if (!el.classList.contains("underline")) throw new Error(`${name} does not wear the underlined link treatment`);
+          if (!el.querySelector("svg")) throw new Error(`${name} lost its icon`);
+        };
+        const threeDays = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+        const rows = [ANGLE, ANGLE_B].map((a) => ({ ...a, created_at: threeDays }));
+        try {
+          await withApi(
+            { getContentAngles: async () => ({ angles: rows }) },
+            async () => {
+              global.__SMOKE_PARAMS = "";
+              await mount(CreateVideo, {})(ctx);
+              await openStep(ctx, "Audience & template");
+              await passAngleGate(ctx);
+              const link = ctx.container.querySelector('[data-testid="regenerate-angles-button"]');
+              assertLink(link, "Regenerate angles");
+              if ((link.textContent || "").trim() !== "Regenerate angles") {
+                throw new Error(`Regenerate angles lost its label: ${JSON.stringify(link.textContent)}`);
+              }
+              if (!(link.parentElement.textContent || "").includes("Audience angle")) {
+                throw new Error("Regenerate angles does not stand beside the Audience angle heading");
+              }
+            }
+          );
+          await act(async () => ctx.root.render(null));
+          await withApi(
+            { getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY }) },
+            async () => {
+              global.__SMOKE_PARAMS = "?project=p1";
+              await mount(CreateVideo, {})(ctx);
+              await openStep(ctx, "Review & submit");
+              const link = ctx.container.querySelector('[data-testid="plan-regenerate-button"]');
+              assertLink(link, "Regenerate plan");
+              const status = ctx.container.querySelector('[data-testid="plan-version-status"]');
+              if (!status || status.parentElement !== link.parentElement) {
+                throw new Error("Regenerate plan does not stand on the plan stack's first line beside the version status");
+              }
+            }
+          );
+        } finally {
+          global.__SMOKE_PARAMS = "";
+        }
+        // Source leg: in each home file, the opening tag nearest
+        // before every converted testid is a plain <button>, never
+        // the shared <Button>.
+        const family = [
+          ["components/studio/SelectionPanels.jsx", ["regenerate-angles-button", "regenerate-goals-button"]],
+          ["components/PostKitSection.jsx", ["postkit-regenerate"]],
+          ["pages/CreateVideo.jsx", ["regenerate-templates-button", "plan-regenerate-button"]],
+          ["pages/HookCta.jsx", ["hook-generate-new"]],
+          ["components/studio/HookPicksControl.jsx", ["-focus-refresh`"]],
+          ["components/studio/LineRewriteAction.jsx", ["testIdPrefix}-button`"]],
+        ];
+        for (const [rel, testids] of family) {
+          const source = fs.readFileSync(path.join(SRC, rel), "utf8");
+          for (const testid of testids) {
+            let idx = source.indexOf(testid);
+            if (idx === -1) throw new Error(`${rel} no longer carries ${testid}`);
+            while (idx !== -1) {
+              const openButton = source.lastIndexOf("<Button", idx);
+              const openPlain = source.lastIndexOf("<button", idx);
+              if (openPlain === -1 || openButton > openPlain) {
+                throw new Error(`${testid} in ${rel} rides the shared Button again (ADR 0382)`);
+              }
+              idx = source.indexOf(testid, idx + 1);
+            }
+          }
         }
       });
 
@@ -10828,8 +10931,15 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           await passGoalGate(ctx);
           await clickEl(ctx, ctx.container.querySelector('[data-testid="regenerate-goals-button"]'), "no shuffle button");
           const busyBtn = ctx.container.querySelector('[data-testid="regenerate-goals-button"]');
-          if (!busyBtn) throw new Error("no shuffle button while goals reshuffle");
-          if (busyBtn.getAttribute("data-busy") !== "true") throw new Error("the shuffle button wears no busy sweep while goals reshuffle");
+          if (!busyBtn) throw new Error("no shuffle control while goals reshuffle");
+          // ADR 0382: Shuffle is a link now, not the shared Button,
+          // so its busy face is the link's — aria-busy set, the
+          // control disabled, the label naming the work (below) —
+          // where the pill carried the same state as data-busy and
+          // its sweep. The substance is unchanged: the busy state
+          // lives on the control itself, never a second narrator.
+          if (busyBtn.getAttribute("aria-busy") !== "true") throw new Error("the shuffle link wears no busy marker while goals reshuffle");
+          if (!busyBtn.disabled) throw new Error("the shuffle link stays enabled while goals reshuffle");
           if (!/Shuffling goals/.test(busyBtn.textContent || "")) {
             throw new Error(`the button label does not name the work: ${JSON.stringify(busyBtn.textContent)}`);
           }
@@ -17363,6 +17473,65 @@ await check("a saved direction pick outside the visible two takes the second sea
         if (picked.getAttribute("aria-pressed") !== "true") throw new Error("the saved place does not stand picked (ADR 0365)");
         if (shown[1] !== picked) throw new Error("the saved pick does not take the second seat (ADR 0365)");
         if (shown[0].dataset.value !== "Location one") throw new Error("the first seat does not hold the set's first option (ADR 0365)");
+      }
+    );
+  });
+
+  await check("section content centers the way the pair areas do (ADR 0381)", async (ctx) => {
+    // ADR 0381 (Kasra's app-wide placement order, Nov 26 2026):
+    // every section's content stands the way the content inside
+    // the Place and wardrobe pair stands — groups centered in
+    // their area, headings over their controls, button rows in
+    // the one thumb-pair proportion. Placement only: the
+    // stylesheet carries the mechanism (jsdom lays nothing out,
+    // so the declarations ARE the geometry, as with ADR 0364's
+    // check), and the bodies that take it carry the one class.
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const blockAt = css.indexOf("Centered areas (ADR 0381)");
+    if (blockAt < 0) throw new Error("index.css carries no centered-areas block (ADR 0381)");
+    const block = css.slice(blockAt, blockAt + 3200);
+    const thumbRule = /\.thumb-pair \{([^}]*)\}/.exec(block);
+    if (!thumbRule || !thumbRule[1].includes("justify-content: center")) {
+      throw new Error("thumb-pair rows do not center their buttons (ADR 0381)");
+    }
+    const areaRule = /\.center-area \{([^}]*)\}/.exec(block);
+    if (!areaRule || !areaRule[1].includes("flex-direction: column") || !areaRule[1].includes("align-items: center")) {
+      throw new Error(".center-area is not the pair cell's centering declaration (ADR 0381)");
+    }
+    if (!css.includes(".center-area > p") || !css.includes(".center-area > .section-pair")) {
+      throw new Error(".center-area lost its safeguards — paragraphs stretch and pairs keep full width (ADR 0381)");
+    }
+    await inHookCta(
+      ctx,
+      {
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: ["Location one", "Location two"], wardrobe: ["Wardrobe one", "Wardrobe two"],
+          setting: [], lighting: [], voice: [], tone: [],
+        }),
+        getGenerations: async () => ({ generations: [] }),
+        createHookCtaProject: async () => blankRow({ id: "hook-cta-1" }),
+      },
+      "",
+      async () => {
+        const setup = ctx.container.querySelector('[data-testid="hook-cta-setup-card"]');
+        if (!setup) throw new Error("the setup card did not render");
+        if (!setup.querySelector(".center-area")) {
+          throw new Error("the Choose an app body does not center its groups (ADR 0381)");
+        }
+        const card = ctx.container.querySelector('[data-testid="hook-cta-direction-card"]');
+        if (!card) throw new Error("the direction card did not render");
+        const body = card.querySelector(".center-area");
+        if (!body) throw new Error("the Place and wardrobe body does not center its groups (ADR 0381)");
+        const pair = body.querySelector(".section-pair");
+        if (!pair) throw new Error("the direction pair did not render inside the centered body");
+        if (pair.classList.contains("center-area")) {
+          throw new Error("the pair itself was re-centered — its divider geometry is ADR 0364's and does not move (ADR 0381)");
+        }
+        const voice = card.querySelector('[data-testid="voice-mode-silent"]');
+        if (!voice) throw new Error("the voice pick did not render in the direction card");
+        const voiceRoot = voice.closest(".center-area");
+        if (!voiceRoot) throw new Error("the voice group does not center in its area (ADR 0381)");
       }
     );
   });

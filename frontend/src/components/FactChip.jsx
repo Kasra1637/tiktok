@@ -43,7 +43,9 @@ export function FactChip({ children, className }) {
  * everywhere one is written.
  */
 export function FactList({ children, className }) {
-  return <div className={cn("flex flex-wrap items-center gap-1.5", className)}>{children}</div>;
+  // ADR 0381: the chip row centers in its card, like every other
+  // control row in the app.
+  return <div className={cn("flex flex-wrap items-center justify-center gap-1.5", className)}>{children}</div>;
 }
 
 export default FactChip;
