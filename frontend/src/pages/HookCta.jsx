@@ -706,10 +706,10 @@ export default function HookCta() {
       {loadState === "ready" && approved.length > 0 && (
         <>
           <SectionCard title="Choose an app" icon={Briefcase} data-testid="hook-cta-setup-card">
-            {/* ADR 0381: the pick row centers in the card the way
-                the pair areas center their groups; the subtitle
-                still stretches (the .center-area paragraph rule). */}
-            <div className="center-area space-y-4">
+            {/* Layout reset: the pick row starts at the card's
+                inset, on the same line as the card title and the
+                subtitle above it — nothing centered. */}
+            <div className="space-y-4">
               <p className="text-sm text-muted-foreground" data-subtitle="">
                 Pick an approved app to start a fresh hook.
               </p>
@@ -759,11 +759,11 @@ export default function HookCta() {
 
           {project && (
             <SectionCard title="Place and wardrobe" icon={Compass} data-testid="hook-cta-direction-card">
-              {/* ADR 0381: the body centers its groups; the pair
-                  itself keeps the body's full width (the
-                  .center-area pair rule), so its divider still
-                  stands at the card's exact center. */}
-              <div className="center-area space-y-4">
+              {/* Layout reset: the body's groups start at the
+                  card's inset on the one line; the pair keeps the
+                  body's full width, so its divider still stands
+                  at the card's exact center (ADR 0364). */}
+              <div className="space-y-4">
                 {/* The voice pick sits with the direction controls it
                     belongs with (ADR 0246): the character talks, or
                     stays silent and TikTok's text-to-speech carries
@@ -882,11 +882,11 @@ export default function HookCta() {
                   on this page: the editor now renders only once a
                   hook line exists, so no blank field stands in the
                   area before the first generate. */}
-              {/* ADR 0381: the spoken-line area centers its label
-                  and its button row; the editor keeps the area's
-                  full width (the .center-area field rule) and the
-                  subtitle still stretches. */}
-              <div className="center-area space-y-4" data-testid="hook-editors">
+              {/* Layout reset: the spoken-line area's label, its
+                  subtitle, the editor and its button row all start
+                  at the card's inset, on the one line — nothing
+                  centered. */}
+              <div className="space-y-4" data-testid="hook-editors">
                 <GroupLabel icon={AudioLines}>The spoken line</GroupLabel>
                 <p className="text-sm text-muted-foreground" data-subtitle="">
                   The hook line, checked as you edit — sharpen it if you like.

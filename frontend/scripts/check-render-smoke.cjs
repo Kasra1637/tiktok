@@ -1548,27 +1548,22 @@ async function main() {
     }
   });
 
-  await check("the section pair's areas align their contents on one start line (ADR 0381)", async () => {
-    // ADR 0371 centered each pair area's contents in its half so
-    // ADR 0364's centered divider would read centered. Kasra's
-    // live review of the result (Nov 26 2026, the same evening)
-    // found the four areas still did not read as one system: a
-    // centered group starts wherever its own width puts it, so
-    // the wide Camera setup and Voice groups read at their areas'
-    // edges while the short Location and Wardrobe groups stood
-    // indented — four areas, four starting offsets. His order:
-    // in each pair area the heading, its icon and its buttons
-    // start at the same place, on one line. ADR 0381 therefore
-    // supersedes the centering INSIDE the pair areas: from
-    // 1024px each area is a flex column whose contents align to
-    // the area's start, and the pair's own overrides carry the
-    // same line into the stacked layout (a full-width thumb-pair
-    // row starts its buttons on the heading's line) and into a
-    // centered group standing inside a pair (Create's Voice
-    // group). The divider mechanism itself does not move — ADR
-    // 0364's check above still pins it. Stylesheet arithmetic
-    // again: jsdom lays nothing out, so the declarations ARE
-    // the geometry.
+  await check("the section pair's areas start their contents on the area's one line (layout reset)", async () => {
+    // Layout reset (Kasra's order, Nov 27 2026, superseding ADR
+    // 0381's alignment system and ADR 0371's centering inside the
+    // pair): inside a pair area the heading, its icon and its
+    // buttons start at the same place — the area's own start — as
+    // one instance of the app's one rule (everything inside a
+    // container starts on the container's one line, nothing inside
+    // a container is centered). From 1024px each area is a flex
+    // column aligned to its start; the stacked layout centers
+    // nothing either, and no pair-only alignment override survives
+    // — the pair takes the same start line every other container
+    // takes, and ADR 0381's centering class is gone from the
+    // stylesheet whole. The divider mechanism itself does not
+    // move — ADR 0364's check above still pins it. Stylesheet
+    // arithmetic again: jsdom lays nothing out, so the
+    // declarations ARE the geometry.
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     const pairAt = css.indexOf(".section-pair {");
     if (pairAt < 0) throw new Error("index.css carries no .section-pair layout");
@@ -1576,24 +1571,27 @@ async function main() {
     if (mediaAt < 0) throw new Error("the section pair has no desktop media block");
     const stacked = css.slice(pairAt, mediaAt);
     if (stacked.includes("align-items: center")) {
-      throw new Error("the pair's stacked layout centers its areas — no pair area centers its contents (ADR 0381)");
+      throw new Error("the pair's stacked layout centers its areas — nothing inside a container is centered (layout reset)");
     }
-    if (!stacked.includes(".section-pair .thumb-pair") || !stacked.includes(".section-pair .center-area")) {
-      throw new Error("the pair's one-line overrides are missing — inside a pair, rows and centered groups take the start line (ADR 0381)");
+    if (stacked.includes(".section-pair .thumb-pair") || stacked.includes(".section-pair .center-area")) {
+      throw new Error("a pair-only alignment override survives — the pair takes the app's one start line, not a special treatment (layout reset)");
+    }
+    if (css.includes(".center-area")) {
+      throw new Error("ADR 0381's centering class survives in the stylesheet (layout reset)");
     }
     const pairDesktop = css.slice(mediaAt, mediaAt + 3200);
     const cellRule = /\.section-pair > \* \{([^}]*)\}/.exec(pairDesktop);
     if (!cellRule) {
-      throw new Error("the pair's desktop areas carry no shared cell rule (ADR 0381)");
+      throw new Error("the pair's desktop areas carry no shared cell rule (layout reset)");
     }
     if (!cellRule[1].includes("display: flex") || !cellRule[1].includes("flex-direction: column")) {
-      throw new Error("the pair's desktop areas are not flex columns (ADR 0381)");
+      throw new Error("the pair's desktop areas are not flex columns (layout reset)");
     }
     if (!cellRule[1].includes("align-items: flex-start")) {
-      throw new Error("the pair's desktop areas do not align their contents to the area's start (ADR 0381)");
+      throw new Error("the pair's desktop areas do not align their contents to the area's start (layout reset)");
     }
     if (cellRule[1].includes("align-items: center")) {
-      throw new Error("the pair's desktop areas center their contents again — the one-line rule superseded it (ADR 0381)");
+      throw new Error("the pair's desktop areas center their contents — the reset superseded it (layout reset)");
     }
   });
 
@@ -17477,29 +17475,38 @@ await check("a saved direction pick outside the visible two takes the second sea
     );
   });
 
-  await check("section content centers the way the pair areas do (ADR 0381)", async (ctx) => {
-    // ADR 0381 (Kasra's app-wide placement order, Nov 26 2026):
-    // every section's content stands the way the content inside
-    // the Place and wardrobe pair stands — groups centered in
-    // their area, headings over their controls, button rows in
-    // the one thumb-pair proportion. Placement only: the
-    // stylesheet carries the mechanism (jsdom lays nothing out,
-    // so the declarations ARE the geometry, as with ADR 0364's
-    // check), and the bodies that take it carry the one class.
+  await check("section content starts on the container's one line, titles evenly spaced (layout reset)", async (ctx) => {
+    // Layout reset (Kasra's order, Nov 27 2026, superseding ADR
+    // 0381): ONE title spacing and ONE equal alignment inside
+    // containers. Every group heading carries the same gap below
+    // it — 0.5rem, declared once on the shared eyebrow face —
+    // and section titles carry no ad-hoc margins of their own
+    // (their spacing is the shared SectionCard rhythm, the same
+    // on every card). Everything inside a container — titles,
+    // headings, button rows, fields, text — starts at the
+    // container's own inset, and NOTHING inside a container is
+    // centered: ADR 0381's centering class is gone from the
+    // stylesheet whole, and option rows (.thumb-pair) start at
+    // the inset like everything else. The stylesheet carries the
+    // mechanism (jsdom lays nothing out, so the declarations ARE
+    // the geometry, as with ADR 0364's check), and the bodies
+    // that took the centering carry it no longer.
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-    const blockAt = css.indexOf("Centered areas (ADR 0381)");
-    if (blockAt < 0) throw new Error("index.css carries no centered-areas block (ADR 0381)");
-    const block = css.slice(blockAt, blockAt + 3200);
-    const thumbRule = /\.thumb-pair \{([^}]*)\}/.exec(block);
-    if (!thumbRule || !thumbRule[1].includes("justify-content: center")) {
-      throw new Error("thumb-pair rows do not center their buttons (ADR 0381)");
+    const blockAt = css.indexOf("Equal alignment inside containers (layout reset)");
+    if (blockAt < 0) throw new Error("index.css carries no equal-alignment reset block (layout reset)");
+    if (css.includes(".center-area")) {
+      throw new Error("ADR 0381's centering class survives in the stylesheet (layout reset)");
     }
-    const areaRule = /\.center-area \{([^}]*)\}/.exec(block);
-    if (!areaRule || !areaRule[1].includes("flex-direction: column") || !areaRule[1].includes("align-items: center")) {
-      throw new Error(".center-area is not the pair cell's centering declaration (ADR 0381)");
+    const thumbRules = [...css.matchAll(/\.thumb-pair \{([^}]*)\}/g)].map((m) => m[1]);
+    if (thumbRules.length === 0) throw new Error("index.css carries no .thumb-pair rule (layout reset)");
+    if (thumbRules.some((rule) => rule.includes("justify-content: center"))) {
+      throw new Error("thumb-pair rows center their buttons — option rows start at the container's inset (layout reset)");
     }
-    if (!css.includes(".center-area > p") || !css.includes(".center-area > .section-pair")) {
-      throw new Error(".center-area lost its safeguards — paragraphs stretch and pairs keep full width (ADR 0381)");
+    if (!/\.eyebrow \{[^}]*margin-bottom: 0\.5rem/.test(css)) {
+      throw new Error("the group heading face does not carry the one title spacing — 0.5rem below every group heading (layout reset)");
+    }
+    if (!/\.section-heading \{[^}]*margin-bottom: 0;/.test(css)) {
+      throw new Error("the section title face carries an ad-hoc bottom margin — section titles take the shared card rhythm (layout reset)");
     }
     await inHookCta(
       ctx,
@@ -17516,22 +17523,27 @@ await check("a saved direction pick outside the visible two takes the second sea
       async () => {
         const setup = ctx.container.querySelector('[data-testid="hook-cta-setup-card"]');
         if (!setup) throw new Error("the setup card did not render");
-        if (!setup.querySelector(".center-area")) {
-          throw new Error("the Choose an app body does not center its groups (ADR 0381)");
+        if (setup.querySelector(".center-area")) {
+          throw new Error("the Choose an app body still centers its groups (layout reset)");
+        }
+        if (!setup.querySelector('[data-testid="hook-cta-app-picker"]')) {
+          throw new Error("the app picker did not render in the Choose an app card (layout reset)");
         }
         const card = ctx.container.querySelector('[data-testid="hook-cta-direction-card"]');
         if (!card) throw new Error("the direction card did not render");
-        const body = card.querySelector(".center-area");
-        if (!body) throw new Error("the Place and wardrobe body does not center its groups (ADR 0381)");
-        const pair = body.querySelector(".section-pair");
-        if (!pair) throw new Error("the direction pair did not render inside the centered body");
+        if (card.querySelector(".center-area")) {
+          throw new Error("the Place and wardrobe body still centers its groups (layout reset)");
+        }
+        const pair = card.querySelector(".section-pair");
+        if (!pair) throw new Error("the direction pair did not render inside the body (layout reset)");
         if (pair.classList.contains("center-area")) {
-          throw new Error("the pair itself was re-centered — its divider geometry is ADR 0364's and does not move (ADR 0381)");
+          throw new Error("the pair itself carries the removed centering class (layout reset)");
         }
         const voice = card.querySelector('[data-testid="voice-mode-silent"]');
         if (!voice) throw new Error("the voice pick did not render in the direction card");
-        const voiceRoot = voice.closest(".center-area");
-        if (!voiceRoot) throw new Error("the voice group does not center in its area (ADR 0381)");
+        if (voice.closest(".center-area")) {
+          throw new Error("the voice group still centers in its area (layout reset)");
+        }
       }
     );
   });

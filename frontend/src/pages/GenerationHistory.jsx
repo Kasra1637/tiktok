@@ -733,10 +733,11 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
               (ADR 0137): one flush block in the media column — clip,
               Download, then the two things you do with the render — while
               the record column keeps the facts and the verdict. */}
-          {/* ADR 0381: the Work group centers in the media column
-              — label over its buttons, the pair areas' placement —
-              while the column's rail structure itself is untouched. */}
-          <div className="center-area space-y-2 border-t border-[color:var(--hairline)] px-3 py-3">
+          {/* Layout reset: the Work group starts at the media
+              column's inset like everything else in the app —
+              label over its buttons on the one line — while the
+              column's rail structure itself is untouched. */}
+          <div className="space-y-2 border-t border-[color:var(--hairline)] px-3 py-3">
             <GroupLabel icon={Clapperboard}>Work with this render</GroupLabel>
             <div
               className="flex flex-wrap gap-2"
@@ -1473,9 +1474,10 @@ export default function GenerationHistory() {
         description="Review finished clips, copy post kits, and log real results."
       />
       <div className="history-filters space-y-2" aria-label="History filters">
-        {/* ADR 0381: the filter row centers in its area, like
-            every other control row in the app. */}
-        <div className="flex flex-wrap items-center justify-center gap-2">
+        {/* Layout reset: the filter row starts at its area's
+            inset, like every other control row in the app —
+            nothing centered. */}
+        <div className="flex flex-wrap items-center gap-2">
           <label className="sr-only" htmlFor="history-search">Search by hook text</label>
           <input
             id="history-search"

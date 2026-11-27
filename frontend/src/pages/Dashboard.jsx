@@ -321,9 +321,10 @@ export default function Dashboard() {
       {!state.loading && recent.length > 0 && (
         <section className="space-y-4" data-testid="dashboard-recents">
           <SectionHeading icon={HistoryIcon}>Recent renders</SectionHeading>
-          {/* ADR 0381: the recent tiles center in their row when
-              they do not fill it, like every other group. */}
-          <div className="flex flex-wrap justify-center gap-4">
+          {/* Layout reset: the recent tiles start at the
+              section's inset like every other group, filled row
+              or not — nothing centered. */}
+          <div className="flex flex-wrap gap-4">
             {recent.map((row, index) => (
               <RecentTile
                 key={row.id}

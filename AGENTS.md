@@ -212,6 +212,12 @@ One render path, single-pass video generation via OpenRouter.
 - Spacing tokens live in `frontend/src/index.css` (`.surface`, `.inset-panel`);
   never add `p-*` to card JSX. Token changes update `design_guidelines.md`
   same-commit.
+- Layout reset (Nov 27 2026, Kasra's order): one title spacing and one equal
+  alignment inside containers — group headings carry the same 0.5rem gap below
+  them (`.eyebrow` in index.css), section titles take the shared SectionCard
+  rhythm, and everything inside a container starts at the container's inset.
+  Nothing inside a container is centered; ADR 0381's app-wide centering is
+  removed. The `.section-pair` start line and ADR 0364's divider geometry stand.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no

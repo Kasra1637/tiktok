@@ -664,11 +664,11 @@ export function AngleSelector({
   );
 
   return (
-    // ADR 0381: the panel's groups center in its area the way the
-    // pair cells center theirs — the gate's action centers under
-    // the heading, and the angle list keeps the panel's full width
-    // (its rows' own width), so the two-up list reads as before.
-    <div className="inset-panel center-area space-y-4">
+    // Layout reset: the panel's groups start at the panel's
+    // inset like everything else in the app — the gate's action
+    // under the heading, the angle list at the panel's full
+    // width, nothing centered.
+    <div className="inset-panel space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <GroupLabel as="label" icon={Target}>
           Audience angle <span className="text-muted-foreground">(required)</span>

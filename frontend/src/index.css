@@ -822,12 +822,23 @@ body {
 /* 0.75rem (12px) is the project's minimum type size — uppercase tracked-out
    labels are the most contrast-sensitive text in the UI, so they sit at the
    floor rather than below it. */
+/* One title spacing (layout reset, Kasra's order, Nov 27 2026):
+   every group heading in the app carries the same gap below it —
+   0.5rem, declared here on the shared eyebrow face — and no gap
+   above it of its own; the container's own rhythm owns the rest.
+   A heading standing in a flex row (beside its actions or its
+   regenerate link) carries no bottom margin: the row's own
+   alignment owns that seat. Section titles (.section-heading)
+   carry no ad-hoc margins at all — their spacing is the shared
+   SectionCard rhythm, the same on every card. */
 .eyebrow {
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: hsl(var(--muted-foreground));
+    margin-top: 0;
+    margin-bottom: 0.5rem;
 }
 
 /* Indigo eyebrow variant. A `text-[color:...]` utility cannot override
@@ -852,6 +863,12 @@ body {
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: hsl(var(--muted-foreground));
+    margin-top: 0;
+    margin-bottom: 0;
+}
+.flex > .section-heading,
+.flex > .eyebrow {
+    margin-bottom: 0;
 }
 
 /* Clickable chrome is never editable: clicking a nav label, page title,
@@ -2466,22 +2483,14 @@ h1,
     border-top: 1px solid var(--hairline);
     padding-top: 0.75rem;
 }
-/* One start line inside a pair area (ADR 0381, Kasra's order):
-   a pair area's heading and its button row start at the same
-   place — the area's own start — in every pair, on both pages.
-   The app-wide centered treatment (the Centered areas block
-   below) therefore yields inside a pair: a thumb-pair row
-   standing at the area's full width (the stacked layout) starts
-   its buttons on the heading's line instead of centering them,
-   and a centered group standing inside a pair area (Create's
-   Voice group) aligns its label and its row to the same start.
-   Outside a pair both keep the centered treatment. */
-.section-pair .thumb-pair {
-    justify-content: flex-start;
-}
-.section-pair .center-area {
-    align-items: flex-start;
-}
+/* One start line inside a pair area (layout reset, Kasra's
+   order, Nov 27 2026): a pair area's heading and its button row
+   start at the same place — the area's own start — in every
+   pair, on both pages. The pair carries no alignment override
+   of its own: it takes the app's one rule (everything inside a
+   container starts on the container's one line, nothing inside
+   a container is centered) the way every other container does,
+   in the stacked layout as much as side by side. */
 @media (min-width: 1024px) {
     .section-pair {
         /* The two-column spelling is ADR 0153's own (repeat(2, …)):
@@ -2513,21 +2522,14 @@ h1,
         padding-left: 2rem;
     }
     .section-pair > * {
-        /* One start line (ADR 0381, Kasra's order, superseding
-           ADR 0371's centering inside the pair areas): ADR 0371
-           centered each area's contents in its half so the
-           centered divider would read centered, but a centered
-           group starts wherever its own width puts it — the wide
-           Camera setup and Voice groups read at their areas'
-           edges while the short Location and Wardrobe groups
-           stood indented, so the four areas' headings and button
-           rows started at four different offsets and never read
-           as one system (Kasra's live review, Nov 26 2026).
-           Each area is therefore a flex column whose contents
-           align to the area's start: heading and button row
-           share the area's own line, the same treatment in every
-           pair on both pages. The divider's geometry above does
-           not move — ADR 0364's check still pins it. The areas'
+        /* One start line (layout reset, Kasra's order, Nov 27
+           2026, superseding ADR 0371's centering inside the pair
+           areas and ADR 0381's pair overrides): each area is a
+           flex column whose contents align to the area's start,
+           so heading and button row share the area's own line —
+           the same start every other container in the app gives
+           its contents. The divider's geometry above does not
+           move — ADR 0364's check still pins it. The areas'
            insides keep their own layout (button rows stay rows);
            this rule lives only in the desktop block, so the
            stacked layout below 1024px is untouched. */
@@ -2537,49 +2539,24 @@ h1,
     }
 }
 
-/* ---------- Centered areas (ADR 0381) ----------
-   Kasra's app-wide placement order, Nov 26 2026: every section's
-   content stands the way the content inside HookSnap's Place and
-   wardrobe pair stands — each content group centered in its area,
-   its heading over its controls, its button rows in the one
-   thumb-pair proportion. Placement and alignment only: no type or
+/* ---------- Equal alignment inside containers (layout reset) ----------
+   Kasra's order, Nov 27 2026, superseding ADR 0381's app-wide
+   centering whole: ONE title spacing and ONE equal alignment
+   inside containers. Everything inside a container — its title,
+   its group headings, its button rows, its fields, its text —
+   starts at the container's own inset, on one line, and NOTHING
+   inside a container is centered. The centering class ADR 0381
+   carried through the section bodies is removed whole, section
+   bodies are plain block stacks again, and option rows
+   (.thumb-pair, whose base rule above carries no centering)
+   start at the inset like everything else. The one title
+   spacing lives on the shared title faces (see .section-heading
+   and .eyebrow above): group headings carry the same 0.5rem gap
+   below them everywhere, and section titles carry no ad-hoc
+   margins — their spacing is the shared SectionCard rhythm, the
+   same on every card. Placement and alignment only: no type or
    glyph size changes, no new element, box or divider anywhere —
-   the rules below restyle containers that already stand.
-
-   Two halves. A thumb-pair row centers its buttons in the row, so
-   an option row standing in a full-width area centers under its
-   heading instead of pooling at the left; inside a pair area the
-   pair's own one-line rule above governs instead. And .center-area
-   is the pair areas' group placement (ADR 0371's centered cell)
-   carried to a section body or a control's root: a flex column
-   whose groups shrink to their widest row and center, while the
-   things that must keep the area's full width keep it — a running
-   paragraph stretches (its lines are never force-centered), a
-   section pair keeps 100% so its divider stays at the container's
-   exact center (ADR 0364), a form keeps 100%, and any group
-   carrying a field keeps 100% so inputs and textareas never
-   narrow to content width. */
-.thumb-pair {
-    justify-content: center;
-}
-.center-area {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-.center-area > * {
-    max-width: 100%;
-}
-.center-area > p {
-    align-self: stretch;
-}
-.center-area > .section-pair,
-.center-area > form {
-    width: 100%;
-}
-.center-area > :has(textarea, input, select) {
-    align-self: stretch;
-}
+   the reset restyles containers that already stand. */
 
 /* ---------- Shared keyboard focus ring for pressable chips and swatches ----------
    Transport and icon buttons carry their own focus-visible ring inline, but

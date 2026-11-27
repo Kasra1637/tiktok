@@ -2692,11 +2692,11 @@ export default function CreateVideo() {
               </div>
             )}
             {objective && !tailoring && recommendationsVisible && visibleRecommendations.length > 0 && (
-              // ADR 0381: the template area's heading and its
-              // regenerate group center in the step; the template
-              // grid below keeps the step's full width (its cards'
-              // own width), so the grid reads as before.
-              <div className="center-area space-y-4">
+              // Layout reset: the template area's heading and its
+              // regenerate link start at the step's inset like
+              // everything else in the app; the template grid
+              // below keeps the step's full width, as before.
+              <div className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <GroupLabel icon={Target}>
                     {tailoredReady ? "Tailored template for this app" : "Recommended templates"}
@@ -3004,12 +3004,11 @@ export default function CreateVideo() {
             )}
           </div>
         ) : (
-          <div className={effectiveReviewTab === "plan" ? "center-area space-y-4" : "hidden"}>
-            {/* ADR 0381: the plan stack's groups center in the step
-                the way the pair cells center theirs — the regenerate
-                row and the section labels center, while paragraphs
-                stretch and the editors keep the step's full width
-                (the .center-area field rule). */}
+          <div className={effectiveReviewTab === "plan" ? "space-y-4" : "hidden"}>
+            {/* Layout reset: the plan stack's groups start at the
+                step's inset like everything else in the app — the
+                regenerate row, the section labels, the paragraphs
+                and the editors on the one line, nothing centered. */}
             {/* Regenerating replaces a plan that may have been edited and
                 approved, so it asks first — the same rule as the strategy
                 rebuild, and for the same reason. The status beside it names

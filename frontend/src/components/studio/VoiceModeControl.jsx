@@ -59,11 +59,10 @@ export default function VoiceModeControl({
   const pickedCurrent = pickedValue === undefined ? current : pickedValue;
   const text = String(silentText || "").trim();
   return (
-    // ADR 0381: the group centers in its area the way the pair
-    // cells center theirs — label and pick row centered, the note
-    // below still stretching the full width (the .center-area
-    // paragraph rule), so the warning reads exactly as before.
-    <div className="center-area space-y-2">
+    // Layout reset: the group starts at its area's inset like
+    // everything else in the app — label, pick row and note on
+    // the container's one line, nothing centered.
+    <div className="space-y-2">
       <GroupLabel icon={Mic}>Voice</GroupLabel>
       {/* The pick wears the resolution treatment (ADR 0331): the
           shared Button in a thumb-pair row, brand and

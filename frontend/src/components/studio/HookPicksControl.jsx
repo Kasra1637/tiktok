@@ -199,10 +199,11 @@ export default function HookPicksControl({
     ...focusOptions.map((line) => ({ value: line, label: line })),
   ];
   return (
-    // ADR 0381: the pick groups center in their area the way the
-    // pair cells center theirs; each group's own rows keep their
-    // internal order (the Buffet still stands beside its label).
-    <div className="center-area space-y-4">
+    // Layout reset: the pick groups start at the container's
+    // inset like everything else in the app; each group's own
+    // rows keep their internal order (the Buffet still stands
+    // beside its label).
+    <div className="space-y-4">
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <GroupLabel icon={Focus}>Focus</GroupLabel>
