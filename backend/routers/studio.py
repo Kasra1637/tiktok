@@ -271,6 +271,10 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
     # has no shape at all — it reads as the app's choice, the
     # behavior its hooks have always had — and no focus.
     out["hook_shape"] = out.get("hook_shape") or "auto"
+    # The Opening pick (Nov 27 2026): a row from before migration
+    # step 12 has no opening at all — it reads as the app's choice,
+    # the behavior its hooks have always had.
+    out["hook_opening"] = out.get("hook_opening") or "auto"
     out["hook_focus"] = out.get("hook_focus") or ""
     out["hook_seconds"] = int(out.get("hook_seconds") or 0)
     out["strategy_version"] = int(out.get("strategy_version") or 0)
@@ -1319,6 +1323,17 @@ async def update_studio_project(
                 raise HTTPException(
                     status_code=400,
                     detail="Shape is the app's choice, a question, or a statement.",
+                )
+        elif key == "hook_opening":
+            # The hook opening pick (Nov 27 2026) is a closed set
+            # like the shape pick above: the app's choice, an action,
+            # or a feeling. Anything else is a value no control
+            # offers.
+            value = (value or "").strip().lower()
+            if value not in ("auto", "action", "feeling"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Opening is the app's choice, an action, or a feeling.",
                 )
         elif key == "tone" and (row.get("surface") or "") == "hook_cta":
             # On the Hook + CTA surface the tone column carries the

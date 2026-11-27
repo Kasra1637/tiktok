@@ -1548,6 +1548,47 @@ async function main() {
     }
   });
 
+  await check("the section trio's dividers stand exactly between their groups (Nov 27 2026)", async () => {
+    // Kasra's order (Nov 27 2026): HookSnap's Voice, Location and
+    // Wardrobe stand on ONE line. The row is the pair mechanism
+    // carried to three areas (.section-trio): three equal columns
+    // meeting at their dividers — no column gap, or a divider
+    // would stand off the midpoint between its two groups — and
+    // the channel carried as symmetric padding, 2rem inside each
+    // area on a divider's sides, so each divider stands exactly
+    // between its neighbouring groups (ADR 0364's centered-divider
+    // rule, applied within the row). The pair's own rules are not
+    // the trio's: this pins the trio's stylesheet arithmetic the
+    // same way ADR 0364's check pins the pair's, because jsdom
+    // lays nothing out — the declarations ARE the geometry.
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const trioAt = css.indexOf(".section-trio {");
+    if (trioAt < 0) throw new Error("index.css carries no .section-trio layout (Nov 27 2026)");
+    const mediaAt = css.indexOf("@media (min-width: 1024px)", trioAt);
+    if (mediaAt < 0) throw new Error("the section trio has no desktop media block");
+    const trioDesktop = css.slice(mediaAt, mediaAt + 1800);
+    if (!trioDesktop.includes("grid-template-columns: repeat(3, minmax(0, 1fr))")) {
+      throw new Error("the trio's desktop columns are not three equal shares (Nov 27 2026)");
+    }
+    if (trioDesktop.includes("gap: 0 2rem")) {
+      throw new Error("the trio carries a column gap — any column gap moves a divider off the midpoint between its groups (ADR 0364)");
+    }
+    if (!trioDesktop.includes("gap: 0;") && !trioDesktop.includes("column-gap: 0")) {
+      throw new Error("the trio's columns do not meet at their dividers — a column gap stands between them (ADR 0364)");
+    }
+    if (!/\.section-trio > :first-child \{\s*padding-right: 2rem;/.test(trioDesktop)) {
+      throw new Error("the trio's first area carries no half-channel padding — the channel is one-sided (ADR 0364)");
+    }
+    if (!trioDesktop.includes("border-left: 1px solid var(--hairline)") || !trioDesktop.includes("padding-left: 2rem")) {
+      throw new Error("a trio area lost its divider or its half-channel padding (ADR 0364)");
+    }
+    const cellRule = /\.section-trio > \* \{([^}]*)\}/.exec(trioDesktop);
+    if (!cellRule) throw new Error("the trio's desktop areas carry no shared cell rule (layout reset)");
+    if (!cellRule[1].includes("align-items: flex-start")) {
+      throw new Error("the trio's desktop areas do not align their contents to the area's start (layout reset)");
+    }
+  });
+
   await check("the section pair's areas start their contents on the area's one line (layout reset)", async () => {
     // Layout reset (Kasra's order, Nov 27 2026, superseding ADR
     // 0381's alignment system and ADR 0371's centering inside the
@@ -15888,7 +15929,7 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("the HookSnap hook card pairs tone and shape and carries no descriptive lines (ADR 0366)", async (ctx) => {
+  await check("the HookSnap hook card carries no descriptive lines (ADR 0366)", async (ctx) => {
     // ADR 0366: Tone and Shape stand in a .section-pair with Focus
     // full-width above them; the card subtitle, the line under
     // Focus and the line under Shape are gone, and so is the
@@ -15917,19 +15958,26 @@ async function runHookCtaChecks() {
             throw new Error(`the hook card still carries a removed descriptive line: ${JSON.stringify(gone)} (ADR 0366)`);
           }
         }
-        // Focus stands full-width above the pair, never inside it.
-        const pair = card.querySelector(".section-pair");
-        if (!pair) throw new Error("the hook card carries no section pair for tone and shape (ADR 0366)");
-        if (pair.querySelector('[data-testid="hook-picks-focus"]')) {
-          throw new Error("the Focus pick stands inside the pair — it stays full-width above it (ADR 0366)");
+        // Focus stands full-width above the slider row, never
+        // inside it. (ADR 0366 stood Tone and Shape in a pair here;
+        // the slider round, Nov 27 2026, supersedes that on this
+        // page: the three picks stand as sliders in the trio, and
+        // the slider check below pins their form.)
+        const trio = card.querySelector(".section-trio");
+        if (!trio) throw new Error("the hook card carries no section trio for its picks");
+        if (trio.querySelector('[data-testid="hook-picks-focus"]')) {
+          throw new Error("the Focus pick stands inside the trio — it stays full-width above it");
         }
-        const cells = [...pair.children];
-        if (cells.length !== 2) throw new Error("the tone and shape pair does not hold two areas");
+        const cells = [...trio.children];
+        if (cells.length !== 3) throw new Error("the picks trio does not hold three areas");
         if (!cells[0].querySelector('[data-testid^="hook-picks-tone"]')) {
-          throw new Error("the pair's first area is not Tone");
+          throw new Error("the trio's first area is not Tone");
         }
         if (!cells[1].querySelector('[data-testid^="hook-picks-shape"]')) {
-          throw new Error("the pair's second area is not Shape");
+          throw new Error("the trio's second area is not Shape");
+        }
+        if (!cells[2].querySelector('[data-testid^="hook-picks-opening"]')) {
+          throw new Error("the trio's third area is not Opening");
         }
         // The Focus pop-up's header wears the one face.
         await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-picks-focus"]'));
@@ -15949,6 +15997,301 @@ async function runHookCtaChecks() {
         const previewLabel = [...preview.querySelectorAll(".eyebrow")].find((el) => el.textContent.trim() === "Caption preview");
         if (!previewLabel || !previewLabel.querySelector("svg")) {
           throw new Error("the Caption preview label carries no icon (ADR 0366)");
+        }
+      }
+    );
+  });
+
+  await check("HookSnap's hook picks are drag sliders — Tone, Shape and Opening on one line (Nov 27 2026)", async (ctx) => {
+    // Kasra's order (Nov 27 2026, from his approved mockups): on
+    // HookSnap the Tone and Shape pill rows become drag sliders and
+    // a third pick, Opening, joins them — three sliders on one line
+    // in the trio, dividers between, each with its stops as dots on
+    // a track, a branded knob on the current stop, the pick's name
+    // under the knob, and a faint line naming every stop. Every
+    // stop is tappable too. The control's default rendering (the
+    // pills) is untouched — HookSnap alone passes the slider form.
+    const row = hookRow({ id: "hook-cta-1", hook_line: HOOK });
+    const patches = [];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => row,
+        updateStudioProject: async (_id, patch) => {
+          patches.push(patch);
+          return { ...row, ...patch };
+        },
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const card = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
+        if (!card) throw new Error("the hook card did not render");
+        const trio = card.querySelector(".section-trio");
+        if (!trio) throw new Error("the hook picks do not stand in the trio");
+        if (trio.querySelector(".thumb-pair")) {
+          throw new Error("a pill row still stands in the HookSnap picks — the sliders replace the pills on this page");
+        }
+        const groups = [
+          { key: "tone", stops: ["auto", "plain", "warm", "bold"], names: ["App's choice", "Plain", "Warm", "Bold"] },
+          { key: "shape", stops: ["auto", "question", "statement"], names: ["App's choice", "Question", "Statement"] },
+          { key: "opening", stops: ["auto", "action", "feeling"], names: ["App's choice", "Action", "Feeling"] },
+        ];
+        for (const group of groups) {
+          const slider = card.querySelector(`[data-testid="hook-picks-${group.key}-slider"]`);
+          if (!slider) throw new Error(`the ${group.key} slider did not render`);
+          if (!trio.contains(slider)) throw new Error(`the ${group.key} slider stands outside the trio`);
+          for (const stop of group.stops) {
+            if (!slider.querySelector(`[data-testid="hook-picks-${group.key}-${stop}"]`)) {
+              throw new Error(`the ${group.key} slider carries no tappable ${stop} stop`);
+            }
+          }
+          const knob = slider.querySelector(`[data-testid="hook-picks-${group.key}-knob"]`);
+          if (!knob) throw new Error(`the ${group.key} slider carries no knob`);
+          if (knob.getAttribute("role") !== "slider" || knob.getAttribute("aria-valuenow") !== "0") {
+            throw new Error(`the ${group.key} knob does not stand on the first stop (the app's choice)`);
+          }
+          const value = slider.querySelector(`[data-testid="hook-picks-${group.key}-value"]`);
+          if (!value || value.textContent.trim() !== "App's choice") {
+            throw new Error(`the ${group.key} slider does not name its current pick under the knob`);
+          }
+          const names = slider.querySelector(`[data-testid="hook-picks-${group.key}-names"]`);
+          if (!names) throw new Error(`the ${group.key} slider carries no line naming its stops`);
+          for (const name of group.names) {
+            if (!names.textContent.includes(name)) {
+              throw new Error(`the ${group.key} slider's stop line does not name ${name}`);
+            }
+          }
+        }
+        // Tapping a stop jumps the pick and saves it through the
+        // same draft PATCH the pills used — the Opening pick rides
+        // it as hook_opening, and the stale note names the remedy
+        // for all three picks alike.
+        await clickEl(ctx, card.querySelector('[data-testid="hook-picks-opening-action"]'));
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        if (!patches.some((p) => p.hook_opening === "action")) {
+          throw new Error(`the opening pick never saved: ${JSON.stringify(patches)}`);
+        }
+        const openingKnob = card.querySelector('[data-testid="hook-picks-opening-knob"]');
+        if (!openingKnob || openingKnob.getAttribute("aria-valuenow") !== "1") {
+          throw new Error("the opening knob did not move to the Action stop");
+        }
+        const openingValue = card.querySelector('[data-testid="hook-picks-opening-value"]');
+        if (!openingValue || openingValue.textContent.trim() !== "Action") {
+          throw new Error("the opening slider does not name Action under its knob");
+        }
+        if (!ctx.container.querySelector('[data-testid="hook-picks-stale-note"]')) {
+          throw new Error("changing the opening over a written hook raised no stale note");
+        }
+        await clickEl(ctx, card.querySelector('[data-testid="hook-picks-tone-warm"]'));
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        if (!patches.some((p) => p.tone === "warm")) {
+          throw new Error(`the tone pick never saved from its slider: ${JSON.stringify(patches)}`);
+        }
+      }
+    );
+    // The knob wears the app's own selection tokens: the indigo
+    // family fill and the indigo selection glow — coral never
+    // carries selection.
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const knobAt = css.indexOf(".pick-slider-knob");
+    if (knobAt < 0) throw new Error("index.css carries no pick slider knob");
+    const knobRule = css.slice(knobAt, css.indexOf("}", knobAt));
+    if (!knobRule.includes("var(--brand-indigo") || !knobRule.includes("var(--glow-indigo)")) {
+      throw new Error("the slider knob is not branded in the indigo selection tokens");
+    }
+  });
+
+  await check("HookSnap's direction groups are sliders too — Voice, Location and Wardrobe (Nov 27 2026)", async (ctx) => {
+    // Kasra's order (Nov 27 2026): the direction trio wears the
+    // same slider form as The hook's picks — Voice a two-stop
+    // slider (Character talks / Character stays silent), Location
+    // and Wardrobe sliders whose stops are the two standing picks
+    // (ADR 0365, the last-seat rule included), the New options
+    // link beside each label exactly as it stands today, revealing
+    // the full set as the pill row it has always been. Create's
+    // direction controls keep their pills — the slider is a
+    // variant HookSnap alone passes.
+    const LOCATIONS = ["Location one", "Location two", "Location three", "Location four"];
+    const WARDROBES = ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"];
+    const FRESH_LOCATIONS = ["Fresh place one", "Fresh place two", "Fresh place three", "Fresh place four"];
+    const patches = [];
+    let row = blankRow({ id: "hook-cta-1", visual_direction: "A calm studio setup" });
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => row,
+        updateStudioProject: async (_id, patch) => {
+          patches.push(patch);
+          row = { ...row, ...patch };
+          return row;
+        },
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: LOCATIONS, wardrobe: WARDROBES,
+          setting: [], lighting: [], voice: [], tone: [],
+        }),
+        refreshDirectionOptions: async (_id, { field }) => ({
+          options: field === "location" ? FRESH_LOCATIONS : WARDROBES,
+        }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const card = ctx.container.querySelector('[data-testid="hook-cta-direction-card"]');
+        if (!card) throw new Error("the direction card did not render");
+        const sliders = card.querySelectorAll(".pick-slider");
+        if (sliders.length !== 3) {
+          throw new Error(`the direction trio carries ${sliders.length} sliders, not three`);
+        }
+        // Voice: two stops, no pick lit on a fresh draft (ADR
+        // 0361), the knob resting on the mode that will render —
+        // silent — with its name under the knob and the note kept.
+        const voiceKnob = card.querySelector('[data-testid="voice-mode-knob"]');
+        if (!voiceKnob || voiceKnob.getAttribute("role") !== "slider") {
+          throw new Error("the voice pick carries no slider knob");
+        }
+        if (voiceKnob.getAttribute("aria-valuenow") !== "1") {
+          throw new Error("the voice knob does not rest on Character stays silent, the standing mode");
+        }
+        for (const id of ["voice-mode-talking", "voice-mode-silent"]) {
+          const stop = card.querySelector(`[data-testid="${id}"]`);
+          if (!stop) throw new Error(`the voice slider carries no ${id} stop`);
+          if (stop.getAttribute("aria-pressed") === "true") {
+            throw new Error("a voice stop stands picked on a fresh draft (ADR 0361)");
+          }
+        }
+        const voiceValue = card.querySelector('[data-testid="voice-mode-value"]');
+        if (!voiceValue || voiceValue.textContent.trim() !== "Character stays silent") {
+          throw new Error("the voice slider does not name the standing mode under its knob");
+        }
+        if (!card.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note is gone from the voice slider — it stays");
+        }
+        // Location and Wardrobe: the two standing picks are the
+        // stops, and New options stands beside the label.
+        for (const [testId, names] of [
+          ["hook-cta-location-direction", ["Location one", "Location two"]],
+          ["hook-cta-wardrobe", ["Wardrobe one", "Wardrobe two"]],
+        ]) {
+          const group = card.querySelector(`[data-testid="${testId}"]`);
+          if (!group || !group.querySelector(".pick-slider")) {
+            throw new Error(`the ${testId} group carries no slider`);
+          }
+          const stopValues = [...group.querySelectorAll("button[data-value]")].map((b) => b.dataset.value);
+          if (JSON.stringify(stopValues) !== JSON.stringify(names)) {
+            throw new Error(`the ${testId} slider's stops are ${JSON.stringify(stopValues)}, not the two standing picks (ADR 0365)`);
+          }
+        }
+        if (!card.querySelector('[data-testid="hook-cta-location-refresh"]')) {
+          throw new Error("the Location New options link is gone from beside its label");
+        }
+        if (!card.querySelector('[data-testid="hook-cta-wardrobe-refresh"]')) {
+          throw new Error("the Wardrobe New options link is gone from beside its label");
+        }
+        // The plan-default line stands under the trio row.
+        const planLine = [...card.querySelectorAll("p")].find((el) => el.textContent.includes("Plan default:"));
+        if (!planLine) throw new Error("the plan default line is gone from the direction card");
+        const trio = card.querySelector(".section-trio");
+        if (!(trio.compareDocumentPosition(planLine) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+          throw new Error("the plan default line does not stand under the trio row");
+        }
+        // ADR 0373 in slider form: a clicked silent stays picked
+        // through the autosave settling.
+        await clickEl(ctx, card.querySelector('[data-testid="voice-mode-silent"]'));
+        const silentStop = card.querySelector('[data-testid="voice-mode-silent"]');
+        if (silentStop.getAttribute("aria-pressed") !== "true") {
+          throw new Error("clicking Character stays silent did not pick it on the slider (ADR 0373)");
+        }
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        if (card.querySelector('[data-testid="voice-mode-silent"]').getAttribute("aria-pressed") !== "true") {
+          throw new Error("the silent pick did not survive the autosave settling on the slider (ADR 0373)");
+        }
+        // New options reveals the full set as the pill row it has
+        // always been, and a pick from it applies.
+        await clickEl(ctx, card.querySelector('[data-testid="hook-cta-location-refresh"]'));
+        await act(async () => {});
+        const locGroup = card.querySelector('[data-testid="hook-cta-location-direction"]');
+        const freshValues = [...locGroup.querySelectorAll("button[data-value]")].map((b) => b.dataset.value);
+        if (JSON.stringify(freshValues) !== JSON.stringify(FRESH_LOCATIONS)) {
+          throw new Error(`after New options Location shows ${JSON.stringify(freshValues)}, not the full refreshed set`);
+        }
+        await pickPairButton(ctx, "hook-cta-location-direction", "Fresh place four");
+        await act(async () => {});
+        const locAfter = card.querySelector('[data-testid="hook-cta-location-direction"]');
+        if (locAfter.getAttribute("data-value") !== "Fresh place four") {
+          throw new Error("picking from the revealed set did not apply on the slider group");
+        }
+      }
+    );
+    // Create keeps its pills: no slider anywhere in its direction
+    // section, and its direction groups still stand as pill rows.
+    global.__SMOKE_PARAMS = "?project=p1";
+    try {
+      await withApi({
+        getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, camera_setup: "handheld" }),
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: ["Location one", "Location two", "Location three"],
+          wardrobe: ["Wardrobe one", "Wardrobe two", "Wardrobe three"],
+        }),
+        updateStudioProject: async (_id, patch) => ({ ...PROJECT_WITH_STRATEGY, ...patch }),
+      }, async () => {
+        await mount(CreateVideo, {})(ctx);
+        await clickEl(ctx, stepPill(ctx, "Audience & template"));
+        const section = ctx.container.querySelector('[data-testid="visual-audio-direction"]');
+        if (!section) throw new Error("Create's direction section is gone");
+        if (section.querySelector(".pick-slider")) {
+          throw new Error("a slider stands in Create's direction section — the slider form is HookSnap's alone");
+        }
+        const locGroup = section.querySelector('[data-testid="review-location-direction"]');
+        if (!locGroup || !locGroup.querySelector("button.direction-btn")) {
+          throw new Error("Create's Location pick no longer stands as its pill row");
+        }
+        const voiceBtn = section.querySelector('[data-testid="voice-mode-talking"]');
+        if (!voiceBtn || !voiceBtn.classList.contains("option-btn")) {
+          throw new Error("Create's voice pick no longer stands as its pill row");
+        }
+      });
+    } finally {
+      global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("a saved direction pick takes the slider's second seat (ADR 0365, Nov 27 2026)", async (ctx) => {
+    // The last-seat rule in slider form: a saved Location pick
+    // outside the visible two stands as the slider's second stop,
+    // picked — what applies is always on the slider, never hidden
+    // behind the reveal.
+    const LOCATIONS = ["Location one", "Location two", "Location three", "Location four"];
+    const WARDROBES = ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"];
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => blankRow({ id: "hook-cta-1", location: "Location four" }),
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: LOCATIONS, wardrobe: WARDROBES,
+          setting: [], lighting: [], voice: [], tone: [],
+        }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const group = ctx.container.querySelector('[data-testid="hook-cta-location-direction"]');
+        if (!group) throw new Error("the location group did not render");
+        if (!group.querySelector(".pick-slider")) throw new Error("the location group carries no slider");
+        const stopValues = [...group.querySelectorAll("button[data-value]")].map((b) => b.dataset.value);
+        if (JSON.stringify(stopValues) !== JSON.stringify(["Location one", "Location four"])) {
+          throw new Error(`the slider's stops are ${JSON.stringify(stopValues)} — the saved pick did not take the second seat (ADR 0365)`);
+        }
+        const picked = group.querySelector('[data-value="Location four"]');
+        if (picked.getAttribute("aria-pressed") !== "true") {
+          throw new Error("the saved location pick does not stand picked on its slider stop");
+        }
+        const value = group.querySelector('[data-testid="hook-cta-location-direction-slider-value"]');
+        if (!value || value.textContent.trim() !== "Location four") {
+          throw new Error("the slider does not name the saved pick under its knob");
         }
       }
     );
@@ -17347,12 +17690,12 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("HookSnap's place and wardrobe stand as a pair, two buttons until New options (ADRs 0364-0365)", async (ctx) => {
+  await check("HookSnap's voice, place and wardrobe stand on one line, two buttons until New options (ADRs 0364-0365, trio)", async (ctx) => {
     // ADR 0364: the card takes Create's second pair — Location and
-    // Wardrobe side by side in .section-pair, each heading wearing
-    // the GroupLabel eyebrow with its own icon; the card subtitle
-    // and the apply-together sentence are gone; the voice note
-    // stays in both modes; and ADR 0361 lands on this page — a
+    // Wardrobe side by side, each heading wearing the GroupLabel
+    // eyebrow with its own icon; the card subtitle and the
+    // apply-together sentence are gone; the voice note stays in
+    // both modes; and ADR 0361 lands on this page — a
     // create-fresh silent project shows NO voice button picked
     // until a click earns it. ADR 0365: each direction field shows
     // TWO buttons by default; the full set stands only after New
@@ -17360,6 +17703,12 @@ async function runHookCtaChecks() {
     // still stands as the pick, seated in the second seat. The
     // ADR 0357 collapse gate reads dirSel only, and this check
     // walks it end to end over the new pair to prove it.
+    // Nov 27 2026 (Kasra's order, from his mockup): Voice joins
+    // the line — the three groups stand side by side in
+    // .section-trio, the pair mechanism carried to three areas,
+    // dividers between them; Voice is the first area, Location
+    // the second, Wardrobe the third, and the plan-default line
+    // stands under the row. Create's pairs are untouched.
     const LOCATIONS = ["Location one", "Location two", "Location three", "Location four"];
     const WARDROBES = ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"];
     const FRESH_LOCATIONS = ["Fresh place one", "Fresh place two", "Fresh place three", "Fresh place four"];
@@ -17390,17 +17739,23 @@ async function runHookCtaChecks() {
         if (card.textContent.includes("apply together")) {
           throw new Error("the direction card still carries the apply-together sentence (ADR 0364)");
         }
-        const pairs = card.querySelectorAll(".section-pair");
-        if (pairs.length !== 1) throw new Error(`the direction card stands ${pairs.length} section pairs, not one (ADR 0364)`);
-        const cells = [...pairs[0].children];
-        if (cells.length !== 2) throw new Error("the direction pair does not hold two areas");
-        if (!cells[0].querySelector('[data-testid="hook-cta-location-direction"]')) {
-          throw new Error("the pair's first area is not Location");
+        if (card.querySelector(".section-pair")) {
+          throw new Error("the direction card still lays its groups in the old pair — Voice stands on the same line now (trio, Nov 27 2026)");
         }
-        if (!cells[1].querySelector('[data-testid="hook-cta-wardrobe"]')) {
-          throw new Error("the pair's second area is not Wardrobe");
+        const trios = card.querySelectorAll(".section-trio");
+        if (trios.length !== 1) throw new Error(`the direction card stands ${trios.length} section trios, not one (trio, Nov 27 2026)`);
+        const cells = [...trios[0].children];
+        if (cells.length !== 3) throw new Error("the direction trio does not hold three areas");
+        if (!cells[0].querySelector('[data-testid="voice-mode-talking"]')) {
+          throw new Error("the trio's first area is not Voice");
         }
-        for (const [cell, name] of [[cells[0], "Location"], [cells[1], "Wardrobe"]]) {
+        if (!cells[1].querySelector('[data-testid="hook-cta-location-direction"]')) {
+          throw new Error("the trio's second area is not Location");
+        }
+        if (!cells[2].querySelector('[data-testid="hook-cta-wardrobe"]')) {
+          throw new Error("the trio's third area is not Wardrobe");
+        }
+        for (const [cell, name] of [[cells[0], "Voice"], [cells[1], "Location"], [cells[2], "Wardrobe"]]) {
           const heading = [...cell.querySelectorAll(".eyebrow")].find((el) => el.textContent.trim() === name);
           if (!heading) throw new Error(`the ${name} heading does not wear the shared eyebrow face (ADR 0364)`);
           if (!heading.querySelector("svg")) throw new Error(`the ${name} heading carries no icon (ADR 0364)`);
@@ -17436,6 +17791,118 @@ async function runHookCtaChecks() {
         await act(async () => {});
         if (bodyCollapsed(ctx, "hook-cta-hook-card")) {
           throw new Error("the hook section did not open once place and wardrobe were both selected");
+        }
+      }
+    );
+  });
+
+  await check("HookSnap's Choose an app and Render the hook stand bare — no card around them (Nov 27 2026)", async (ctx) => {
+    // Kasra's order (Nov 27 2026, approved from his mockup): a
+    // section holding one small control inside a full-width card
+    // reads as mostly empty space, and the eye notices the space
+    // because the box draws it. So Choose an app and Render the
+    // hook lose the card as a whole — the .surface chrome goes,
+    // and the section stands bare on the page: its heading, its
+    // lines and its controls, nothing around them. The heading
+    // face, the section's data-testid and the collapse-in-sequence
+    // behavior (ADR 0356) all stand exactly as they did inside
+    // the card; every other HookSnap section keeps its card.
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => blankRow({ id: "hook-cta-1" }),
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: ["Location one", "Location two"], wardrobe: ["Wardrobe one", "Wardrobe two"],
+          setting: [], lighting: [], voice: [], tone: [],
+        }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const setup = ctx.container.querySelector('[data-testid="hook-cta-setup-card"]');
+        if (!setup) throw new Error("the Choose an app section did not render");
+        for (const cls of ["surface", "surface-compact", "inset-panel"]) {
+          if (setup.classList.contains(cls)) {
+            throw new Error(`the Choose an app section still wears its card (${cls}) — it stands bare (Nov 27 2026)`);
+          }
+        }
+        const setupHeading = setup.querySelector("h2");
+        if (!setupHeading || !setupHeading.textContent.includes("Choose an app")) {
+          throw new Error("the bare Choose an app section lost its heading");
+        }
+        if (!setupHeading.querySelector("svg")) {
+          throw new Error("the bare Choose an app heading lost its glyph");
+        }
+        if (!setup.querySelector('[data-testid="hook-cta-app-picker"]')) {
+          throw new Error("the app picker did not render in the bare Choose an app section");
+        }
+        const render = ctx.container.querySelector('[data-testid="hook-cta-render-card"]');
+        if (!render) throw new Error("the Render the hook section did not render");
+        for (const cls of ["surface", "surface-compact", "inset-panel"]) {
+          if (render.classList.contains(cls)) {
+            throw new Error(`the Render the hook section still wears its card (${cls}) — it stands bare (Nov 27 2026)`);
+          }
+        }
+        const renderHeading = render.querySelector("h2");
+        if (!renderHeading || !renderHeading.textContent.includes("Render the hook")) {
+          throw new Error("the bare Render the hook section lost its heading");
+        }
+        if (!bodyCollapsed(ctx, "hook-cta-render-card")) {
+          throw new Error("the bare render section lost its collapse — it still opens in sequence (Nov 27 2026)");
+        }
+        if (!render.querySelector('[data-testid="hook-render-panel"]')) {
+          throw new Error("the render panel did not render inside the bare section");
+        }
+        const direction = ctx.container.querySelector('[data-testid="hook-cta-direction-card"]');
+        if (!direction) throw new Error("the direction card did not render");
+        if (!direction.classList.contains("surface")) {
+          throw new Error("the direction card lost its surface — only Choose an app and Render the hook went bare (Nov 27 2026)");
+        }
+        const hookCard = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
+        if (!hookCard || !hookCard.classList.contains("surface")) {
+          throw new Error("the hook card lost its surface — only Choose an app and Render the hook went bare (Nov 27 2026)");
+        }
+      }
+    );
+  });
+
+  await check("the voice pick stands with no line under it in talking mode (Nov 27 2026)", async (ctx) => {
+    // Kasra's order (Nov 27 2026): the long descriptive sentence
+    // under the voice pick in talking mode — "The character
+    // speaks the line on camera — voice on, and the lips move
+    // with the words." — is removed whole, on HookSnap and on
+    // Create alike (the control is shared). The silent mode's
+    // note is a different line in a different role — it hands
+    // over the exact text for TikTok's text-to-speech — and it
+    // stays, standing only while silent is picked.
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => blankRow({ id: "hook-cta-1" }),
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: ["Location one", "Location two"], wardrobe: ["Wardrobe one", "Wardrobe two"],
+          setting: [], lighting: [], voice: [], tone: [],
+        }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const card = ctx.container.querySelector('[data-testid="hook-cta-direction-card"]');
+        if (!card) throw new Error("the direction card did not render");
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-talking"]'));
+        await act(async () => {});
+        if (card.textContent.includes("The character speaks the line on camera")) {
+          throw new Error("the long voice line still stands under the voice pick in talking mode (Nov 27 2026)");
+        }
+        if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note stands while talking is picked");
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-silent"]'));
+        await act(async () => {});
+        if (!ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note is gone — it stays (Nov 27 2026)");
         }
       }
     );
@@ -17534,10 +18001,10 @@ await check("a saved direction pick outside the visible two takes the second sea
         if (card.querySelector(".center-area")) {
           throw new Error("the Place and wardrobe body still centers its groups (layout reset)");
         }
-        const pair = card.querySelector(".section-pair");
-        if (!pair) throw new Error("the direction pair did not render inside the body (layout reset)");
+        const pair = card.querySelector(".section-trio");
+        if (!pair) throw new Error("the direction trio did not render inside the body (layout reset)");
         if (pair.classList.contains("center-area")) {
-          throw new Error("the pair itself carries the removed centering class (layout reset)");
+          throw new Error("the trio itself carries the removed centering class (layout reset)");
         }
         const voice = card.querySelector('[data-testid="voice-mode-silent"]');
         if (!voice) throw new Error("the voice pick did not render in the direction card");

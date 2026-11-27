@@ -1225,6 +1225,24 @@ async def _migration_0011_project_hook_picks(conn):
     await conn.commit()
 
 
+async def _migration_0012_project_hook_opening(conn):
+    """Project hook opening (the Opening pick, Nov 27 2026): the
+    HookSnap founder's third steering pick, riding beside the shape
+    from step 11. A closed pick whose default is the behavior every
+    hook has had until now: "auto", the app choosing how the line
+    opens; the other values are "action" (open on the verb in
+    motion) and "feeling" (open on the felt sensation). Added only
+    when missing, so a database that already has it passes through
+    untouched."""
+    cursor = await conn.execute("PRAGMA table_info(studio_projects)")
+    cols = {row[1] for row in await cursor.fetchall()}
+    if "hook_opening" not in cols:
+        await conn.execute(
+            "ALTER TABLE studio_projects ADD COLUMN hook_opening TEXT NOT NULL DEFAULT 'auto'"
+        )
+    await conn.commit()
+
+
 MIGRATION_STEPS = (
     (2, "jobs queue for post-render persistence", _migration_0002_jobs),
     (3, "whole-video verdicts with frozen bundles", _migration_0003_video_verdicts),
@@ -1236,6 +1254,7 @@ MIGRATION_STEPS = (
     (9, "project surface marker", _migration_0009_project_surface),
     (10, "project voice mode", _migration_0010_project_voice_mode),
     (11, "project hook picks", _migration_0011_project_hook_picks),
+    (12, "project hook opening", _migration_0012_project_hook_opening),
 )
 
 

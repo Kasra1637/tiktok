@@ -1,6 +1,7 @@
 import { Mic } from "lucide-react";
 import { Button } from "../ui/button";
 import { GroupLabel } from "../SectionCard";
+import { PickSlider } from "./HookPicksControl";
 
 /**
  * The presenter voice pick (ADR 0246), shared by the Hook + CTA
@@ -29,8 +30,10 @@ import { GroupLabel } from "../SectionCard";
  * feature, not decoration: it tells the founder the character will
  * be silent and names the exact text to paste into TikTok's
  * text-to-speech so TikTok voices the post — the line itself, shown
- * verbatim once it exists. A caller may pass `hideNote` to stand
- * the pills without the note in either mode (ADR 0362: Create's
+ * verbatim once it exists. Talking mode carries no line of its own
+ * (Nov 27 2026: the descriptive sentence that stood under the pills
+ * in talking mode is removed whole). A caller may pass `hideNote`
+ * to stand the pills without the silent note (ADR 0362: Create's
  * direction section carries no descriptive lines at all, so it
  * opts out; HookSnap passes nothing and keeps the note).
  */
@@ -48,6 +51,7 @@ export default function VoiceModeControl({
   hideNote = false,
   disabled = false,
   testId = "voice-mode",
+  asSlider = false,
 }) {
   const current = value === "talking" ? "talking" : "silent";
   // Which choice the buttons may show as picked (ADR 0361): a
@@ -66,32 +70,53 @@ export default function VoiceModeControl({
       <GroupLabel icon={Mic}>Voice</GroupLabel>
       {/* The pick wears the resolution treatment (ADR 0331): the
           shared Button in a thumb-pair row, brand and
-          thumb-selected on the pick, as the 480p / 768p row stands. */}
-      <div className="thumb-pair flex flex-wrap gap-2" role="group" aria-label="Presenter voice">
-        {OPTIONS.map((option) => {
-          const picked = pickedCurrent === option.value;
-          return (
-            <Button
-              key={option.value}
-              type="button"
-              size="sm"
-              variant={picked ? "brand" : "secondary"}
-              aria-pressed={picked}
-              disabled={disabled}
-              onClick={() => onChange?.(option.value)}
-              data-testid={`${testId}-${option.value}`}
-              className={`tap-chip option-btn ${picked ? "thumb-selected" : ""}`}
-            >
-              {option.label}
-            </Button>
-          );
-        })}
-      </div>
-      {!hideNote && (current === "talking" ? (
-        <p className="text-sm text-muted-foreground">
-          The character speaks the line on camera — voice on, and the lips move with the words.
-        </p>
+          thumb-selected on the pick, as the 480p / 768p row stands.
+          The slider form (Kasra's order, Nov 27 2026) supersedes
+          the row on the HookSnap surface only: a host passing
+          asSlider gets the same two choices as a drag slider —
+          the knob resting on the mode that will render while no
+          pick stands (ADR 0361's unpicked state, restValue), a
+          click or drag earning the pick exactly as a pill click
+          does (ADR 0373's repair rides the same onChange). */}
+      {asSlider ? (
+        <PickSlider
+          options={OPTIONS}
+          current={pickedCurrent}
+          restValue={current}
+          onChange={onChange}
+          disabled={disabled}
+          testId={testId}
+          ariaLabel="Presenter voice"
+        />
       ) : (
+        <div className="thumb-pair flex flex-wrap gap-2" role="group" aria-label="Presenter voice">
+          {OPTIONS.map((option) => {
+            const picked = pickedCurrent === option.value;
+            return (
+              <Button
+                key={option.value}
+                type="button"
+                size="sm"
+                variant={picked ? "brand" : "secondary"}
+                aria-pressed={picked}
+                disabled={disabled}
+                onClick={() => onChange?.(option.value)}
+                data-testid={`${testId}-${option.value}`}
+                className={`tap-chip option-btn ${picked ? "thumb-selected" : ""}`}
+              >
+                {option.label}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+      {/* Nov 27 2026 (Kasra's order): talking mode stands with no
+          line under the pills — the long descriptive sentence that
+          stood there is removed whole, on every caller. The silent
+          note below is a different line in a different role (it
+          hands over the exact text for TikTok's text-to-speech)
+          and stays, in silent mode only. */}
+      {!hideNote && current === "silent" && (
         <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-silent-note`}>
           The character stays silent in this video — no voice, and the mouth never moves.
           For a voice on TikTok, paste this line into TikTok&rsquo;s text-to-speech:{" "}
@@ -104,7 +129,7 @@ export default function VoiceModeControl({
             </span>
           )}
         </p>
-      ))}
+      )}
     </div>
   );
 }

@@ -188,7 +188,7 @@ class TestMigrationConvergence:
         async def main():
             import schema
 
-            assert schema.MIGRATION_STEPS[-3][0] == 9
+            assert 9 in [step[0] for step in schema.MIGRATION_STEPS]
 
             db_path = tmp_path / "surface.db"
             await _apply(api, db_path)
@@ -219,7 +219,7 @@ class TestMigrationConvergence:
         async def main():
             import schema
 
-            assert schema.MIGRATION_STEPS[-2][0] == 10
+            assert 10 in [step[0] for step in schema.MIGRATION_STEPS]
 
             db_path = tmp_path / "voice-mode.db"
             await _apply(api, db_path)
@@ -250,7 +250,7 @@ class TestMigrationConvergence:
         async def main():
             import schema
 
-            assert schema.MIGRATION_STEPS[-1][0] == 11
+            assert 11 in [step[0] for step in schema.MIGRATION_STEPS]
 
             db_path = tmp_path / "hook-picks.db"
             await _apply(api, db_path)
@@ -278,6 +278,38 @@ class TestMigrationConvergence:
                 # NOT NULL with the auto default: every existing row
                 # reads as letting the app choose the hook's shape,
                 # which is the behavior its hooks have always had.
+                assert notnull == 1
+                assert dflt == "'auto'"
+            finally:
+                await conn.close()
+
+        asyncio.run(main())
+
+    def test_project_hook_opening_step_is_recorded(self, api, tmp_path):
+        async def main():
+            import schema
+
+            assert schema.MIGRATION_STEPS[-1][0] == 12
+
+            db_path = tmp_path / "hook-opening.db"
+            await _apply(api, db_path)
+            conn = await aiosqlite.connect(str(db_path))
+            try:
+                cur = await conn.execute(
+                    "SELECT name FROM schema_migrations WHERE version = 12"
+                )
+                row = await cur.fetchone()
+                assert row is not None and "hook opening" in row[0]
+
+                cur = await conn.execute("PRAGMA table_info(studio_projects)")
+                cols = {r[1]: r for r in await cur.fetchall()}
+                assert "hook_opening" in cols
+                _cid, _name, col_type, notnull, dflt, _pk = cols["hook_opening"]
+                assert col_type == "TEXT"
+                # NOT NULL with the auto default: every existing row
+                # reads as letting the app choose the hook's opening,
+                # which is the behavior its hooks have always had
+                # (the Opening pick, Nov 27 2026).
                 assert notnull == 1
                 assert dflt == "'auto'"
             finally:

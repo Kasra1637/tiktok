@@ -329,6 +329,10 @@ STUDIO_EDITABLE_FIELDS = STUDIO_TEXT_FIELDS + (
     # rows it stays the plan's free-text tone.
     "hook_focus",
     "hook_shape",
+    # The Opening pick (Nov 27 2026) rides the same way as the shape
+    # beside it: a closed pick ("auto", "action" or "feeling"),
+    # validated in the update path, steering the next hook only.
+    "hook_opening",
     # `cover_text` is editable but deliberately NOT a studio text field:
     # it is post copy drafted with the plan (ADR 0145), not plan content,
     # so editing it writes the column without marking the plan changed
@@ -401,6 +405,9 @@ class UpdateStudioProjectRequest(BaseModel):
     # both validated there like the voice pick above.
     hook_focus: Optional[str] = None
     hook_shape: Optional[str] = None
+    # The Opening pick (Nov 27 2026): the app's choice, an action, or
+    # a feeling — validated in the update path like the shape above.
+    hook_opening: Optional[str] = None
     # The cover text (ADR 0145): post copy drafted with the plan. It is
     # editable like the plan's words, but it is not plan content — the
     # update path writes it without a version bump or a stale strategy.

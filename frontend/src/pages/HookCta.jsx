@@ -185,6 +185,7 @@ function isUntouchedHookCtaDraft(project) {
     !String(project.tone || "").trim() &&
     !String(project.hook_focus || "").trim() &&
     (project.hook_shape || "auto") === "auto" &&
+    (project.hook_opening || "auto") === "auto" &&
     (project.voice_mode || "") === "silent" &&
     Number(project.duration_seconds || 5) === 5
   );
@@ -705,10 +706,16 @@ export default function HookCta() {
 
       {loadState === "ready" && approved.length > 0 && (
         <>
-          <SectionCard title="Choose an app" icon={Briefcase} data-testid="hook-cta-setup-card">
-            {/* Layout reset: the pick row starts at the card's
-                inset, on the same line as the card title and the
-                subtitle above it — nothing centered. */}
+          <SectionCard bare title="Choose an app" icon={Briefcase} data-testid="hook-cta-setup-card">
+            {/* Nov 27 2026 (Kasra's order): this section stands
+                bare — no card around it. One small control inside
+                a full-width card read as mostly empty space, and
+                the eye noticed the space because the box drew it;
+                with no box there is no empty width to notice. The
+                heading, the subtitle and the pick row stand on
+                the page exactly as they stood in the card. The
+                unapproved panel below keeps its own inset chrome:
+                it is an aside, not the section's container. */}
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground" data-subtitle="">
                 Pick an approved app to start a fresh hook.
@@ -760,38 +767,41 @@ export default function HookCta() {
           {project && (
             <SectionCard title="Place and wardrobe" icon={Compass} data-testid="hook-cta-direction-card">
               {/* Layout reset: the body's groups start at the
-                  card's inset on the one line; the pair keeps the
-                  body's full width, so its divider still stands
-                  at the card's exact center (ADR 0364). */}
+                  card's inset on the one line; the trio keeps the
+                  body's full width, so its dividers stand exactly
+                  between their groups (ADR 0364's rule). */}
               <div className="space-y-4">
-                {/* The voice pick sits with the direction controls it
-                    belongs with (ADR 0246): the character talks, or
-                    stays silent and TikTok's text-to-speech carries
-                    the line instead. ADR 0364: it reads pickedValue
-                    the way Create does (ADR 0361) — a create-fresh
-                    project stands silent at the render, so no voice
-                    button stands lit before a click; the note under
-                    the pair stays in both modes, untouched. */}
-                <VoiceModeControl
-                  value={editValue("voice_mode", "silent")}
-                  pickedValue={editPick("voice_mode", "silent")}
-                  onChange={(value) => editField("voice_mode", value, { omitDefault: true, fallback: "silent" })}
-                  silentText={String(editValue("hook_line", "") || "").trim()}
-                  silentTextName="the hook line"
-                />
-
-                {/* ADR 0364: Location and Wardrobe stand side by
-                    side in the shared .section-pair — the exact
-                    twin of Create's second pair — each heading in
-                    the one GroupLabel eyebrow face with its own
-                    icon, and the plan-default line rides inside
-                    the Wardrobe area, mirroring Create. The card's
-                    subtitle and the apply-together sentence are
-                    removed: no standing descriptive lines stand in
-                    this card. Below 1024px the pair stacks and the
-                    stylesheet's rhythm puts one hairline between
-                    Location and Wardrobe where none stood before. */}
-                <div className="section-pair">
+                {/* Nov 27 2026 (Kasra's order, from his mockup):
+                    Voice, Location and Wardrobe stand on ONE line
+                    in .section-trio — the pair mechanism carried to
+                    three areas, dividers between them. Voice stood
+                    full-width above the Location/Wardrobe pair
+                    until now. The voice pick itself is unchanged
+                    (ADR 0246): the character talks, or stays silent
+                    and TikTok's text-to-speech carries the line
+                    instead; it reads pickedValue the way Create
+                    does (ADR 0361) — a create-fresh project stands
+                    silent at the render, so no voice button stands
+                    lit before a click; the silent note stays,
+                    inside the Voice area. Each DirectionSelect
+                    heading wears the one GroupLabel eyebrow face
+                    with its own icon (ADR 0364), the two standing
+                    picks stand as slider stops until New options
+                    (ADR 0365; the slider form, Nov 27 2026), and the
+                    plan-default line stands under the row. Below
+                    1024px the trio stacks and the stylesheet's
+                    rhythm puts a hairline between each two groups. */}
+                <div className="section-trio">
+                  <div className="space-y-2">
+                    <VoiceModeControl
+                      value={editValue("voice_mode", "silent")}
+                      pickedValue={editPick("voice_mode", "silent")}
+                      onChange={(value) => editField("voice_mode", value, { omitDefault: true, fallback: "silent" })}
+                      silentText={String(editValue("hook_line", "") || "").trim()}
+                      silentTextName="the hook line"
+                      asSlider
+                    />
+                  </div>
                   <div className="space-y-2">
                     <DirectionSelect
                       id="hook-cta-location-direction"
@@ -803,6 +813,7 @@ export default function HookCta() {
                       options={directionOptions?.location}
                       placeholder="Choose a Location…"
                       refresh={directionRefreshProps("location", "hook-cta-location-refresh")}
+                      asSlider
                     />
                   </div>
                   <div className="space-y-2">
@@ -816,14 +827,15 @@ export default function HookCta() {
                       options={directionOptions?.wardrobe}
                       placeholder="Choose wardrobe…"
                       refresh={directionRefreshProps("wardrobe", "hook-cta-wardrobe-refresh")}
+                      asSlider
                     />
-                    {project?.visual_direction && !edits.visual_direction && (
-                      <p className="text-sm text-muted-foreground">
-                        Plan default: {sentenceCase(project.visual_direction)}
-                      </p>
-                    )}
                   </div>
                 </div>
+                {project?.visual_direction && !edits.visual_direction && (
+                  <p className="text-sm text-muted-foreground">
+                    Plan default: {sentenceCase(project.visual_direction)}
+                  </p>
+                )}
                 {directionRefreshError && (
                   <p role="alert" data-testid="hook-cta-direction-refresh-error" className="text-sm text-destructive-text">
                     {directionRefreshError}
@@ -841,9 +853,11 @@ export default function HookCta() {
                     and no 4/5 buttons to show. The server pins the
                     length the same way. */}
                 {/* The steering picks (ADR 0247) stand above the
-                    generate action they steer: the focus, tone and
-                    shape the hook is written with, each defaulting
-                    to the app's own choice. */}
+                    generate action they steer: the focus, tone,
+                    shape and opening the hook is written with, each
+                    defaulting to the app's own choice. On this page
+                    the tone, shape and opening stand as drag
+                    sliders (Kasra's order, Nov 27 2026). */}
                 <HookPicksControl
                   focusOptions={focusOptions}
                   focus={editValue("hook_focus", "")}
@@ -856,6 +870,9 @@ export default function HookCta() {
                   onToneChange={(value) => changePick("tone", value, { omitDefault: true, fallback: "" })}
                   shape={editValue("hook_shape", "auto")}
                   onShapeChange={(value) => changePick("hook_shape", value, { omitDefault: true, fallback: "auto" })}
+                  opening={editValue("hook_opening", "auto")}
+                  onOpeningChange={(value) => changePick("hook_opening", value, { omitDefault: true, fallback: "auto" })}
+                  picksAsSliders
                   hasHook={hasHook}
                   focusStale={focusMenuStale}
                   stale={picksStale && hasHook}
@@ -986,7 +1003,7 @@ export default function HookCta() {
           )}
 
           {project && (
-            <SectionCard title="Render the hook" icon={Clapperboard} data-testid="hook-cta-render-card" collapsed={!renderSectionOpen}>
+            <SectionCard bare title="Render the hook" icon={Clapperboard} data-testid="hook-cta-render-card" collapsed={!renderSectionOpen}>
               <div className="space-y-4">
                 <HookRenderPanel
                   project={{

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { GroupLabel } from "../SectionCard";
+import { PickSlider } from "./HookPicksControl";
 
 /**
  * One profile-aware set of option buttons for a direction field (the
@@ -79,6 +80,14 @@ export function DirectionSelect({
   // a founder who has seen all four has nowhere else to go.
   // { onRefresh, refreshing, refreshTestId }.
   refresh = null,
+  // The slider form (Kasra's order, Nov 27 2026): on the HookSnap
+  // surface the two standing picks stand as a drag slider's stops
+  // instead of two buttons. The reveal is untouched — New options
+  // still opens the full set as the pill row below, and a pick
+  // from it seats into the slider's stops by the same last-seat
+  // rule when the row stands collapsed again. Every other caller
+  // keeps the buttons exactly as they are.
+  asSlider = false,
 }) {
   // The options stand side by side wearing the resolution
   // treatment (ADR 0331): the shared Button in a thumb-pair row,
@@ -147,6 +156,20 @@ export function DirectionSelect({
           </button>
         )}
       </div>
+      {asSlider && options && !revealed ? (
+        <div data-testid={testId} data-value={value || ""}>
+          <PickSlider
+            options={shown.map((option) => ({ value: option, label: directionButtonLabel(option) }))}
+            current={value || ""}
+            restValue={shown[0]}
+            restLabel={value ? directionButtonLabel(value) : undefined}
+            onChange={onPick}
+            disabled={disabled}
+            testId={`${testId}-slider`}
+            ariaLabel={label}
+          />
+        </div>
+      ) : (
       <div
         className="thumb-pair"
         role="group"
@@ -178,6 +201,7 @@ export function DirectionSelect({
           })
         )}
       </div>
+      )}
     </div>
   );
 }

@@ -2539,6 +2539,143 @@ h1,
     }
 }
 
+/* ---------- Section trio ----------
+   Three subsections of ONE section standing side by side: the
+   pair mechanism carried to three areas — HookSnap's Place and
+   wardrobe, where Voice joins Location and Wardrobe on one line
+   (Kasra's order, Nov 27 2026). A chrome-less grid like the pair:
+   no card, no border of its own. Stacked, each following area
+   takes the section's own divider (a hairline with the section's
+   0.75rem rhythm around it). From 1024px the three stand in equal
+   columns meeting at their dividers — no column gap, each
+   divider carried as the following area's border-left with the
+   channel split as symmetric padding (2rem inside each area on
+   the divider's own sides) — so each divider stands exactly
+   between its two neighbouring groups (ADR 0364's
+   centered-divider rule, applied within the row). The pair's own
+   rules are untouched: this block is the trio's alone, and
+   Create's pairs keep the mechanism above byte for byte. Like
+   the pair, the trio owns only the dividers and the spacing,
+   never the areas' insides, and its areas start their contents
+   on the area's one line (layout reset). */
+.section-trio {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+}
+.section-trio > * + * {
+    border-top: 1px solid var(--hairline);
+    padding-top: 0.75rem;
+}
+@media (min-width: 1024px) {
+    .section-trio {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0;
+    }
+    .section-trio > :first-child {
+        padding-right: 2rem;
+    }
+    .section-trio > * + * {
+        border-top: none;
+        padding-top: 0;
+        border-left: 1px solid var(--hairline);
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+    .section-trio > :last-child {
+        padding-right: 0;
+    }
+    .section-trio > * {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+/* The hook picks' drag slider (Nov 27 2026, HookSnap's The hook):
+   one track per pick, its stops as dots on the track, and a round
+   knob on the current stop. The knob is branded in the app's own
+   selection tokens — the indigo family fill with the indigo
+   selection glow; coral never carries selection. The current
+   pick's name stands under the knob, and the faint line under the
+   slider names every stop (each name is a tap target too), so the
+   founder sees what sliding reveals before touching it. */
+.pick-slider {
+    width: 100%;
+}
+.pick-slider-track {
+    position: relative;
+    height: 1.75rem;
+    touch-action: none;
+    cursor: pointer;
+}
+.pick-slider-rail {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 0.25rem;
+    transform: translateY(-50%);
+    border-radius: 999px;
+    background: var(--hairline);
+}
+.pick-slider-stop {
+    position: absolute;
+    top: 50%;
+    width: 0.625rem;
+    height: 0.625rem;
+    padding: 0;
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    border: 1px solid var(--hairline);
+    background: var(--background);
+    cursor: pointer;
+}
+.pick-slider-knob {
+    position: absolute;
+    top: 50%;
+    width: 1.25rem;
+    height: 1.25rem;
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    background-image: linear-gradient(135deg, var(--brand-indigo), var(--brand-indigo-dark));
+    box-shadow: var(--glow-indigo);
+    cursor: grab;
+}
+.pick-slider-knob:focus-visible {
+    outline: 2px solid var(--brand-indigo);
+    outline-offset: 2px;
+}
+.pick-slider-value-row {
+    position: relative;
+    height: 1.25rem;
+}
+.pick-slider-value {
+    position: absolute;
+    top: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--foreground);
+    white-space: nowrap;
+}
+.pick-slider-names {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+.pick-slider-name {
+    padding: 0;
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+    opacity: 0.55;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.pick-slider-name.is-current {
+    opacity: 1;
+    color: var(--foreground);
+}
+
 /* ---------- Equal alignment inside containers (layout reset) ----------
    Kasra's order, Nov 27 2026, superseding ADR 0381's app-wide
    centering whole: ONE title spacing and ONE equal alignment

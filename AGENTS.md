@@ -218,6 +218,28 @@ One render path, single-pass video generation via OpenRouter.
   rhythm, and everything inside a container starts at the container's inset.
   Nothing inside a container is centered; ADR 0381's app-wide centering is
   removed. The `.section-pair` start line and ADR 0364's divider geometry stand.
+- Bare sections + direction trio (Nov 27 2026, Kasra's order): HookSnap's
+  Choose an app and Render the hook stand bare (`bare` on SectionCard — no
+  `.surface` chrome; heading, testid and the ADR 0356 collapse stand
+  unchanged), its Place and wardrobe lays Voice, Location and Wardrobe on one
+  line in `.section-trio` (the pair mechanism carried to three areas;
+  `.section-pair` itself untouched), and the voice pick's long talking-mode
+  line is removed whole on both pages (the silent note stays).
+- Hook picks as sliders + the Opening pick (Nov 27 2026, Kasra's order): on
+  HookSnap only, Tone and Shape render as drag sliders (`picksAsSliders` on
+  HookPicksControl; the default pill rendering is unchanged) and a third
+  pick, Opening (App's choice / Action / Feeling), joins them in the trio.
+  Opening rides the draft as `hook_opening` (migration step 12, closed set
+  validated in the update path) into `_hook_steering_block`: "action" opens
+  on the verb in motion, "feeling" on the felt sensation, "auto" steers
+  nothing — every existing hook rule stands.
+- Direction groups as sliders (Nov 27 2026, Kasra's order): HookSnap's trio
+  groups wear the same slider (`asSlider` on VoiceModeControl and
+  DirectionSelect; Create keeps the pills) — Voice's two choices are the
+  stops (the knob rests on the standing mode while no pick stands, ADR
+  0361), Location and Wardrobe carry their two standing picks as stops
+  (ADR 0365's last-seat rule included), and New options still reveals the
+  full set as pills.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no

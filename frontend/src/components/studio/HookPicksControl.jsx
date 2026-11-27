@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Focus, HelpCircle, Maximize2, MessagesSquare, RefreshCw, X } from "lucide-react";
+import { Check, Focus, HelpCircle, Maximize2, MessagesSquare, RefreshCw, Rocket, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { CONTROL_CLASS } from "../formControls";
 import { GroupLabel } from "../SectionCard";
@@ -10,7 +10,10 @@ import { GroupLabel } from "../SectionCard";
  * standing in the Hook card above the generate action: a focus, a
  * tone, and a shape. Three small choices, each with the app's own
  * choice as its default — an untouched set of picks generates
- * exactly the hook this page has always generated.
+ * exactly the hook this page has always generated. A fourth pick,
+ * the opening, joined them on Nov 27 2026 (Kasra's order), and on
+ * the HookSnap surface the tone, shape and opening render as drag
+ * sliders (the picksAsSliders prop) instead of pill rows.
  *
  * FOCUS is one of the app profile's own outcome lines — the list
  * below is the whole vocabulary, built from the profile the same
@@ -125,6 +128,17 @@ const SHAPE_OPTIONS = [
   { value: "statement", label: "Statement" },
 ];
 
+// The third pick (Kasra's order, Nov 27 2026): how the hook opens —
+// the app's choice, on the verb in motion (Action, the racing
+// form), or on the concrete felt sensation (Feeling). It rides the
+// project's hook_opening column the same way the shape rides its
+// own, and "auto" is the behavior every hook has had until now.
+const OPENING_OPTIONS = [
+  { value: "auto", label: "App's choice" },
+  { value: "action", label: "Action" },
+  { value: "feeling", label: "Feeling" },
+];
+
 // The small option sets wear the resolution treatment (ADR 0331,
 // Kasra's ruling at the Nov 25 2026 live review): the shared Button
 // in a thumb-pair row — brand and thumb-selected on the pick,
@@ -156,6 +170,136 @@ export function PickPills({ options, current, onChange, disabled, testId, ariaLa
   );
 }
 
+// The drag slider (Kasra's order, Nov 27 2026, from his approved
+// mockups): one track per pick, the stops as dots on it, a round
+// knob on the current stop branded in the app's own selection
+// tokens (the indigo family and its glow — coral never carries
+// selection), the current pick's name stated under the knob, and a
+// faint line under the slider naming every stop, so a founder sees
+// what sliding reveals before touching it. Dragging is never the
+// only way: every stop dot and every name in the faint line is
+// tappable, and the knob itself is a keyboard slider. HookSnap
+// renders its picks this way; the control's default rendering
+// stays the pill rows above, byte-identical.
+export function PickSlider({ options, current, onChange, disabled, testId, ariaLabel, restValue, restLabel }) {
+  const trackRef = useRef(null);
+  const found = options.findIndex((option) => option.value === current);
+  // The knob's seat: the pick itself when one stands. A caller
+  // whose standing state is not a pick (the voice pick before a
+  // click, ADR 0361; a direction pick the current set no longer
+  // carries) passes restValue — the knob rests on that stop with
+  // no stop reading as picked, and the name under it is restLabel
+  // or the rest stop's own name.
+  const restFound = options.findIndex((option) => option.value === restValue);
+  const index = found >= 0 ? found : restFound >= 0 ? restFound : 0;
+  const pct = options.length > 1 ? (index / (options.length - 1)) * 100 : 0;
+  const valueLabel = found >= 0
+    ? options[found].label
+    : restLabel ?? (restFound >= 0 ? options[restFound].label : "");
+  const jump = (next) => {
+    const option = options[Math.min(options.length - 1, Math.max(0, next))];
+    if (option && option.value !== current) onChange?.(option.value);
+  };
+  const indexFromClientX = (clientX) => {
+    const el = trackRef.current;
+    if (!el) return index;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width) return index;
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return Math.round(ratio * (options.length - 1));
+  };
+  const onPointerDown = (event) => {
+    if (disabled) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    jump(indexFromClientX(event.clientX));
+  };
+  const onPointerMove = (event) => {
+    if (disabled || !event.buttons) return;
+    jump(indexFromClientX(event.clientX));
+  };
+  const onKnobKeyDown = (event) => {
+    if (disabled) return;
+    if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+      event.preventDefault();
+      jump(index + 1);
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+      event.preventDefault();
+      jump(index - 1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      jump(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      jump(options.length - 1);
+    }
+  };
+  return (
+    <div className="pick-slider" data-testid={`${testId}-slider`}>
+      <div
+        ref={trackRef}
+        className="pick-slider-track"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+      >
+        <div className="pick-slider-rail" aria-hidden="true" />
+        {options.map((option, i) => (
+          <button
+            key={option.value || "auto"}
+            type="button"
+            className="pick-slider-stop"
+            style={{ left: `${options.length > 1 ? (i / (options.length - 1)) * 100 : 0}%` }}
+            aria-label={option.label}
+            aria-pressed={i === found}
+            disabled={disabled}
+            onClick={() => jump(i)}
+            data-value={option.value}
+            data-testid={`${testId}-${option.value || "auto"}`}
+          />
+        ))}
+        <div
+          className="pick-slider-knob"
+          style={{ left: `${pct}%` }}
+          role="slider"
+          tabIndex={disabled ? -1 : 0}
+          aria-label={ariaLabel}
+          aria-valuemin={0}
+          aria-valuemax={options.length - 1}
+          aria-valuenow={index}
+          aria-valuetext={valueLabel}
+          onKeyDown={onKnobKeyDown}
+          data-testid={`${testId}-knob`}
+        />
+      </div>
+      <div className="pick-slider-value-row" aria-hidden="true">
+        <span
+          className="pick-slider-value"
+          style={{
+            left: `${pct}%`,
+            transform: `translateX(${index === 0 ? "0" : index === options.length - 1 ? "-100%" : "-50%"})`,
+          }}
+          data-testid={`${testId}-value`}
+        >
+          {valueLabel}
+        </span>
+      </div>
+      <div className="pick-slider-names" data-testid={`${testId}-names`}>
+        {options.map((option, i) => (
+          <button
+            key={option.value || "auto"}
+            type="button"
+            className={`pick-slider-name ${i === found ? "is-current" : ""}`}
+            disabled={disabled}
+            onClick={() => jump(i)}
+            data-testid={`${testId}-name-${option.value || "auto"}`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function HookPicksControl({
   focusOptions = [],
   focus = "",
@@ -170,12 +314,16 @@ export default function HookPicksControl({
   onToneChange,
   shape = "auto",
   onShapeChange,
+  opening = "auto",
+  onOpeningChange,
+  picksAsSliders = false,
   stale = false,
   disabled = false,
   testId = "hook-picks",
 }) {
   const toneValue = TONE_OPTIONS.some((option) => option.value === tone) ? tone : "";
   const shapeValue = SHAPE_OPTIONS.some((option) => option.value === shape) ? shape : "auto";
+  const openingValue = OPENING_OPTIONS.some((option) => option.value === opening) ? opening : "auto";
   // A saved focus the profile no longer carries steers nothing on
   // the backend; here it reads as what it now is — the app's choice.
   const focusValue = focusOptions.includes(focus) ? focus : "";
@@ -350,32 +498,79 @@ export default function HookPicksControl({
           spread Create's direction section wears. Focus itself is
           a single wide control and never splits. The descriptive
           lines under Focus and Shape are removed with this round;
-          the stale notes below are state and stay. */}
-      <div className="section-pair">
-        <div className="space-y-2">
-          <GroupLabel icon={MessagesSquare}>Tone</GroupLabel>
-          <PickPills
-            options={TONE_OPTIONS}
-            current={toneValue}
-            onChange={onToneChange}
-            disabled={disabled}
-            testId={`${testId}-tone`}
-            ariaLabel="Hook tone"
-          />
-        </div>
+          the stale notes below are state and stay.
+          The slider form (Kasra's order, Nov 27 2026) supersedes
+          the pair on the HookSnap surface only: a host passing
+          picksAsSliders gets the three picks — Tone, Shape and
+          the new Opening — as drag sliders in the section trio,
+          one line with dividers between, exactly the spread the
+          page's direction card wears. Without the prop this block
+          renders the pair of pill rows above, unchanged. */}
+      {picksAsSliders ? (
+        <div className="section-trio">
+          <div className="space-y-2">
+            <GroupLabel icon={MessagesSquare}>Tone</GroupLabel>
+            <PickSlider
+              options={TONE_OPTIONS}
+              current={toneValue}
+              onChange={onToneChange}
+              disabled={disabled}
+              testId={`${testId}-tone`}
+              ariaLabel="Hook tone"
+            />
+          </div>
 
-        <div className="space-y-2">
-          <GroupLabel icon={HelpCircle}>Shape</GroupLabel>
-          <PickPills
-            options={SHAPE_OPTIONS}
-            current={shapeValue}
-            onChange={onShapeChange}
-            disabled={disabled}
-            testId={`${testId}-shape`}
-            ariaLabel="Hook shape"
-          />
+          <div className="space-y-2">
+            <GroupLabel icon={HelpCircle}>Shape</GroupLabel>
+            <PickSlider
+              options={SHAPE_OPTIONS}
+              current={shapeValue}
+              onChange={onShapeChange}
+              disabled={disabled}
+              testId={`${testId}-shape`}
+              ariaLabel="Hook shape"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <GroupLabel icon={Rocket}>Opening</GroupLabel>
+            <PickSlider
+              options={OPENING_OPTIONS}
+              current={openingValue}
+              onChange={onOpeningChange}
+              disabled={disabled}
+              testId={`${testId}-opening`}
+              ariaLabel="Hook opening"
+            />
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="section-pair">
+          <div className="space-y-2">
+            <GroupLabel icon={MessagesSquare}>Tone</GroupLabel>
+            <PickPills
+              options={TONE_OPTIONS}
+              current={toneValue}
+              onChange={onToneChange}
+              disabled={disabled}
+              testId={`${testId}-tone`}
+              ariaLabel="Hook tone"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <GroupLabel icon={HelpCircle}>Shape</GroupLabel>
+            <PickPills
+              options={SHAPE_OPTIONS}
+              current={shapeValue}
+              onChange={onShapeChange}
+              disabled={disabled}
+              testId={`${testId}-shape`}
+              ariaLabel="Hook shape"
+            />
+          </div>
+        </div>
+      )}
 
       {stale && (
         <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-stale-note`}>

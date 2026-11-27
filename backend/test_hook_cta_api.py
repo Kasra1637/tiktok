@@ -928,6 +928,34 @@ class TestHookSteeringPicks:
         assert exc.value.status_code == 400
         assert "Shape" in exc.value.detail
 
+    def test_a_fresh_project_lets_the_app_choose_the_opening(self, api):
+        # The third pick (Nov 27 2026): a fresh draft carries the
+        # app's choice for the opening too — no steering, exactly
+        # the behavior every hook has had until now.
+        project, _profile = self._draft(api, "Picks Opening Fresh")
+        assert project["hook_opening"] == "auto"
+
+    def test_the_opening_pick_saves_and_reads_back(self, api):
+        from models import UpdateStudioProjectRequest
+        project, _profile = self._draft(api, "Picks Opening Save")
+        out = _run(api.update_studio_project(
+            project["id"], UpdateStudioProjectRequest(hook_opening="action"), ANON))
+        assert out["hook_opening"] == "action"
+        fresh = _run(api.get_studio_project(project["id"], ANON))
+        assert fresh["hook_opening"] == "action"
+        out = _run(api.update_studio_project(
+            project["id"], UpdateStudioProjectRequest(hook_opening="feeling"), ANON))
+        assert out["hook_opening"] == "feeling"
+
+    def test_an_unknown_opening_is_refused(self, api):
+        from models import UpdateStudioProjectRequest
+        project, _profile = self._draft(api, "Picks Opening Refused")
+        with pytest.raises(HTTPException) as exc:
+            _run(api.update_studio_project(
+                project["id"], UpdateStudioProjectRequest(hook_opening="sideways"), ANON))
+        assert exc.value.status_code == 400
+        assert "Opening" in exc.value.detail
+
     def test_an_unknown_tone_is_refused_on_this_surface(self, api):
         from models import UpdateStudioProjectRequest
         project, _profile = self._draft(api, "Picks Tone Refused")
@@ -1090,6 +1118,40 @@ class TestGenerateHookLineSteering:
         assert STATEMENT_OUTCOME in block
         assert "TONE: bold" in block
         assert "SHAPE: a question" in block
+
+    def test_an_action_opening_steers_the_prompt(self, monkeypatch):
+        import ai_service
+        # The Opening pick (Nov 27 2026): "action" steers the hook
+        # to open on the verb in motion — the racing form — inside
+        # the same single steering block the other picks join.
+        calls = _stub_chat(monkeypatch, [_hook_reply()])
+        _run(ai_service.generate_hook_line(
+            _hook_project(hook_opening="action"), STEERING_PROFILE))
+        prompt = calls[0]["prompt"]
+        assert "FOUNDER'S STEERING" in prompt
+        assert "OPENING: action" in prompt
+        assert "verb in motion" in prompt
+
+    def test_a_feeling_opening_steers_the_prompt(self, monkeypatch):
+        import ai_service
+        # "feeling" steers the hook to open on the concrete felt
+        # sensation, before the effort.
+        calls = _stub_chat(monkeypatch, [_hook_reply()])
+        _run(ai_service.generate_hook_line(
+            _hook_project(hook_opening="feeling"), STEERING_PROFILE))
+        prompt = calls[0]["prompt"]
+        assert "FOUNDER'S STEERING" in prompt
+        assert "OPENING: feeling" in prompt
+        assert "felt sensation" in prompt
+
+    def test_an_unknown_opening_value_steers_nothing(self, monkeypatch):
+        import ai_service
+        # A value no control offers reads as the app's choice, the
+        # shape pick's rule: the prompt stays the unpicked one.
+        calls = _stub_chat(monkeypatch, [_hook_reply()])
+        _run(ai_service.generate_hook_line(
+            _hook_project(hook_opening="sideways"), STEERING_PROFILE))
+        assert "FOUNDER'S STEERING" not in calls[0]["prompt"]
 
     def test_a_question_pick_keeps_the_trying_in_its_steering(self, monkeypatch):
         import ai_service

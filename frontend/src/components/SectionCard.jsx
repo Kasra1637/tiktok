@@ -32,6 +32,16 @@ export function SectionHeading({ icon: Icon, as: Tag = "h2", className, children
  * shown. There is no toggle and no new chrome: the caller drives the
  * flag from its own state, and a caller that never passes it renders
  * byte-for-byte as before.
+ *
+ * `bare` (Kasra's order, Nov 27 2026, HookSnap only so far) removes
+ * the card as a whole: no `.surface` chrome — no border, no
+ * background, no padding — so the section stands on the page itself,
+ * its heading row and body exactly as they render inside the card.
+ * A section holding one small control in a full-width card reads as
+ * mostly empty space, and the eye notices the space because the box
+ * draws it; with no box there is no empty width to notice. The
+ * heading, the rhythm and the collapse behavior are the card's own,
+ * unchanged — only the surface goes.
  */
 export function SectionCard({
   title,
@@ -40,6 +50,7 @@ export function SectionCard({
   actions,
   compact = false,
   flush = false,
+  bare = false,
   headingLevel = "h2",
   collapsed = false,
   children,
@@ -50,9 +61,13 @@ export function SectionCard({
   return (
     <div
       className={cn(
-        compact ? "surface-compact" : "surface",
-        flush ? "surface-flush space-y-0" : "space-y-5",
-        "rounded-2xl",
+        bare
+          ? "space-y-5"
+          : cn(
+              compact ? "surface-compact" : "surface",
+              flush ? "surface-flush space-y-0" : "space-y-5",
+              "rounded-2xl"
+            ),
         className
       )}
       {...rest}

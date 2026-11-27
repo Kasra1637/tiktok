@@ -203,6 +203,35 @@ describe("HookPicksControl", () => {
     await view.unmount();
   });
 
+  test("the default rendering carries no sliders and no opening pick", async () => {
+    const view = await mount();
+    expect(view.q("hook-picks-tone-slider")).toBeNull();
+    expect(view.q("hook-picks-opening-slider")).toBeNull();
+    await view.unmount();
+  });
+
+  test("the slider form renders three sliders, the opening among them", async () => {
+    const onOpeningChange = jest.fn();
+    const view = await mount({ picksAsSliders: true, opening: "auto", onOpeningChange });
+    for (const key of ["tone", "shape", "opening"]) {
+      expect(view.q(`hook-picks-${key}-slider`)).not.toBeNull();
+      const knob = view.q(`hook-picks-${key}-knob`);
+      expect(knob).not.toBeNull();
+      expect(knob.getAttribute("role")).toBe("slider");
+      expect(knob.getAttribute("aria-valuenow")).toBe("0");
+      expect(view.q(`hook-picks-${key}-value`).textContent).toBe("App's choice");
+    }
+    const names = view.q("hook-picks-opening-names");
+    expect(names.textContent).toContain("Action");
+    expect(names.textContent).toContain("Feeling");
+    // Tapping a stop reports the pick, like the pills do.
+    await act(async () => { view.q("hook-picks-opening-action").click(); });
+    expect(onOpeningChange).toHaveBeenCalledWith("action");
+    await act(async () => { view.q("hook-picks-tone-warm").click(); });
+    expect(view.onToneChange).toHaveBeenCalledWith("warm");
+    await view.unmount();
+  });
+
   test("a saved focus the profile no longer carries reads as the app's choice", async () => {
     const view = await mount({ focus: "An outcome the profile dropped" });
     expect(view.q("hook-picks-focus").textContent).toContain("Let the app choose");

@@ -3340,6 +3340,7 @@ FOCUS_LINE_LIMIT = 6
 # before the picks existed.
 HOOK_TONE_PICKS = ("plain", "warm", "bold")
 HOOK_SHAPE_PICKS = ("auto", "question", "statement")
+HOOK_OPENING_PICKS = ("auto", "action", "feeling")
 
 
 def _hook_shape_pick(project: dict) -> str:
@@ -3347,6 +3348,14 @@ def _hook_shape_pick(project: dict) -> str:
     as "auto", so a row written by anything else steers nothing."""
     shape = str((project or {}).get("hook_shape") or "auto").strip().lower()
     return shape if shape in HOOK_SHAPE_PICKS else "auto"
+
+
+def _hook_opening_pick(project: dict) -> str:
+    """The project's opening pick, normalized the shape pick's way:
+    an unknown value reads as "auto", so a row written by anything
+    else steers nothing."""
+    opening = str((project or {}).get("hook_opening") or "auto").strip().lower()
+    return opening if opening in HOOK_OPENING_PICKS else "auto"
 
 
 def _hook_steering_block(project: dict, profile: dict) -> str:
@@ -3407,6 +3416,25 @@ def _hook_steering_block(project: dict, profile: dict) -> str:
             "statement, never a question. It names the feeling or the "
             "pain point outright and holds the answer back: the demo "
             "that follows is the answer."
+        )
+    opening = _hook_opening_pick(project)
+    if opening == "action":
+        lines.append(
+            "- OPENING: action — the hook opens on the verb in "
+            "motion: she is already mid-effort, racing to do the "
+            "thing, the doing and what it costs her in the same "
+            "line (the racing form). The first words are the action "
+            "itself — never a feeling about the doing, never a "
+            "still scene."
+        )
+    elif opening == "feeling":
+        lines.append(
+            "- OPENING: feeling — the hook opens on the concrete "
+            "felt sensation: the one physical feeling in her body, "
+            "named plainly, lands in the first words — then the "
+            "effort, what she is trying to do about it. The "
+            "sensation first — never a label for it, never the "
+            "activity."
         )
     if not lines:
         return ""

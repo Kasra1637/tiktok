@@ -27,6 +27,10 @@ describe("VoiceModeControl", () => {
     expect(view.q("voice-mode-talking").getAttribute("aria-pressed")).toBe("true");
     expect(view.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("false");
     expect(view.q("voice-mode-silent-note")).toBeNull();
+    // Nov 27 2026 (Kasra's order): talking mode stands with no
+    // line under the pills — the long descriptive sentence that
+    // stood there is removed whole, on every caller.
+    expect(view.container.textContent).not.toContain("The character speaks the line on camera");
     await view.unmount();
   });
 
@@ -44,9 +48,10 @@ describe("VoiceModeControl", () => {
   test("hideNote stands the pills without the note in either mode", async () => {
     // ADR 0362: Create's direction section carries no descriptive
     // lines, so it passes hideNote — the buttons and their picked
-    // faces are untouched, and neither mode's note renders. A
-    // caller that passes nothing (HookSnap) keeps the note, as the
-    // cases above and below pin.
+    // faces are untouched, and the silent note does not render.
+    // Talking mode carries no line of its own at all (Nov 27
+    // 2026). A caller that passes nothing (HookSnap) keeps the
+    // silent note, as the cases above and below pin.
     const silent = await mount({ value: "silent", hideNote: true, silentText: "A line." });
     expect(silent.q("voice-mode-silent-note")).toBeNull();
     expect(silent.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("true");
@@ -92,6 +97,33 @@ describe("VoiceModeControl", () => {
     const note = view.q("voice-mode-silent-note");
     expect(note).not.toBeNull();
     expect(note.textContent).toContain("The hook line will appear here once it is written.");
+    await view.unmount();
+  });
+
+  test("the slider form rests the knob on the standing mode with no pick lit", async () => {
+    // Nov 27 2026 (Kasra's order): HookSnap passes asSlider — the
+    // two choices stand as slider stops. Unpicked (ADR 0361), no
+    // stop is pressed, the knob rests on the mode that will
+    // render, its name stands under the knob, and the note stays.
+    const view = await mount({ value: "silent", pickedValue: "", asSlider: true });
+    expect(view.q("voice-mode-slider")).not.toBeNull();
+    const knob = view.q("voice-mode-knob");
+    expect(knob).not.toBeNull();
+    expect(knob.getAttribute("role")).toBe("slider");
+    expect(knob.getAttribute("aria-valuenow")).toBe("1");
+    expect(view.q("voice-mode-talking").getAttribute("aria-pressed")).toBe("false");
+    expect(view.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("false");
+    expect(view.q("voice-mode-value").textContent).toBe("Character stays silent");
+    expect(view.q("voice-mode-silent-note")).not.toBeNull();
+    await act(async () => { view.q("voice-mode-talking").click(); });
+    expect(view.onChange).toHaveBeenCalledWith("talking");
+    await view.unmount();
+  });
+
+  test("the default rendering carries no slider", async () => {
+    const view = await mount();
+    expect(view.q("voice-mode-slider")).toBeNull();
+    expect(view.q("voice-mode-knob")).toBeNull();
     await view.unmount();
   });
 });
