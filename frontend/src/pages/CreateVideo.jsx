@@ -2,6 +2,7 @@ import { RecommendationCard, AngleSelector, AngleGoalPicker, PresenterPhotoContr
 import { DirectionSelect, PlanPhaseLine } from "../components/studio/ReviewPanels";
 import HookLineEditor from "../components/studio/HookLineEditor";
 import VoiceModeControl from "../components/studio/VoiceModeControl";
+import { PickSlider } from "../components/studio/HookPicksControl";
 import CoverTextEditor from "../components/studio/CoverTextEditor";
 import ScriptRewrite from "../components/studio/ScriptRewrite";
 import AngleRegenConfirmDialog from "../components/studio/AngleRegenConfirmDialog";
@@ -36,6 +37,7 @@ import {
 import GenerationPanel from "../components/GenerationPanel";
 import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { api, getErrorMessage } from "../lib/api";
+import { signalSaved } from "../lib/saveSignal";
 import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { recordSignal, recordBehavior, classifyScriptEdit } from "../lib/feedback";
 import { readyRefusalMessage } from "../lib/readyRefusal";
@@ -1542,7 +1544,6 @@ export default function CreateVideo() {
     if (silent) {
       if (autosaving) return;
       setAutosaving(true);
-      setSaveStatus("Saving…");
     } else {
       setBusy(true);
     }
@@ -1599,7 +1600,7 @@ export default function CreateVideo() {
       }
       setError(readyRefusalMessage(updated, readyError));
       dispatchDraft({ type: "plan-accepted", project: settled, savedEdits });
-      if (silent) setSaveStatus("All changes saved");
+      if (silent) { setSaveStatus(""); signalSaved(); }
     } catch (err) {
       const message = getErrorMessage(err);
       setError(message);
@@ -2511,40 +2512,30 @@ export default function CreateVideo() {
               <div className="section-pair">
               <div className="space-y-2">
                 <GroupLabel icon={Camera}>Camera setup</GroupLabel>
-                {/* Two options stand side by side as black buttons (ADR
-                    0330) — the thumb-pair design of the render panels'
-                    resolution row; a dropdown is earned only at four or
-                    more options (ADR 0329). */}
+                {/* The unified slider (Kasra's order, Nov 27 2026):
+                    the two setups are the slider's stops, the knob
+                    resting on the setup that will render while no
+                    pick stands (the same unpicked face the voice
+                    slider keeps), a tap or drag earning the pick
+                    through the same draft edit the buttons used. */}
                 <div
-                  className="thumb-pair"
-                  role="group"
-                  aria-label="Camera setup"
                   data-testid="camera-setup"
                   data-value={editValue("camera_setup", "handheld")}
                 >
-                  {[
-                    { value: "handheld", label: "Handheld selfie" },
-                    { value: "fixed", label: "Fixed camera" },
-                  ].map((option) => {
-                    const picked = editPick("camera_setup", "handheld") === option.value;
-                    return (
-                      <Button
-                        key={option.value}
-                        type="button"
-                        size="sm"
-                        variant={picked ? "brand" : "secondary"}
-                        aria-pressed={picked}
-                        data-value={option.value}
-                        className={`tap-chip option-btn ${picked ? "thumb-selected" : ""}`}
-                        disabled={busy}
-                        onClick={() => {
-                          dispatchDraft({ type: "edit-field", field: "camera_setup", value: option.value, omitDefault: true, fallback: "handheld" });
-                        }}
-                      >
-                        {option.label}
-                      </Button>
-                    );
-                  })}
+                  <PickSlider
+                    options={[
+                      { value: "handheld", label: "Handheld selfie" },
+                      { value: "fixed", label: "Fixed camera" },
+                    ]}
+                    current={editPick("camera_setup", "handheld")}
+                    restValue={editValue("camera_setup", "handheld")}
+                    onChange={(value) => {
+                      dispatchDraft({ type: "edit-field", field: "camera_setup", value, omitDefault: true, fallback: "handheld" });
+                    }}
+                    disabled={busy}
+                    testId="camera-setup"
+                    ariaLabel="Camera setup"
+                  />
                 </div>
               </div>
               {/* The voice pick (ADR 0246) sits with the movement and
@@ -2563,6 +2554,7 @@ export default function CreateVideo() {
                   value={editValue("voice_mode", "silent")}
                   pickedValue={editPick("voice_mode", "silent")}
                   hideNote
+                  asSlider
                   onChange={(value) => {
                     dispatchDraft({ type: "edit-field", field: "voice_mode", value, omitDefault: true, fallback: "silent" });
                   }}
@@ -2600,6 +2592,7 @@ export default function CreateVideo() {
                     placeholder="Choose a Location…"
                     disabled={busy}
                     refresh={refreshProps("location", "review-location-refresh")}
+                    asSlider
                   />
                   {directionLocationIneligible && (
                     <p className="text-sm text-muted-foreground" data-testid="direction-location-ineligible">
@@ -2627,6 +2620,7 @@ export default function CreateVideo() {
                     placeholder="Choose wardrobe…"
                     disabled={busy}
                     refresh={refreshProps("wardrobe", "review-wardrobe-refresh")}
+                    asSlider
                   />
                   {project?.visual_direction && !edits.visual_direction && (
                     <p className="text-sm text-muted-foreground">
@@ -3344,12 +3338,16 @@ export default function CreateVideo() {
                   Ready for generation.
                 </p>
               )}
-              {/* Autosave status, same rhythm as the Demo + CTA draft line:
-                  narrates the background save so an unpressed button never
-                  reads as lost work. Manual saves clear it — the button is
-                  the feedback then. */}
+              {/* No autosave words stand here anymore (Nov 27 2026,
+                  Kasra's order): the background save's completion is
+                  the one green check in the top chrome. What still
+                  renders in this seat is a failed autosave naming
+                  itself — a failure is not a status whisper, and a
+                  silent one would read as saved work that never
+                  landed. Manual saves clear it — the button is the
+                  feedback then. */}
               {saveStatus && (
-                <p role="status" data-testid="review-autosave-status" className="text-sm text-muted-foreground">
+                <p role="alert" data-testid="review-autosave-status" className="text-sm text-destructive-text">
                   {saveStatus}
                 </p>
               )}

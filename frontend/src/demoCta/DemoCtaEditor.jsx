@@ -53,6 +53,7 @@ import { PostKitSection } from "../components/PostKitSection";
 import { CONTROL_CLASS } from "../components/formControls";
 import { AppSelect } from "../components/AppSelect";
 import { Chip } from "../components/Chip";
+import { PickSlider } from "../components/studio/HookPicksControl";
 import { Disclosure } from "../components/Disclosure";
 import { recordSignal } from "../lib/feedback";
 import {
@@ -228,35 +229,27 @@ function RecordBriefNote({ brief }) {
 /**
  * Three-way presentation picker. It once served both clips; since
  * ADR 0374 the base always stands as Real Video, so the picker lives
- * on the added clip alone (`append-mode-*` testids).
+ * on the added clip alone (`append-mode-*` testids). It wears the
+ * one unified slider now (Kasra's order, Nov 27 2026), like every
+ * pick-one-of-a-few control in the app; the ids it writes are the
+ * same three it has always written.
  */
 function StylePicker({ label, hint, value, onChange, prefix }) {
   return (
     <>
       <SubLabel icon={Smartphone}>{label}</SubLabel>
       {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
-      <div className="grid grid-cols-3 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1">
-        {[
-          ["floating", "Floating Phone"],
-          ["hand", "Hand Holding"],
-          ["realistic", "Real Video"],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => onChange(id)}
-            aria-pressed={value === id}
-            data-testid={`${prefix}${id}`}
-            className={`focus-ring h-8 rounded-lg text-sm font-semibold transition duration-150 ${
-              value === id
-                ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
-                : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <PickSlider
+        options={[
+          { value: "floating", label: "Floating Phone" },
+          { value: "hand", label: "Hand Holding" },
+          { value: "realistic", label: "Real Video" },
+        ]}
+        current={value}
+        onChange={onChange}
+        testId={prefix.replace(/-$/, "")}
+        ariaLabel={label}
+      />
     </>
   );
 }
@@ -264,117 +257,73 @@ function StylePicker({ label, hint, value, onChange, prefix }) {
 /**
  * The joint transition between the base and added clips. One picker, read
  * by the shared painter, so the preview and the export move identically.
- * Four motion trends in one row; the saved pick survives reduced motion
- * (when everything parks as cuts), so the motion returns if the setting
- * changes.
+ * Four motion trends on the one unified slider (Kasra's order, Nov 27
+ * 2026); the saved pick survives reduced motion (when everything parks
+ * as cuts), so the motion returns if the setting changes.
  */
 function TransitionPicker({ value, onChange }) {
   return (
     <>
       <SubLabel icon={Repeat}>Transition between clips</SubLabel>
-      <div className="grid grid-cols-4 gap-1 rounded-xl border border-[color:var(--hairline)] bg-secondary/30 p-1" role="group" aria-label="Transition between clips">
-        {TRANSITIONS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => onChange(t.id)}
-            aria-pressed={value === t.id}
-            title={t.description}
-            data-testid={`transition-${t.id}`}
-            className={`focus-ring h-8 rounded-lg px-1 text-sm font-semibold transition duration-150 ${
-              value === t.id
-                ? "bg-[color:var(--brand-indigo)]/15 text-foreground shadow-[var(--shadow-xs)]"
-                : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <PickSlider
+        options={TRANSITIONS.map((t) => ({ value: t.id, label: t.label }))}
+        current={value}
+        onChange={onChange}
+        testId="transition"
+        ariaLabel="Transition between clips"
+      />
     </>
   );
 }
 
-/** Hand-scene environment grid, one per clip (`prefix` namespaces testids). */
+/** Hand-scene environment pick, one per clip (`prefix` namespaces
+ * testids). The one unified slider (Kasra's order, Nov 27 2026): the
+ * environments are its stops and the picked room names itself under
+ * the track; the scene itself still shows in the preview. */
 function EnvGrid({ value, onChange, prefix }) {
   return (
-    <div className="grid grid-cols-5 gap-1.5">
-      {ENVIRONMENTS.map((env) => (
-        <button
-          key={env.id}
-          type="button"
-          onClick={() => onChange(env.id)}
-          title={env.label}
-          data-testid={`${prefix}env-${env.id}`}
-          className={`focus-ring overflow-hidden rounded-xl border text-xs transition ${
-            value === env.id ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
-          }`}
-        >
-          <img src={env.url} alt={env.label} className="aspect-[3/4] w-full object-cover" loading="lazy" crossOrigin="anonymous" />
-          <div className="px-0.5 py-1 text-center text-xs leading-tight text-muted-foreground">{env.label}</div>
-        </button>
-      ))}
-    </div>
+    <PickSlider
+      options={ENVIRONMENTS.map((env) => ({ value: env.id, label: env.label }))}
+      current={value}
+      onChange={onChange}
+      testId={`${prefix}env`}
+      ariaLabel="Environment"
+    />
   );
 }
 
-/** Floating-phone backdrop swatches, one set per clip. */
+/** Floating-phone backdrop pick, one set per clip — the one unified
+ * slider (Kasra's order, Nov 27 2026), the backdrops as its stops. */
 function BackgroundPicker({ value, onChange, prefix }) {
   return (
     <div className="space-y-2">
       <SubLabel icon={ImageIcon}>Background</SubLabel>
-      <div className="flex flex-wrap items-center gap-2">
-        {BACKGROUNDS.map((b) => (
-          <button
-            key={b.id}
-            type="button"
-            onClick={() => onChange(b.id)}
-            title={b.label}
-            aria-label={b.label}
-            aria-pressed={value === b.id}
-            data-testid={`${prefix}background-${b.id}`}
-            className={`focus-ring h-10 w-10 shrink-0 overflow-hidden rounded-xl border transition duration-150 ${
-              value === b.id
-                ? "border-[color:var(--brand-indigo)] ring-2 ring-[color:var(--indigo-45)]"
-                : "border-[color:var(--hairline)] hover:border-[color:var(--hairline-strong)]"
-            }`}
-            style={
-              b.preview === "transparent"
-                ? { backgroundImage: "linear-gradient(45deg,#666 25%,transparent 25%),linear-gradient(-45deg,#666 25%,transparent 25%),linear-gradient(-45deg,transparent 75%,#666 75%),linear-gradient(-45deg,transparent 75%,#666 75%)", backgroundSize: "8px 8px", backgroundPosition: "0 0,0 4px,4px -4px,-4px 0", backgroundColor: "#222" }
-                : { background: b.preview }
-            }
-          />
-        ))}
-      </div>
+      <PickSlider
+        options={BACKGROUNDS.map((b) => ({ value: b.id, label: b.label }))}
+        current={value}
+        onChange={onChange}
+        testId={`${prefix}background`}
+        ariaLabel="Background"
+      />
     </div>
   );
 }
 
-/** Floating-phone motion picker. The app's own selectable pill rather than
- *  another hand-rolled row of text buttons: this list is a segmented choice,
- *  which is what `Chip` is for, and it carries the visible border, hover
- *  state and indigo selected state a plain row lacks. */
+/** Floating-phone motion picker — the one unified slider (Kasra's
+ * order, Nov 27 2026), the motions as its stops, writing the same
+ * animation ids the chip grid wrote. */
 function AnimationPicker({ value, onChange, prefix }) {
   return (
     <div className="space-y-2">
       <SubLabel icon={Sparkles}>Animation</SubLabel>
-      <div
-        role="group"
-        aria-label="Animation"
-        data-testid={`${prefix}animation-group`}
-        className="grid grid-cols-3 gap-1.5 lg:grid-cols-2 xl:grid-cols-3"
-      >
-        {ANIMATIONS.map((a) => (
-          <Chip
-            key={a.id}
-            active={value === a.id}
-            onClick={() => onChange(a.id)}
-            testId={`${prefix}animation-${a.id}`}
-            ariaLabel={a.label}
-          >
-            {a.label}
-          </Chip>
-        ))}
+      <div data-testid={`${prefix}animation-group`}>
+        <PickSlider
+          options={ANIMATIONS.map((a) => ({ value: a.id, label: a.label }))}
+          current={value}
+          onChange={onChange}
+          testId={`${prefix}animation`}
+          ariaLabel="Animation"
+        />
       </div>
     </div>
   );
@@ -1929,7 +1878,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
         <Button size="sm" variant="secondary" disabled={!draftReady || recording || !session.canUndo} onClick={session.undo} data-testid="demo-cta-undo" title="Undo (Ctrl/Cmd+Z)"><Undo2 className="h-4 w-4" />Undo</Button>
         <Button size="sm" variant="secondary" disabled={!draftReady || recording || !session.canRedo} onClick={session.redo} data-testid="demo-cta-redo" title="Redo (Ctrl/Cmd+Shift+Z)"><Redo2 className="h-4 w-4" />Redo</Button>
       </div>
-      <p role="status" className="text-sm text-muted-foreground" data-testid="draft-save-status">{draftLoadError || session.saveStatus}</p>
+      {/* No draft-save words stand here anymore (Nov 27 2026, Kasra's
+          order): a completed draft write is the one green check in
+          the top chrome. A draft that failed to LOAD still names
+          itself in this seat — that is a failure with remedies
+          beside it, not a save status. A failed draft WRITE keeps
+          its Retry draft save button below, driven by the session's
+          own state exactly as before. */}
+      {draftLoadError && <p role="alert" className="text-sm text-destructive-text" data-testid="draft-save-status">{draftLoadError}</p>}
       {draftLoadError && <div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => setDraftLoadAttempt((n) => n + 1)}>Retry recovery</Button><Button size="sm" variant="secondary" onClick={() => { setDraftLoadError(null); setDraftReady(true); }}>Start without recovery</Button></div>}
       {session.saveStatus.startsWith("Draft not saved") && <Button size="sm" variant="secondary" onClick={session.saveNow}>Retry draft save</Button>}
     </div>

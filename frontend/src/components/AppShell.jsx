@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { HelpCircle, Menu, Sparkles } from "lucide-react";
 import Sidebar, { MobileSidebar } from "./Sidebar";
 import { ListenDock } from "./ListenDock";
+import { SaveSavedIndicator } from "./SaveSavedIndicator";
 import { useOnboarding } from "./onboarding/OnboardingProvider";
 
 const SIDEBAR_COLLAPSED_KEY = "hookforge_sidebar_collapsed";
@@ -80,6 +81,11 @@ export function AppShell({ children }) {
       </a>
       <Sidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
       <MobileSidebar open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+      {/* The one saved indicator (Kasra's order, Nov 27 2026): a
+          single green check in the top chrome, app-wide — the
+          pages' autosaves signal their completions to it, and no
+          page shows save words of its own anymore. */}
+      <SaveSavedIndicator />
 
       <div
         className="flex min-h-screen flex-col transition-[padding] duration-300 ease-out-expo lg:pl-[var(--sb-w)]"

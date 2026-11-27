@@ -221,9 +221,11 @@ describe("HookPicksControl", () => {
       expect(knob.getAttribute("aria-valuenow")).toBe("0");
       expect(view.q(`hook-picks-${key}-value`).textContent).toBe("App's choice");
     }
-    const names = view.q("hook-picks-opening-names");
-    expect(names.textContent).toContain("Action");
-    expect(names.textContent).toContain("Feeling");
+    // The unified face (Nov 27 2026): no stop-names row stands
+    // under any slider — only the one pick-name line, asserted
+    // above for each of the three.
+    expect(view.q("hook-picks-opening-names")).toBeNull();
+    expect(view.container.querySelector(".pick-slider-name")).toBeNull();
     // Tapping a stop reports the pick, like the pills do.
     await act(async () => { view.q("hook-picks-opening-action").click(); });
     expect(onOpeningChange).toHaveBeenCalledWith("action");

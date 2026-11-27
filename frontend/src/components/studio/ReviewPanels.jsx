@@ -80,13 +80,13 @@ export function DirectionSelect({
   // a founder who has seen all four has nowhere else to go.
   // { onRefresh, refreshing, refreshTestId }.
   refresh = null,
-  // The slider form (Kasra's order, Nov 27 2026): on the HookSnap
-  // surface the two standing picks stand as a drag slider's stops
-  // instead of two buttons. The reveal is untouched — New options
-  // still opens the full set as the pill row below, and a pick
-  // from it seats into the slider's stops by the same last-seat
-  // rule when the row stands collapsed again. Every other caller
-  // keeps the buttons exactly as they are.
+  // The slider form (Kasra's order, Nov 27 2026): the two standing
+  // picks stand as the unified slider's stops instead of two
+  // buttons — first on HookSnap's surface, then on Create's too,
+  // when the unified toggle spread app-wide. The reveal is
+  // untouched — New options still opens the full set as the pill
+  // row below, and a pick from it seats into the slider's stops by
+  // the same last-seat rule when the row stands collapsed again.
   asSlider = false,
 }) {
   // The options stand side by side wearing the resolution

@@ -24,6 +24,7 @@ import { Disclosure } from "../components/Disclosure";
 import { Skeleton } from "../components/ui/skeleton";
 import PageFrame from "../components/PageFrame";
 import { api, getErrorMessage } from "../lib/api";
+import { signalSaved } from "../lib/saveSignal";
 import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { Sparkles, Briefcase, Save, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, ArrowRight, Smartphone, RefreshCw, BadgeCheck, Package, Layers, Compass, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -549,7 +550,6 @@ export default function BrandSetup() {
     const sentSignature = liveSignature();
     if (silent) {
       setAutosaving(true);
-      setSaveStatus("Saving…");
     }
     try {
       const saved = await persistProfile();
@@ -570,7 +570,7 @@ export default function BrandSetup() {
         applyProfile(saved);
         refreshProfilesList();
         lastSavedRef.current = signatureForRow(saved);
-        if (silent) setSaveStatus("All changes saved");
+        if (silent) { setSaveStatus(""); signalSaved(); }
       }
     } catch (err) {
       const message = getErrorMessage(err);
@@ -955,12 +955,15 @@ export default function BrandSetup() {
                 </DropdownMenu>
               )}
             </div>
-            {/* Autosave status for the researched path, same rhythm as the
-                Review step's draft line: silent saves narrate here so an
-                unpressed Save never reads as lost work. Conditioned on the
-                path like the Save buttons are, so the testid stays unique. */}
+            {/* No autosave words stand here anymore (Nov 27 2026,
+                Kasra's order): a completed silent save is the one
+                green check in the top chrome. What still renders in
+                this seat is a failed autosave naming itself — a
+                failure is not a status whisper. Conditioned on the
+                path like the Save buttons are, so the testid stays
+                unique. */}
             {researchedProfile && saveStatus && (
-              <p role="status" data-testid="brand-autosave-status" className="pt-2 text-sm text-muted-foreground">
+              <p role="alert" data-testid="brand-autosave-status" className="pt-2 text-sm text-destructive-text">
                 {saveStatus}
               </p>
             )}
@@ -1340,10 +1343,11 @@ export default function BrandSetup() {
                   <Save className="h-4 w-4" />
                   {saving ? "Saving" : brand?.id ? "Save App Profile" : "Create App Profile"}
                 </Button>
-                {/* Autosave status for the hand-typed path — see the research
-                    form above for why it narrates here. */}
+                {/* A failed autosave names itself for the hand-typed
+                    path — see the research form above for why only
+                    the failure renders here. */}
                 {saveStatus && (
-                  <p role="status" data-testid="brand-autosave-status" className="text-sm text-muted-foreground">
+                  <p role="alert" data-testid="brand-autosave-status" className="text-sm text-destructive-text">
                     {saveStatus}
                   </p>
                 )}

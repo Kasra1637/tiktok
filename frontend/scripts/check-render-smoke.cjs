@@ -4297,14 +4297,25 @@ async function main() {
       getGenerations: async () => ({ generations: [] }),
       getStudioVideoModels: async () => ({ default: "heygen-video-1", models: [HEYGEN_CAPABILITY] }),
     }, () => mount(GenerationPanel, { project: { ...PROJECT_WITH_STRATEGY } })(ctx));
-    // ADR 0329: the choice stands side by side as verdict-style
-    // buttons, the model's default (768p) standing picked.
+    // ADR 0329's side-by-side pair wears the unified slider now
+    // (Nov 27 2026), the model's default (768p) standing picked —
+    // and 768p is the slider's value, not just its lit stop.
     const row = ctx.container.querySelector('[data-testid="gen-resolution"]');
-    if (!row) throw new Error("no resolution buttons for a model that offers 480p and 768p");
+    if (!row) throw new Error("no resolution slider for a model that offers 480p and 768p");
     const picked = row.querySelector('[data-testid="gen-resolution-768p"]');
-    if (!picked) throw new Error("the default 768p carries no button");
+    if (!picked) throw new Error("the default 768p carries no stop");
     if (picked.getAttribute("aria-pressed") !== "true") {
-      throw new Error("the resolution row does not default to 768p");
+      throw new Error("the resolution slider does not default to 768p");
+    }
+    if (!row.querySelector(".pick-slider")) {
+      throw new Error("the resolution pair does not wear the unified slider");
+    }
+    const resValue = row.querySelector('[data-testid="gen-resolution-value"]');
+    if (!resValue || resValue.textContent.trim() !== "768p") {
+      throw new Error("the resolution slider's value line does not name 768p by default");
+    }
+    if (row.getAttribute("data-value") !== "768p") {
+      throw new Error("the resolution slider does not stand at 768p by default");
     }
     if (!row.querySelector('[data-testid="gen-resolution-480p"]')) {
       throw new Error("480p is not offered as a button");
@@ -6338,8 +6349,8 @@ async function main() {
       if (src.includes(' id="gen-resolution"') || src.includes(' id="hook-gen-resolution"')) {
         throw new Error(`${name} still renders the resolution as a dropdown (ADR 0329)`);
       }
-      if (!src.includes("thumb-pair")) {
-        throw new Error(`${name} carries no verdict-style resolution row (ADR 0329)`);
+      if (!src.includes("PickSlider")) {
+        throw new Error(`${name} carries no unified resolution slider (Nov 27 2026)`);
       }
     }
     const cta = fs.readFileSync(path.join(SRC, "pages/HookCta.jsx"), "utf8");
@@ -9052,6 +9063,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     global.__SMOKE_PARAMS = "?project=p1";
     let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld" };
     let saves = 0;
+    const signals = watchSavedSignals();
     try {
       await withApi({
         getStudioProject: async () => saved,
@@ -9073,13 +9085,18 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
         if (saves !== 1) throw new Error(`the change did not autosave: ${saves} server saves`);
         if (saved.visual_direction !== "Wardrobe two") throw new Error("the autosave did not carry the wardrobe pick");
-        // The saved confirmation stands beside Review's save button,
-        // where it always stood; the state is the page's, so it reads
-        // the same after walking over.
+        // No save words stand in Review anymore (Kasra's order,
+        // Nov 27 2026): the saved confirmation is the one green
+        // check in the top chrome, and this save fired its signal;
+        // the old status seat renders only a failed autosave's
+        // name, so it is absent here. The state is the page's, so
+        // it reads the same after walking over.
         await clickEl(ctx, stepPill(ctx, "Review & submit"));
-        const status = ctx.container.querySelector('[data-testid="review-autosave-status"]');
-        if (!status || !status.textContent.includes("All changes saved")) {
-          throw new Error("no saved confirmation after the autosave");
+        if (ctx.container.querySelector('[data-testid="review-autosave-status"]')) {
+          throw new Error("save words still stand in Review after the autosave");
+        }
+        if (signals.count < 1) {
+          throw new Error("the autosave never signalled the chrome's saved check");
         }
         // A second change must schedule a second save, not reuse the first.
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
@@ -9089,9 +9106,42 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
         if (saves !== before + 1) throw new Error(`a second change did not autosave: ${saves} server saves`);
         if (saved.visual_direction !== "Wardrobe one") throw new Error("the second autosave did not carry the newer pick");
+        if (signals.count < 2) throw new Error("the second autosave did not re-signal the saved check");
       });
     } finally {
+      signals.stop();
       global.__SMOKE_PARAMS = "";
+    }
+  });
+
+  await check("the saved signal is one green check in the chrome, re-pulsing on every save (Nov 27 2026)", async (ctx) => {
+    // Kasra's order (Nov 27 2026): no autosave text stands on any
+    // page — the saved confirmation is ONE green check icon in
+    // the top chrome, shown when a save completes, and every save
+    // re-triggers it (the indicator remounts and pulses anew)
+    // rather than sitting static from the first save on.
+    for (const rel of ["pages/HookCta.jsx", "pages/CreateVideo.jsx", "pages/BrandSetup.jsx", "demoCta/DemoCtaEditor.jsx", "demoCta/editSession.js"]) {
+      const src = fs.readFileSync(path.join(SRC, rel), "utf8");
+      if (src.includes('setSaveStatus("All changes saved")') || src.includes('"Draft saved on this device"')) {
+        throw new Error(`${rel} still writes the saved text the chrome check replaced`);
+      }
+    }
+    const { SaveSavedIndicator } = load("components/SaveSavedIndicator.jsx");
+    const { signalSaved } = load("lib/saveSignal.js");
+    await mount(SaveSavedIndicator, {})(ctx);
+    if (ctx.container.querySelector('[data-testid="autosave-saved-check"]')) {
+      throw new Error("the saved check stands before any save completed");
+    }
+    await act(async () => { signalSaved(); });
+    const first = ctx.container.querySelector('[data-testid="autosave-saved-check"]');
+    if (!first) throw new Error("the saved check did not rise on the first save");
+    if (!first.querySelector("svg")) throw new Error("the saved indicator carries no check icon");
+    if (first.textContent.trim() !== "") throw new Error("the saved indicator carries words — it is icon only");
+    if (!first.className.includes("save-check-pop")) throw new Error("the saved check carries no pulse to re-trigger");
+    await act(async () => { signalSaved(); });
+    const second = ctx.container.querySelector('[data-testid="autosave-saved-check"]');
+    if (!second || second === first) {
+      throw new Error("a second save did not re-trigger the saved check — it sat static");
     }
   });
 
@@ -9137,17 +9187,17 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           throw new Error(`a handheld camera was not offered its first locations: ${JSON.stringify(pairValues())}`);
         }
         // ADR 0337 (Kasra's ruling, Nov 25 2026): a direction
-        // button's label stays inside 25 characters, shortened
+        // stop's label stays inside 25 characters, shortened
         // the safe way — a complete phrase, never amputated
         // mid-thought ("Calm living room with a" is the banned
         // shape), never wearing dots. The fixture's long places
         // shorten to their complete cores.
-        const pairLabels = [...ctx.container.querySelectorAll('[data-testid="review-location-direction"] button')].map((b) => b.textContent.trim());
+        const pairLabels = [...ctx.container.querySelectorAll('[data-testid="review-location-direction"] button')].map((b) => b.getAttribute("aria-label"));
         if (JSON.stringify(pairLabels) !== JSON.stringify(["Quiet garden bench", "Calm living room"])) {
-          throw new Error(`a direction button's label is not the safely shortened phrase: ${JSON.stringify(pairLabels)}`);
+          throw new Error(`a direction stop's label is not the safely shortened phrase: ${JSON.stringify(pairLabels)}`);
         }
         if (pairLabels.some((t) => t.length > 25 || t.includes("…"))) {
-          throw new Error(`a direction button's text runs long or ends in dots: ${JSON.stringify(pairLabels)}`);
+          throw new Error(`a direction stop's label runs long or ends in dots: ${JSON.stringify(pairLabels)}`);
         }
         // ADR 0334: "New options" stands beside the field's title,
         // in the title's own row, right after it — the Focus row's
@@ -15453,6 +15503,7 @@ async function runHookCtaChecks() {
 
   await check("the Hook + CTA shell creates the draft on the app pick and spends nothing", async (ctx) => {
     const creates = [];
+    const signals = watchSavedSignals();
     await inHookCta(
       ctx,
       {
@@ -15481,8 +15532,11 @@ async function runHookCtaChecks() {
             `the draft was created with ${JSON.stringify(creates[0])}, expected the picked app`
           );
         }
-        if (!saveStatus(ctx) || !saveStatus(ctx).textContent.includes("All changes saved")) {
-          throw new Error("the created draft shows no saved confirmation");
+        if (saveStatus(ctx)) {
+          throw new Error("save words stand beside the app picker — the saved signal is the chrome's green check now (Nov 27 2026)");
+        }
+        if (signals.count < 1) {
+          throw new Error("creating the draft never signalled the chrome's saved check");
         }
         // The page's later cards stand from the moment the draft
         // exists: direction, the hook, the render, the finish and
@@ -15508,6 +15562,7 @@ async function runHookCtaChecks() {
         }
       }
     );
+    signals.stop();
   });
 
   await check("Generate hook writes the line and the editor holds it", async (ctx) => {
@@ -15757,7 +15812,7 @@ async function runHookCtaChecks() {
         // Change the Focus pick to the new focus; the pick alone
         // generates nothing (ADR 0122 stands).
         const card = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
-        await chooseOption(ctx, card.querySelector('[data-testid="hook-picks-focus"]'), NEW_FOCUS);
+        await pickPairButton(ctx, "hook-picks-focus", NEW_FOCUS);
         await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
         if (generateCalls.length) {
           throw new Error("changing the focus pick generated a hook on its own");
@@ -15979,15 +16034,20 @@ async function runHookCtaChecks() {
         if (!cells[2].querySelector('[data-testid^="hook-picks-opening"]')) {
           throw new Error("the trio's third area is not Opening");
         }
-        // The Focus pop-up's header wears the one face.
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-picks-focus"]'));
-        const popup = ctx.container.ownerDocument.querySelector('[data-testid="hook-picks-focus-popup"]');
-        if (!popup) throw new Error("the Focus pop-up did not open");
-        const popupHead = [...popup.querySelectorAll(".eyebrow")].find((el) => el.textContent.trim() === "Focus");
-        if (!popupHead || !popupHead.querySelector("svg")) {
-          throw new Error("the Focus pop-up header does not wear the eyebrow face with the Focus icon (ADR 0366)");
+        // The Focus group's header wears the one face, and its
+        // pick is the unified slider (Nov 27 2026) — no pop-up
+        // opens on this page anymore.
+        const focusHead = [...card.querySelectorAll(".eyebrow")].find((el) => el.textContent.trim() === "Focus");
+        if (!focusHead || !focusHead.querySelector("svg")) {
+          throw new Error("the Focus header does not wear the eyebrow face with the Focus icon (ADR 0366)");
         }
-        await clickEl(ctx, popup.querySelector('button[aria-label="Close"]'));
+        const focusGroup = card.querySelector('[data-testid="hook-picks-focus"]');
+        if (!focusGroup || !focusGroup.querySelector(".pick-slider")) {
+          throw new Error("the Focus pick does not wear the unified slider (Nov 27 2026)");
+        }
+        if (ctx.container.ownerDocument.querySelector('[data-testid="hook-picks-focus-popup"]')) {
+          throw new Error("a Focus pop-up stands on the slider page (Nov 27 2026)");
+        }
         // The caption preview's label carries its icon.
         const kitCard = ctx.container.querySelector('[data-testid="hook-cta-post-kit"]');
         await clickEl(ctx, kitCard.querySelector('[data-testid="hook-cta-caption-preview-button"]'));
@@ -16007,10 +16067,12 @@ async function runHookCtaChecks() {
     // HookSnap the Tone and Shape pill rows become drag sliders and
     // a third pick, Opening, joins them — three sliders on one line
     // in the trio, dividers between, each with its stops as dots on
-    // a track, a branded knob on the current stop, the pick's name
-    // under the knob, and a faint line naming every stop. Every
-    // stop is tappable too. The control's default rendering (the
-    // pills) is untouched — HookSnap alone passes the slider form.
+    // a track, a branded knob on the current stop, and only the
+    // pick's name under the track. Every stop is tappable too.
+    // The unified face (Kasra's sharpening, later Nov 27 2026):
+    // no row naming every stop and no smaller line repeating the
+    // pick — one bigger-font name only, on a track that carries
+    // the one fixed width.
     const row = hookRow({ id: "hook-cta-1", hook_line: HOOK });
     const patches = [];
     await inHookCta(
@@ -16055,12 +16117,25 @@ async function runHookCtaChecks() {
           if (!value || value.textContent.trim() !== "App's choice") {
             throw new Error(`the ${group.key} slider does not name its current pick under the knob`);
           }
-          const names = slider.querySelector(`[data-testid="hook-picks-${group.key}-names"]`);
-          if (!names) throw new Error(`the ${group.key} slider carries no line naming its stops`);
-          for (const name of group.names) {
-            if (!names.textContent.includes(name)) {
-              throw new Error(`the ${group.key} slider's stop line does not name ${name}`);
-            }
+          // The unified face: no stop-names row, no smaller
+          // duplicate line — exactly one pick-name line, the
+          // groove's fill up to the knob, and the knob's three
+          // grip lines.
+          if (slider.querySelector(`[data-testid="hook-picks-${group.key}-names"]`)) {
+            throw new Error(`the ${group.key} slider still carries the stop-names row`);
+          }
+          if (slider.querySelector(".pick-slider-name")) {
+            throw new Error(`the ${group.key} slider still names its stops under the track`);
+          }
+          const valueLines = slider.querySelectorAll(`[data-testid="hook-picks-${group.key}-value"]`);
+          if (valueLines.length !== 1) {
+            throw new Error(`the ${group.key} slider carries ${valueLines.length} pick-name lines, not exactly one`);
+          }
+          if (!slider.querySelector(".pick-slider-fill")) {
+            throw new Error(`the ${group.key} slider's groove carries no fill`);
+          }
+          if (knob.querySelectorAll("span").length !== 3) {
+            throw new Error(`the ${group.key} knob does not carry its three grip lines`);
           }
         }
         // Tapping a stop jumps the pick and saves it through the
@@ -16100,6 +16175,14 @@ async function runHookCtaChecks() {
     if (!knobRule.includes("var(--brand-indigo") || !knobRule.includes("var(--glow-indigo)")) {
       throw new Error("the slider knob is not branded in the indigo selection tokens");
     }
+    // One fixed track width, set by the component: the groove
+    // never sizes to its labels and never changes with the value.
+    const trackAt = css.indexOf(".pick-slider-track");
+    if (trackAt < 0) throw new Error("index.css carries no pick slider track");
+    const trackRule = css.slice(trackAt, css.indexOf("}", trackAt));
+    if (!trackRule.includes("width: 9.375rem")) {
+      throw new Error("the slider track does not carry the one fixed width");
+    }
   });
 
   await check("HookSnap's direction groups are sliders too — Voice, Location and Wardrobe (Nov 27 2026)", async (ctx) => {
@@ -16110,8 +16193,8 @@ async function runHookCtaChecks() {
     // (ADR 0365, the last-seat rule included), the New options
     // link beside each label exactly as it stands today, revealing
     // the full set as the pill row it has always been. Create's
-    // direction controls keep their pills — the slider is a
-    // variant HookSnap alone passes.
+    // direction controls wear the same sliders since the unified
+    // spread (later Nov 27 2026), asserted at this check's end.
     const LOCATIONS = ["Location one", "Location two", "Location three", "Location four"];
     const WARDROBES = ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"];
     const FRESH_LOCATIONS = ["Fresh place one", "Fresh place two", "Fresh place three", "Fresh place four"];
@@ -16146,7 +16229,9 @@ async function runHookCtaChecks() {
         }
         // Voice: two stops, no pick lit on a fresh draft (ADR
         // 0361), the knob resting on the mode that will render —
-        // silent — with its name under the knob and the note kept.
+        // silent — with its name under the track. The note does
+        // NOT stand: it belongs to a change the user makes, never
+        // to the standing state (Kasra's order, Nov 27 2026).
         const voiceKnob = card.querySelector('[data-testid="voice-mode-knob"]');
         if (!voiceKnob || voiceKnob.getAttribute("role") !== "slider") {
           throw new Error("the voice pick carries no slider knob");
@@ -16165,8 +16250,8 @@ async function runHookCtaChecks() {
         if (!voiceValue || voiceValue.textContent.trim() !== "Character stays silent") {
           throw new Error("the voice slider does not name the standing mode under its knob");
         }
-        if (!card.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the silent note is gone from the voice slider — it stays");
+        if (card.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note stands on a fresh draft — it belongs to the change, not the standing state (Nov 27 2026)");
         }
         // Location and Wardrobe: the two standing picks are the
         // stops, and New options stands beside the label.
@@ -16207,6 +16292,16 @@ async function runHookCtaChecks() {
         if (card.querySelector('[data-testid="voice-mode-silent"]').getAttribute("aria-pressed") !== "true") {
           throw new Error("the silent pick did not survive the autosave settling on the slider (ADR 0373)");
         }
+        // The note belongs to that change (Nov 27 2026): the user
+        // just slid Voice onto silent, so the note stands now —
+        // and sliding back to talking takes it away again.
+        if (!card.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note did not rise when the user changed Voice to silent");
+        }
+        await clickEl(ctx, card.querySelector('[data-testid="voice-mode-talking"]'));
+        if (card.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note stayed after the user slid back to talking");
+        }
         // New options reveals the full set as the pill row it has
         // always been, and a pick from it applies.
         await clickEl(ctx, card.querySelector('[data-testid="hook-cta-location-refresh"]'));
@@ -16224,8 +16319,11 @@ async function runHookCtaChecks() {
         }
       }
     );
-    // Create keeps its pills: no slider anywhere in its direction
-    // section, and its direction groups still stand as pill rows.
+    // Create wears the same sliders (Nov 27 2026, the unified
+    // toggle spread app-wide): Camera setup, Voice, Location and
+    // Wardrobe all stand as the one groove slider in its
+    // direction section, and a camera pick writes the same draft
+    // value its buttons wrote.
     global.__SMOKE_PARAMS = "?project=p1";
     try {
       await withApi({
@@ -16239,18 +16337,23 @@ async function runHookCtaChecks() {
       }, async () => {
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
+        await act(async () => {});
         const section = ctx.container.querySelector('[data-testid="visual-audio-direction"]');
         if (!section) throw new Error("Create's direction section is gone");
-        if (section.querySelector(".pick-slider")) {
-          throw new Error("a slider stands in Create's direction section — the slider form is HookSnap's alone");
+        for (const testId of ["camera-setup", "review-location-direction", "review-wardrobe"]) {
+          const group = section.querySelector(`[data-testid="${testId}"]`);
+          if (!group || !group.querySelector(".pick-slider")) {
+            throw new Error(`Create's ${testId} group does not wear the unified slider`);
+          }
         }
-        const locGroup = section.querySelector('[data-testid="review-location-direction"]');
-        if (!locGroup || !locGroup.querySelector("button.direction-btn")) {
-          throw new Error("Create's Location pick no longer stands as its pill row");
+        if (!section.querySelector('[data-testid="voice-mode-slider"]')) {
+          throw new Error("Create's Voice group does not wear the unified slider");
         }
-        const voiceBtn = section.querySelector('[data-testid="voice-mode-talking"]');
-        if (!voiceBtn || !voiceBtn.classList.contains("option-btn")) {
-          throw new Error("Create's voice pick no longer stands as its pill row");
+        await pickPairButton(ctx, "camera-setup", "fixed");
+        await act(async () => {});
+        const camGroup = section.querySelector('[data-testid="camera-setup"]');
+        if (!camGroup || camGroup.getAttribute("data-value") !== "fixed") {
+          throw new Error("Create's camera slider did not write the fixed pick");
         }
       });
     } finally {
@@ -16858,9 +16961,11 @@ async function runHookCtaChecks() {
     // ADR 0364 changes the READ face only: ADR 0361 lands on this
     // page, so a saved-silent draft shows NO pill picked — silent
     // is the standing default, and a stored "silent" reads exactly
-    // like never picked, as on Create. The note still renders (the
-    // value IS silent), and the switch-back path below is the
-    // regression pin, unchanged.
+    // like never picked, as on Create. The note does NOT render
+    // for the standing pick (Nov 27 2026: it belongs to the
+    // change, never to the standing state) — it rises at this
+    // check's end, when the user changes back onto silent — and
+    // the switch-back path below is the regression pin, unchanged.
     const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
     let row = hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face, voice_mode: "silent" });
     const patches = [];
@@ -16883,8 +16988,8 @@ async function runHookCtaChecks() {
         if (silentPill.getAttribute("aria-pressed") === "true" || talkingPill.getAttribute("aria-pressed") === "true") {
           throw new Error("a saved-silent draft reads as picked — ADR 0364 (ADR 0361 here) stands it unpicked until a click");
         }
-        if (!ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the silent note did not render for the saved silent pick");
+        if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note stands for the saved silent pick — it belongs to the change, not the standing state (Nov 27 2026)");
         }
         await clickEl(ctx, talkingPill);
         if (talkingPill.getAttribute("aria-pressed") !== "true") {
@@ -16896,6 +17001,12 @@ async function runHookCtaChecks() {
         await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
         if (!patches.some((p) => p.voice_mode === "talking")) {
           throw new Error(`the switch back to talking never saved: ${JSON.stringify(patches)}`);
+        }
+        // The note belongs to the change (Nov 27 2026): sliding
+        // back onto silent is a change, so the note rises now.
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-silent"]'));
+        if (!ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note did not rise when the user changed Voice to silent");
         }
       }
     );
@@ -17145,7 +17256,7 @@ async function runHookCtaChecks() {
         if (!refreshEarly.textContent.includes("New options") || refreshEarly.textContent.includes("Buffet")) {
           throw new Error(`the Focus refresh reads "${refreshEarly.textContent}", expected the New options link (ADR 0325)`);
         }
-        await chooseOption(ctx, card.querySelector('[data-testid="hook-picks-focus"]'), OUTCOME);
+        await pickPairButton(ctx, "hook-picks-focus", OUTCOME);
         await clickEl(ctx, card.querySelector('[data-testid="hook-picks-tone-warm"]'));
         await clickEl(ctx, card.querySelector('[data-testid="hook-picks-shape-question"]'));
         await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
@@ -17178,64 +17289,63 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("the Focus pick opens in a centered pop-up, never a dropdown (ADR 0334)", async (ctx) => {
-    // Kasra's ruling (Nov 25 2026): the Focus dropdown stretched
-    // the full width of its section for one line of text, and its
-    // options are whole sentences read before choosing — so the
-    // pick wears the angle treatment (ADR 0330): a trigger showing
-    // the current choice with the pop-out icon, and the choices in
-    // a centered overlay, in full. Picking closes the pop-up.
+  await check("the Focus pick is the unified slider on HookSnap (Nov 27 2026)", async (ctx) => {
+    // Kasra's order (Nov 27 2026) supersedes ADR 0334's pop-up on
+    // this surface: the Focus pick wears the one groove slider
+    // like every other pick — the app's choice and the profile's
+    // standing outcome lines are its stops, the chosen line names
+    // itself under the track, and tapping a stop saves the pick
+    // through the same draft PATCH the pop-up's rows rode. The
+    // control's pop-up form stands only in its default rendering,
+    // which no page passes anymore.
     const OUTCOME = "Clearing the day's thoughts out loud";
     const fullProfile = {
       ...PROFILE,
       outcome_statements: [{ outcome: OUTCOME, from_feature: "Voice entries" }],
       desired_outcomes: ["Fall asleep without replaying the day"],
     };
+    const patches = [];
     await inHookCta(
       ctx,
       {
         getAppProfiles: async () => ({ profiles: [fullProfile] }),
         getAppProfile: async () => fullProfile,
         createHookCtaProject: async () => hookRow({ id: "hook-cta-1" }),
-        updateStudioProject: async (_id, patch) => hookRow({ id: "hook-cta-1", ...patch }),
+        updateStudioProject: async (_id, patch) => {
+          patches.push(patch);
+          return hookRow({ id: "hook-cta-1", ...patch });
+        },
       },
       "",
       async () => {
         const card = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
         if (!card) throw new Error("the Hook card did not render");
-        const trigger = card.querySelector('[data-testid="hook-picks-focus"]');
-        if (!trigger) throw new Error("the Focus trigger did not render");
-        if (trigger.getAttribute("aria-haspopup") === "listbox") {
-          throw new Error("the Focus pick is still a dropdown (ADR 0334)");
+        const group = card.querySelector('[data-testid="hook-picks-focus"]');
+        if (!group) throw new Error("the Focus pick did not render");
+        const slider = group.querySelector(".pick-slider");
+        if (!slider) throw new Error("the Focus pick does not wear the unified slider");
+        if (group.querySelector('[aria-haspopup="dialog"]')) {
+          throw new Error("the Focus pick still opens a pop-up on the slider page");
         }
         if (ctx.container.ownerDocument.querySelector('[data-testid="hook-picks-focus-popup"]')) {
-          throw new Error("the Focus pop-up stands open before the trigger is touched");
+          throw new Error("a Focus pop-up stands on the slider page");
         }
-        await clickEl(ctx, trigger);
-        const popup = ctx.container.ownerDocument.querySelector('[data-testid="hook-picks-focus-popup"]');
-        if (!popup) throw new Error("the Focus trigger did not open the pop-up");
-        const layer = popup.closest(".fixed");
-        if (!layer || !layer.classList.contains("inset-0") || !layer.classList.contains("z-[100]")) {
-          throw new Error("the Focus pop-up is not the centered overlay layer");
+        const stopValues = [...slider.querySelectorAll("button[data-value]")].map((b) => b.dataset.value);
+        if (!stopValues.includes("") || !stopValues.includes(OUTCOME)) {
+          throw new Error(`the Focus slider's stops are ${JSON.stringify(stopValues)} — the app's choice and the profile's lines belong there`);
         }
-        // ADR 0341: the Focus pop-up stands on the document body
-        // too, through the same portal as the angle pop-up.
-        if (layer.parentElement !== layer.ownerDocument.body) {
-          throw new Error("the Focus pop-up does not stand on the document body (ADR 0341)");
+        const value = slider.querySelector('[data-testid="hook-picks-focus-value"]');
+        if (!value || value.textContent.trim() !== "Let the app choose") {
+          throw new Error("the Focus slider does not name the app's choice under its track");
         }
-        // The Focus pop-up dims the screen with the same shared
-        // scrim as every pop-up (ADR 0335).
-        const focusBackdrop = layer.querySelector('button[aria-label="Close"]');
-        if (!focusBackdrop || !focusBackdrop.className.includes("pop-scrim")) {
-          throw new Error("the Focus pop-up does not dim the screen with the tour's scrim (ADR 0335)");
+        await pickPairButton(ctx, "hook-picks-focus", OUTCOME);
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        if (!patches.some((p) => p.hook_focus === OUTCOME)) {
+          throw new Error(`the Focus pick never saved from its slider: ${JSON.stringify(patches)}`);
         }
-        const rows = [...popup.querySelectorAll('[role="option"]')];
-        if (!rows.some((o) => o.dataset.value === OUTCOME)) {
-          throw new Error("the Focus pop-up does not offer the profile's outcome lines in full");
-        }
-        await clickEl(ctx, rows.find((o) => o.dataset.value === OUTCOME));
-        if (ctx.container.ownerDocument.querySelector('[data-testid="hook-picks-focus-popup"]')) {
-          throw new Error("the Focus pop-up stayed open after the pick");
+        const valueAfter = card.querySelector('[data-testid="hook-picks-focus-value"]');
+        if (!valueAfter || valueAfter.textContent.trim() !== OUTCOME) {
+          throw new Error("the Focus slider does not name the picked line under its track");
         }
       }
     );
@@ -17317,12 +17427,11 @@ async function runHookCtaChecks() {
       async () => {
         const card = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
         if (!card) throw new Error("the Hook card did not render");
-        const focusControl = card.querySelector('[data-testid="hook-picks-focus"]');
-        const before = await offeredOptionValues(ctx, focusControl);
+        const offeredFocusValues = () => [...card.querySelectorAll('[data-testid="hook-picks-focus"] button[data-value]')].map((b) => b.dataset.value);
+        const before = offeredFocusValues();
         if (before.includes(FRAGMENT)) {
           throw new Error("the fragment was offered as a focus line before the refresh (ADR 0307: a fragment is never offered)");
         }
-        await clickEl(ctx, focusControl);
         const refresh = card.querySelector('[data-testid="hook-picks-focus-refresh"]');
         if (!refresh) throw new Error("the Focus refresh control did not render");
         await clickEl(ctx, refresh);
@@ -17331,7 +17440,7 @@ async function runHookCtaChecks() {
         if (calls.length !== 1 || calls[0] !== PROFILE.id) {
           throw new Error(`the refresh called the endpoint ${JSON.stringify(calls)}, expected once for the profile`);
         }
-        const after = await offeredOptionValues(ctx, focusControl);
+        const after = offeredFocusValues();
         if (!after.includes(FRESH)) {
           throw new Error("the fresh outcome line is not offered after the refresh");
         }
@@ -17690,12 +17799,13 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("HookSnap's voice, place and wardrobe stand on one line, two buttons until New options (ADRs 0364-0365, trio)", async (ctx) => {
+  await check("HookSnap's voice, place and wardrobe stand on one line, two stops until New options (ADRs 0364-0365, trio)", async (ctx) => {
     // ADR 0364: the card takes Create's second pair — Location and
     // Wardrobe side by side, each heading wearing the GroupLabel
     // eyebrow with its own icon; the card subtitle and the
-    // apply-together sentence are gone; the voice note stays in
-    // both modes; and ADR 0361 lands on this page — a
+    // apply-together sentence are gone; the voice note rises
+    // only when the user changes Voice onto silent (Nov 27
+    // 2026); and ADR 0361 lands on this page — a
     // create-fresh silent project shows NO voice button picked
     // until a click earns it. ADR 0365: each direction field shows
     // TWO buttons by default; the full set stands only after New
@@ -17766,8 +17876,13 @@ async function runHookCtaChecks() {
         if (silentBtn.getAttribute("aria-pressed") === "true" || talkingBtn.getAttribute("aria-pressed") === "true") {
           throw new Error("a voice button stands picked on a fresh draft before any click (ADR 0364, landing ADR 0361 here)");
         }
+        if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the voice note stands before any change — it belongs to the change, not the standing state (Nov 27 2026)");
+        }
+        await clickEl(ctx, talkingBtn);
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-silent"]'));
         if (!ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the voice note is gone from HookSnap — it stays (ADR 0364)");
+          throw new Error("the voice note did not rise when the user changed Voice to silent (Nov 27 2026)");
         }
         const shownValues = (group) => [...group.querySelectorAll("button[data-value]")].map((b) => b.dataset.value);
         const locGroup = ctx.container.querySelector('[data-testid="hook-cta-location-direction"]');
@@ -19465,6 +19580,7 @@ async function runBrandSetupChecks() {
       // the exact manual path.
       let saved = { ...handTyped };
       let saves = 0;
+      const signals = watchSavedSignals();
       await withApi(
         {
           getActiveBrand: async () => saved,
@@ -19492,9 +19608,11 @@ async function runBrandSetupChecks() {
           await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
           if (saves !== 1) throw new Error(`the change did not autosave: ${saves} server saves`);
           if (saved.brand_name !== "Handmade Plus") throw new Error("the autosave did not carry the new name");
-          const status = ctx.container.querySelector('[data-testid="brand-autosave-status"]');
-          if (!status || !status.textContent.includes("All changes saved")) {
-            throw new Error("no saved confirmation after the autosave");
+          if (ctx.container.querySelector('[data-testid="brand-autosave-status"]')) {
+            throw new Error("save words still stand on the profile form — the saved signal is the chrome's green check now (Nov 27 2026)");
+          }
+          if (signals.count < 1) {
+            throw new Error("the autosave never signalled the chrome's saved check");
           }
           // A second change must schedule a second save, not reuse the first.
           await act(async () => {
@@ -19504,8 +19622,10 @@ async function runBrandSetupChecks() {
           await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
           if (saves !== 2) throw new Error(`a second change did not autosave: ${saves} server saves`);
           if (saved.brand_name !== "Handmade Pro") throw new Error("the second autosave did not carry the newer name");
+          if (signals.count < 2) throw new Error("the second autosave did not re-signal the saved check");
         }
       );
+      signals.stop();
     }
   );
 
@@ -22932,21 +23052,24 @@ async function runDemoCtaChecks() {
   );
 
   await check(
-    "swatches are fixed size and animation uses the app's chip",
+    "accent swatches stay fixed size and the editor's picks wear the unified slider",
     async () => {
       const src = fs.readFileSync(
         path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
         "utf8"
       );
-      // Two swatch groups: background and accent. Frame color was removed, so
-      // a third fixed-size group here means it came back. All 40px and fixed —
-      // a grid with `aspect-square` grew them with the settings column.
+      // One swatch group stands: the accent. The background pick
+      // wears the unified slider now (Nov 27 2026), and frame
+      // color was removed earlier, so a second fixed-size group
+      // here means one of them came back. All 40px and fixed —
+      // a grid with `aspect-square` grew them with the settings
+      // column.
       const fixed = (src.match(/h-10 w-10 shrink-0/g) || []).length;
-      if (fixed !== 2) {
+      if (fixed !== 1) {
         throw new Error(
-          `found ${fixed} fixed-40px swatch groups, expected exactly 2 (background ` +
-            "and accent). A third is either the removed frame color returning, or " +
-            "a stretchy grid replacing a fixed row."
+          `found ${fixed} fixed-40px swatch groups, expected exactly 1 (accent). ` +
+            "A second is either the removed frame color returning, the background " +
+            "swatches returning, or a stretchy grid replacing a fixed row."
         );
       }
       if (/aspect-square overflow-hidden rounded-lg/.test(src)) {
@@ -22975,18 +23098,16 @@ async function runDemoCtaChecks() {
             "which draws a white halo on this theme."
         );
       }
-      // Animation is a segmented choice, so it uses the app's own Chip.
-      if (!/import \{ Chip \} from "\.\.\/components\/Chip"/.test(src)) {
-        throw new Error(
-          "animation stopped using the app's Chip. It is a segmented choice, and " +
-            "the hand-rolled row of borderless text buttons was the deviation."
-        );
+      // The editor's pick-one groups wear the one unified slider
+      // (Kasra's order, Nov 27 2026): the second clip's style, the
+      // transition, the animation, the background and the
+      // environment all render through PickSlider, each keeping
+      // its own state field and values.
+      if (!/import \{ PickSlider \} from "\.\.\/components\/studio\/HookPicksControl"/.test(src)) {
+        throw new Error("the editor's picks stopped using the unified slider");
       }
-      if (!/aria-label="Animation"[\s\S]{0,200}?grid grid-cols-3 gap-1\.5 lg:grid-cols-2 xl:grid-cols-3/.test(src)) {
-        throw new Error(
-          "the animation chips are not 3-per-row with a 2-per-row guard for " +
-            "the narrow lg-xl column, where a third column wraps labels."
-        );
+      if ((src.match(/<PickSlider/g) || []).length < 5) {
+        throw new Error("one of the editor's five pick groups does not render the unified slider");
       }
       // Both entrance grids render through one shared EntranceGrid: pin the
       // contract as fragments — the 3-per-row class inside the component, one
@@ -24698,12 +24819,12 @@ async function runDemoCtaChecks() {
       global.__SMOKE_ROUTE_CHANGE = (to) => { global.__SMOKE_PARAMS = to.search; ctx.root.render(React.createElement(History)); };
       try {
       await mount(History)(ctx);
-      await chooseOption(ctx, ctx.container.querySelector('#history-status-filter'), "failed");
+      await clickEl(ctx, ctx.container.querySelector('#history-status-filter [data-value="failed"]'), "no failed status stop");
       await act(async () => pending[1].resolve({ generations: [{ ...COMPLETED, id: "latest", status: "failed", audience: "Night scrollers" }] }));
       await act(async () => pending[0].resolve({ generations: [{ ...COMPLETED, id: "stale", audience: "Night scrollers" }] }));
       if (!ctx.container.querySelector('#generation-latest') || ctx.container.querySelector('#generation-stale')) throw new Error("older request overwrote current filter");
-      await chooseOption(ctx, ctx.container.querySelector('#history-status-filter'), "completed");
-      await chooseOption(ctx, ctx.container.querySelector('#history-status-filter'), "archived");
+      await clickEl(ctx, ctx.container.querySelector('#history-status-filter [data-value="completed"]'), "no completed status stop");
+      await clickEl(ctx, ctx.container.querySelector('#history-status-filter [data-value="archived"]'), "no archived status stop");
       await act(async () => pending[3].resolve({ generations: [{ ...COMPLETED, id: "archived", status: "archived", audience: "Night scrollers" }] }));
       await act(async () => pending[2].reject(new Error("stale request failed")));
       expectAbsent(ctx, "stale request failed");
@@ -27493,8 +27614,11 @@ await check(
           throw new Error("the copy filter on its non-default side does not read as active");
         }
         const status = ctx.container.querySelector("#history-status-filter");
-        if (!status.className.includes("filter-control") || status.getAttribute("data-active") !== "true") {
+        if (status.getAttribute("data-active") !== "true") {
           throw new Error("a chosen status does not read as an active filter");
+        }
+        if (!status.querySelector(".pick-slider")) {
+          throw new Error("the status filter does not wear the unified slider (Nov 27 2026)");
         }
         const sort = ctx.container.querySelector('[data-testid="history-sort"]');
         if (!sort.className.includes("filter-control")) {
@@ -27524,12 +27648,13 @@ await check(
     }
   });
 
-  // The filter dropdowns are drawn by the app, not the OS (ADR 0162):
-  // opening one shows the app's own listbox, the current value reads
-  // selected inside it, and choosing another value applies the filter
-  // and closes the menu. A native select's open menu belongs to the
-  // browser, which is exactly what the founder could not see dressed.
-  await check("filter dropdowns open an app-drawn menu and choosing applies the filter", async (ctx) => {
+  // The sort menu is drawn by the app, not the OS (ADR 0162):
+  // opening it shows the app's own listbox. The status filter is
+  // the unified slider now (Nov 27 2026): its six standings are
+  // stops, the URL's status stands picked, and tapping another
+  // stop applies the filter — the URL param moves, exactly as
+  // the dropdown's choice did.
+  await check("the sort menu is app-drawn and the status slider applies its pick", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     const previousNavigations = global.__SMOKE_NAVIGATIONS;
@@ -27548,39 +27673,26 @@ await check(
         await mount(GenerationHistory)(ctx);
         const status = ctx.container.querySelector("#history-status-filter");
         if (!status) throw new Error("History lost the status filter");
-        if (status.tagName !== "BUTTON" || status.getAttribute("aria-haspopup") !== "listbox") {
-          throw new Error("the status filter is not the app-drawn dropdown button");
+        const statusSlider = status.querySelector(".pick-slider");
+        if (!statusSlider) throw new Error("the status filter does not wear the unified slider");
+        const stops = [...statusSlider.querySelectorAll("button[data-value]")];
+        if (stops.length !== 6) {
+          throw new Error(`the status slider carries ${stops.length} stops, not the six statuses`);
         }
-        if (status.getAttribute("aria-expanded") !== "false") {
-          throw new Error("the status menu starts open");
+        const chosen = stops.find((o) => o.dataset.value === "failed");
+        if (!chosen || chosen.getAttribute("aria-pressed") !== "true") {
+          throw new Error("the current status does not stand picked on its slider");
         }
-        await clickEl(ctx, status);
-        if (status.getAttribute("aria-expanded") !== "true") {
-          throw new Error("clicking the status filter did not open its menu");
+        if (stops.some((o) => o !== chosen && o.getAttribute("aria-pressed") === "true")) {
+          throw new Error("more than the current status stands picked");
         }
-        const menu = status.closest(".app-select")?.querySelector('[role="listbox"]');
-        if (!menu) throw new Error("the open status menu is not an app-drawn listbox");
-        const options = [...menu.querySelectorAll('[role="option"]')];
-        if (options.length !== 6) {
-          throw new Error(`the status menu lists ${options.length} options, not the six statuses`);
-        }
-        const chosen = options.find((o) => o.dataset.value === "failed");
-        if (!chosen || chosen.getAttribute("aria-selected") !== "true") {
-          throw new Error("the current status does not read selected in its own menu");
-        }
-        if (options.some((o) => o !== chosen && o.getAttribute("aria-selected") === "true")) {
-          throw new Error("more than the current status reads selected");
-        }
-        // Choosing a different status applies the filter — the URL param
-        // moves — and the menu closes behind the choice.
-        const completed = options.find((o) => o.dataset.value === "completed");
+        // Tapping a different stop applies the filter — the URL
+        // param moves, exactly as the dropdown's choice did.
+        const completed = stops.find((o) => o.dataset.value === "completed");
         await clickEl(ctx, completed);
         const went = (global.__SMOKE_NAVIGATIONS || []).map((to) => (to && to.search) || "");
         if (!went.some((search) => new URLSearchParams(search).get("status") === "completed")) {
           throw new Error(`choosing a status did not navigate the status param: ${JSON.stringify(went)}`);
-        }
-        if (status.getAttribute("aria-expanded") !== "false" || ctx.container.querySelector('[role="listbox"]')) {
-          throw new Error("the status menu stayed open after a choice");
         }
         // The keyboard opens and closes a menu too: ArrowDown opens the
         // sort menu, Escape closes it without changing anything.
@@ -27621,7 +27733,12 @@ await check(
     const generations = [withCopy, { ...COMPLETED, id: "sec-without" }];
     const previousParams = global.__SMOKE_PARAMS;
     const previousNavigations = global.__SMOKE_NAVIGATIONS;
+    const previousRouteChange = global.__SMOKE_ROUTE_CHANGE;
     global.__SMOKE_NAVIGATIONS = [];
+    // The slider walk below needs the route change applied, the
+    // way the stale-filter check installs it: a stop only fires
+    // for a value the page does not already stand on.
+    global.__SMOKE_ROUTE_CHANGE = (to) => { global.__SMOKE_PARAMS = to.search; ctx.root.render(React.createElement(GenerationHistory)); };
     try {
       await withApi({
         getGenerationHistory: async () => ({ generations }),
@@ -27652,9 +27769,14 @@ await check(
         }
         // The filter control is URL-owned: picking a side navigates the
         // copy param, so back/forward agree with the section on screen.
+        // The page already stands on the with-copy side, and a slider
+        // stop standing picked does not re-fire (the knob's rule), so
+        // the walk goes to the other side and back.
         const filter = ctx.container.querySelector('#history-copy-filter');
         if (!filter) throw new Error("History lost the copy/context filter");
-        await chooseOption(ctx, filter, "with");
+        await clickEl(ctx, filter.querySelector('[data-value="without"]'), "no without-copy stop on the copy slider");
+        const filterBack = ctx.container.querySelector('#history-copy-filter');
+        await clickEl(ctx, filterBack.querySelector('[data-value="with"]'), "no with-copy stop on the copy slider");
         const went = (global.__SMOKE_NAVIGATIONS || []).map((to) => (to && to.search) || "");
         if (!went.some((search) => new URLSearchParams(search).get("copy") === "with")) {
           throw new Error(`the copy filter did not navigate the copy param: ${JSON.stringify(went)}`);
@@ -27680,6 +27802,7 @@ await check(
         }
       });
     } finally {
+      global.__SMOKE_ROUTE_CHANGE = previousRouteChange;
       global.__SMOKE_PARAMS = previousParams;
       global.__SMOKE_NAVIGATIONS = previousNavigations;
     }
@@ -27837,17 +27960,26 @@ await check(
         if (toggle.getAttribute('aria-expanded') !== 'true' || filters.dataset.expanded !== 'true' || !filters.querySelector('#history-status-filter')) {
           throw new Error('mobile filters must open to expose the current status filter');
         }
-        // Every filter control on this bar is a chip, and a chip is a thumb
-        // target on a phone: the shared pill-select class and the toggle must
-        // both carry the coarse-pointer rule, or half the bar stays 32px.
+        // Every chip control on this bar is a thumb target on a
+        // phone: the shared pill-select class and the toggle must
+        // both carry the coarse-pointer rule, or half the bar
+        // stays 32px. The copy and status filters wear the
+        // unified slider now (Nov 27 2026), not chips — their
+        // seat in the opened row is the slider itself.
         for (const el of [
           toggle,
           ctx.container.querySelector('#history-search'),
-          ctx.container.querySelector('#history-copy-filter'),
-          filters.querySelector('#history-status-filter'),
         ]) {
           if (!el || !el.className.includes('tap-chip')) {
             throw new Error('a History filter control lost its coarse-pointer tap target');
+          }
+        }
+        for (const el of [
+          ctx.container.querySelector('#history-copy-filter'),
+          filters.querySelector('#history-status-filter'),
+        ]) {
+          if (!el || !el.querySelector('.pick-slider')) {
+            throw new Error('a History filter no longer wears the unified slider');
           }
         }
         // The rule itself lives once, in index.css, and the shared components
@@ -28756,6 +28888,19 @@ async function pickPairButton(ctx, testId, value) {
   const button = group.querySelector(`[data-value="${value}"]`);
   if (!button) throw new Error(`the ${testId} pair does not show ${value}`);
   await clickEl(ctx, button, `pick ${value} in ${testId}`);
+}
+
+// The autosave signal (Nov 27 2026): a completed autosave anywhere
+// on the page fires this window event, and the one green check in
+// the top chrome listens for it. A check counts the firings to
+// prove the save reached the chrome — and that every save fires
+// again, never a one-time static state.
+function watchSavedSignals() {
+  const state = { count: 0 };
+  const handler = () => { state.count += 1; };
+  dom.window.addEventListener("hookforge:autosaved", handler);
+  state.stop = () => dom.window.removeEventListener("hookforge:autosaved", handler);
+  return state;
 }
 
 async function offeredOptionValues(ctx, control) {

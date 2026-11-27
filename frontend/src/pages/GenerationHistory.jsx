@@ -18,6 +18,7 @@ import { HistoryEmptyArt } from "../components/EmptyStateArt";
 import { StatusBadge } from "../components/StatusBadge";
 import { AppPicker, PILL_SELECT_CLASS } from "../components/AppPicker";
 import { AppSelect } from "../components/AppSelect";
+import { PickSlider } from "../components/studio/HookPicksControl";
 import { GroupLabel, SectionHeading } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
@@ -1491,12 +1492,24 @@ export default function GenerationHistory() {
             className={PILL_SELECT_CLASS}
           />
           <label className="sr-only" htmlFor="history-copy-filter">Filter by post copy and plan context</label>
-          <AppSelect id="history-copy-filter" value={effectiveCopy} onChange={(value) => setFilter("copy", value)}
-            ariaLabel="Filter by post copy and plan context" testId="history-copy-filter" dataActive={effectiveCopy === "without"} className={PILL_SELECT_CLASS}
-            options={[
-              { value: "with", label: "With post copy & context" },
-              { value: "without", label: "Without post copy & context" },
-            ]} />
+          {/* The unified slider (Kasra's order, Nov 27 2026): the
+              copy filter is a pick-one-of-two, so it wears the one
+              groove face, writing the same filter value the
+              dropdown wrote. The sort beside it stays a dropdown —
+              it is a true sort, not a filter pick. */}
+          <div id="history-copy-filter" data-testid="history-copy-filter" data-value={effectiveCopy}
+            data-active={effectiveCopy === "without" ? "true" : undefined}>
+            <PickSlider
+              options={[
+                { value: "with", label: "With post copy & context" },
+                { value: "without", label: "Without post copy & context" },
+              ]}
+              current={effectiveCopy}
+              onChange={(value) => setFilter("copy", value)}
+              testId="history-copy-filter"
+              ariaLabel="Filter by post copy and plan context"
+            />
+          </div>
           <button type="button" className="history-more-filters pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold"
             data-active={(profileFilter || statusFilter || sort !== "newest") ? "true" : undefined}
             aria-expanded={moreFiltersOpen} aria-controls="history-secondary-filters" onClick={() => setMoreFiltersOpen((open) => !open)}>
@@ -1517,20 +1530,25 @@ export default function GenerationHistory() {
               ariaLabel="Filter by app"
             />
             <label className="sr-only" htmlFor="history-status-filter">Filter by status</label>
-            <AppSelect
-              id="history-status-filter"
-              value={statusFilter}
-              onChange={(value) => setFilter("status", value)}
-              ariaLabel="Filter by status"
-              dataActive={Boolean(statusFilter)}
-              className={PILL_SELECT_CLASS}
-              options={[
-                { value: "", label: "All statuses" },
-                ...["completed", "failed", "generating", "submitted", "archived"].map((s) => (
-                  { value: s, label: humanize(s) }
-                )),
-              ]}
-            />
+            {/* The unified slider (Kasra's order, Nov 27 2026): the
+                status filter's six standings are the slider's
+                stops, writing the same filter value the dropdown
+                wrote. */}
+            <div id="history-status-filter" data-value={statusFilter}
+              data-active={statusFilter ? "true" : undefined}>
+              <PickSlider
+                options={[
+                  { value: "", label: "All statuses" },
+                  ...["completed", "failed", "generating", "submitted", "archived"].map((s) => (
+                    { value: s, label: humanize(s) }
+                  )),
+                ]}
+                current={statusFilter}
+                onChange={(value) => setFilter("status", value)}
+                testId="history-status-filter"
+                ariaLabel="Filter by status"
+              />
+            </div>
             <label className="sr-only" htmlFor="history-sort">Sort history</label>
             <AppSelect
               id="history-sort"

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Mic } from "lucide-react";
 import { Button } from "../ui/button";
 import { GroupLabel } from "../SectionCard";
@@ -26,11 +27,13 @@ import { PickSlider } from "./HookPicksControl";
  * show as picked, separately from the mode `value` the note names
  * (ADR 0361: Create passes "" while a project stands on its
  * defaults, so no button reads as chosen before a click).
- * When silence is picked the note below the pills is part of the
- * feature, not decoration: it tells the founder the character will
- * be silent and names the exact text to paste into TikTok's
- * text-to-speech so TikTok voices the post — the line itself, shown
- * verbatim once it exists. Talking mode carries no line of its own
+ * When the user changes the pick onto silence the note below is
+ * part of the feature, not decoration: it tells the founder the
+ * character will be silent and names the exact text to paste into
+ * TikTok's text-to-speech so TikTok voices the post — the line
+ * itself, shown verbatim once it exists. The note belongs to the
+ * change, never to a standing saved pick (Kasra's order, Nov 27
+ * 2026). Talking mode carries no line of its own
  * (Nov 27 2026: the descriptive sentence that stood under the pills
  * in talking mode is removed whole). A caller may pass `hideNote`
  * to stand the pills without the silent note (ADR 0362: Create's
@@ -53,6 +56,19 @@ export default function VoiceModeControl({
   testId = "voice-mode",
   asSlider = false,
 }) {
+  // The silent note belongs to the change, not to the standing
+  // state (Kasra's order, Nov 27 2026): it renders only after the
+  // user changes this control during this page session and lands
+  // on silent. A saved silent pick standing on the page shows no
+  // note on its own; sliding to silent brings the note up, and
+  // sliding back to talking takes it away. The record of the
+  // change is local interaction state, never derived from the
+  // saved value alone.
+  const [changedTo, setChangedTo] = useState(null);
+  const reportChange = (next) => {
+    setChangedTo(next);
+    onChange?.(next);
+  };
   const current = value === "talking" ? "talking" : "silent";
   // Which choice the buttons may show as picked (ADR 0361): a
   // caller that tracks picks separately from the effective mode
@@ -68,22 +84,23 @@ export default function VoiceModeControl({
     // the container's one line, nothing centered.
     <div className="space-y-2">
       <GroupLabel icon={Mic}>Voice</GroupLabel>
-      {/* The pick wears the resolution treatment (ADR 0331): the
-          shared Button in a thumb-pair row, brand and
-          thumb-selected on the pick, as the 480p / 768p row stands.
-          The slider form (Kasra's order, Nov 27 2026) supersedes
-          the row on the HookSnap surface only: a host passing
-          asSlider gets the same two choices as a drag slider —
-          the knob resting on the mode that will render while no
-          pick stands (ADR 0361's unpicked state, restValue), a
-          click or drag earning the pick exactly as a pill click
-          does (ADR 0373's repair rides the same onChange). */}
+      {/* The pick wears the resolution treatment (ADR 0331) in its
+          default form: the shared Button in a thumb-pair row, brand
+          and thumb-selected on the pick. The slider form (Kasra's
+          order, Nov 27 2026) supersedes the row wherever a host
+          passes asSlider — HookSnap first, then Create too, when
+          the unified toggle spread app-wide: the same two choices
+          as the one groove slider, the knob resting on the mode
+          that will render while no pick stands (ADR 0361's
+          unpicked state, restValue), a click or drag earning the
+          pick exactly as a pill click does (ADR 0373's repair
+          rides the same onChange). */}
       {asSlider ? (
         <PickSlider
           options={OPTIONS}
           current={pickedCurrent}
           restValue={current}
-          onChange={onChange}
+          onChange={reportChange}
           disabled={disabled}
           testId={testId}
           ariaLabel="Presenter voice"
@@ -100,7 +117,7 @@ export default function VoiceModeControl({
                 variant={picked ? "brand" : "secondary"}
                 aria-pressed={picked}
                 disabled={disabled}
-                onClick={() => onChange?.(option.value)}
+                onClick={() => reportChange(option.value)}
                 data-testid={`${testId}-${option.value}`}
                 className={`tap-chip option-btn ${picked ? "thumb-selected" : ""}`}
               >
@@ -115,8 +132,11 @@ export default function VoiceModeControl({
           stood there is removed whole, on every caller. The silent
           note below is a different line in a different role (it
           hands over the exact text for TikTok's text-to-speech)
-          and stays, in silent mode only. */}
-      {!hideNote && current === "silent" && (
+          and stays — but only once the user changes this control
+          onto silent in this session: a standing saved pick shows
+          no note on load, sliding to silent brings it up, and
+          sliding back takes it away. */}
+      {!hideNote && current === "silent" && changedTo === "silent" && (
         <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-silent-note`}>
           The character stays silent in this video — no voice, and the mouth never moves.
           For a voice on TikTok, paste this line into TikTok&rsquo;s text-to-speech:{" "}

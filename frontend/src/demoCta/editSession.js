@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { writeDraft } from "./draftStorage";
+import { signalSaved } from "../lib/saveSignal";
 
 // Blob identities are represented by each source's id; JSON omits their bytes.
 const keyOf = (edit) => JSON.stringify(edit);
@@ -26,7 +27,7 @@ export function useEditSession({ draftKey, snapshot, restore, enabled }) {
     // Serialize writes so a slow save can never overwrite a newer document.
     queue.current = queue.current.catch(() => {}).then(() => writeDraft(draftKey, edit));
     return queue.current.then(() => {
-      if (mounted.current && keyOf(edit) === keyOf(latest.current)) setSaveStatus("Draft saved on this device");
+      if (mounted.current && keyOf(edit) === keyOf(latest.current)) { setSaveStatus(""); signalSaved(); }
     }, () => {
       dirty.current = true;
       if (mounted.current) setSaveStatus("Draft not saved. Browser storage may be full; retry or free space.");

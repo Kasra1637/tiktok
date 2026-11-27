@@ -170,17 +170,19 @@ export function PickPills({ options, current, onChange, disabled, testId, ariaLa
   );
 }
 
-// The drag slider (Kasra's order, Nov 27 2026, from his approved
-// mockups): one track per pick, the stops as dots on it, a round
-// knob on the current stop branded in the app's own selection
-// tokens (the indigo family and its glow — coral never carries
-// selection), the current pick's name stated under the knob, and a
-// faint line under the slider naming every stop, so a founder sees
-// what sliding reveals before touching it. Dragging is never the
-// only way: every stop dot and every name in the faint line is
-// tappable, and the knob itself is a keyboard slider. HookSnap
-// renders its picks this way; the control's default rendering
-// stays the pill rows above, byte-identical.
+// The one unified pick slider (Kasra's order, Nov 27 2026, from
+// his approved mockups): every pick-one-of-a-few control in the
+// app wears this face. The track is a shallow groove at one fixed
+// width the component sets, a dot stands at each stop, the groove
+// fills with the brand tint up to the knob, and the knob is a
+// short pill branded in the app's own selection tokens (the
+// indigo family and its glow — coral never carries selection)
+// with grip lines, so it reads as a handle. Under the track ONLY
+// the current pick's name stands, in the bigger bold font: there
+// is no row naming every stop, and no smaller second line
+// repeating the pick — the other stops reveal themselves on the
+// change itself. Dragging is never the only way: every stop dot
+// is tappable, and the knob itself is a keyboard slider.
 export function PickSlider({ options, current, onChange, disabled, testId, ariaLabel, restValue, restLabel }) {
   const trackRef = useRef(null);
   const found = options.findIndex((option) => option.value === current);
@@ -192,7 +194,12 @@ export function PickSlider({ options, current, onChange, disabled, testId, ariaL
   // or the rest stop's own name.
   const restFound = options.findIndex((option) => option.value === restValue);
   const index = found >= 0 ? found : restFound >= 0 ? restFound : 0;
-  const pct = options.length > 1 ? (index / (options.length - 1)) * 100 : 0;
+  const ratio = options.length > 1 ? index / (options.length - 1) : 0;
+  // The knob travels inside the groove: its center runs from half
+  // its own width (1.75rem) to the same inset at the far end, and
+  // the stop dots and the fill share that travel, so the knob
+  // lands exactly on its stop at every seat.
+  const seatLeft = (r) => `calc(0.875rem + ${r} * (100% - 1.75rem))`;
   const valueLabel = found >= 0
     ? options[found].label
     : restLabel ?? (restFound >= 0 ? options[restFound].label : "");
@@ -205,8 +212,12 @@ export function PickSlider({ options, current, onChange, disabled, testId, ariaL
     if (!el) return index;
     const rect = el.getBoundingClientRect();
     if (!rect.width) return index;
-    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    return Math.round(ratio * (options.length - 1));
+    // The knob's travel insets 14px (half the knob) at each end of
+    // the groove; pointer positions map across that same travel.
+    const travel = rect.width - 28;
+    const raw = travel > 0 ? (clientX - rect.left - 14) / travel : 0;
+    const clamped = Math.min(1, Math.max(0, raw));
+    return Math.round(clamped * (options.length - 1));
   };
   const onPointerDown = (event) => {
     if (disabled) return;
@@ -241,13 +252,13 @@ export function PickSlider({ options, current, onChange, disabled, testId, ariaL
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
       >
-        <div className="pick-slider-rail" aria-hidden="true" />
+        <div className="pick-slider-fill" style={{ width: seatLeft(ratio) }} aria-hidden="true" />
         {options.map((option, i) => (
           <button
             key={option.value || "auto"}
             type="button"
             className="pick-slider-stop"
-            style={{ left: `${options.length > 1 ? (i / (options.length - 1)) * 100 : 0}%` }}
+            style={{ left: seatLeft(options.length > 1 ? i / (options.length - 1) : 0) }}
             aria-label={option.label}
             aria-pressed={i === found}
             disabled={disabled}
@@ -258,7 +269,7 @@ export function PickSlider({ options, current, onChange, disabled, testId, ariaL
         ))}
         <div
           className="pick-slider-knob"
-          style={{ left: `${pct}%` }}
+          style={{ left: seatLeft(ratio) }}
           role="slider"
           tabIndex={disabled ? -1 : 0}
           aria-label={ariaLabel}
@@ -268,33 +279,14 @@ export function PickSlider({ options, current, onChange, disabled, testId, ariaL
           aria-valuetext={valueLabel}
           onKeyDown={onKnobKeyDown}
           data-testid={`${testId}-knob`}
-        />
-      </div>
-      <div className="pick-slider-value-row" aria-hidden="true">
-        <span
-          className="pick-slider-value"
-          style={{
-            left: `${pct}%`,
-            transform: `translateX(${index === 0 ? "0" : index === options.length - 1 ? "-100%" : "-50%"})`,
-          }}
-          data-testid={`${testId}-value`}
         >
-          {valueLabel}
-        </span>
+          <span aria-hidden="true" />
+          <span aria-hidden="true" />
+          <span aria-hidden="true" />
+        </div>
       </div>
-      <div className="pick-slider-names" data-testid={`${testId}-names`}>
-        {options.map((option, i) => (
-          <button
-            key={option.value || "auto"}
-            type="button"
-            className={`pick-slider-name ${i === found ? "is-current" : ""}`}
-            disabled={disabled}
-            onClick={() => jump(i)}
-            data-testid={`${testId}-name-${option.value || "auto"}`}
-          >
-            {option.label}
-          </button>
-        ))}
+      <div className="pick-slider-value" data-testid={`${testId}-value`}>
+        {valueLabel}
       </div>
     </div>
   );
@@ -402,6 +394,26 @@ export default function HookPicksControl({
             </button>
           )}
         </div>
+        {picksAsSliders ? (
+          // The unified slider form (Kasra's order, Nov 27 2026):
+          // on the slider surface the Focus pick wears the same
+          // groove face as every other pick — the app's choice and
+          // the profile's standing lines are its stops, the chosen
+          // line names itself under the track, and the refresh
+          // beside the label above keeps its seat. The pop-up form
+          // below stands only where the host does not pass
+          // picksAsSliders.
+          <div data-testid={`${testId}-focus`}>
+            <PickSlider
+              options={focusRows}
+              current={focusValue}
+              onChange={onFocusChange}
+              disabled={disabled}
+              testId={`${testId}-focus`}
+              ariaLabel="Focus"
+            />
+          </div>
+        ) : (
         <div>
           <button
             type="button"
@@ -478,6 +490,7 @@ export default function HookPicksControl({
             document.body
           )}
         </div>
+        )}
         {focusStale && !hasHook && (
           <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-focus-stale-note`}>
             {focusRefreshAsLink

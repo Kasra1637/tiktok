@@ -34,13 +34,17 @@ describe("VoiceModeControl", () => {
     await view.unmount();
   });
 
-  test("an explicitly unpicked face marks no choice while the note follows the mode", async () => {
+  test("an explicitly unpicked face marks no choice and the note waits for a change", async () => {
     // ADR 0361: Create passes pickedValue="" for a project standing
-    // on its defaults — no button is pressed, and the note still
-    // names the mode that will render.
+    // on its defaults — no button is pressed. The note belongs to
+    // the change, not the standing state (Kasra's order, Nov 27
+    // 2026): a saved silent mode standing untouched shows no note;
+    // the note rises when the user changes onto silent.
     const view = await mount({ value: "silent", pickedValue: "" });
     expect(view.q("voice-mode-talking").getAttribute("aria-pressed")).toBe("false");
     expect(view.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("false");
+    expect(view.q("voice-mode-silent-note")).toBeNull();
+    await act(async () => { view.q("voice-mode-silent").click(); });
     expect(view.q("voice-mode-silent-note")).not.toBeNull();
     await view.unmount();
   });
@@ -51,7 +55,8 @@ describe("VoiceModeControl", () => {
     // faces are untouched, and the silent note does not render.
     // Talking mode carries no line of its own at all (Nov 27
     // 2026). A caller that passes nothing (HookSnap) keeps the
-    // silent note, as the cases above and below pin.
+    // silent note for the change onto silent, as the cases above
+    // and below pin.
     const silent = await mount({ value: "silent", hideNote: true, silentText: "A line." });
     expect(silent.q("voice-mode-silent-note")).toBeNull();
     expect(silent.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("true");
@@ -84,6 +89,10 @@ describe("VoiceModeControl", () => {
       silentText: "I'm trying to clear my head before bed but my thoughts race.",
       silentTextName: "the hook line",
     });
+    // The standing silent pick shows no note; changing onto
+    // silent raises it.
+    expect(view.q("voice-mode-silent-note")).toBeNull();
+    await act(async () => { view.q("voice-mode-silent").click(); });
     const note = view.q("voice-mode-silent-note");
     expect(note).not.toBeNull();
     expect(note.textContent).toContain("The character stays silent in this video");
@@ -94,6 +103,7 @@ describe("VoiceModeControl", () => {
 
   test("the silent note before any line exists names what will show", async () => {
     const view = await mount({ value: "silent", silentText: "", silentTextName: "the hook line" });
+    await act(async () => { view.q("voice-mode-silent").click(); });
     const note = view.q("voice-mode-silent-note");
     expect(note).not.toBeNull();
     expect(note.textContent).toContain("The hook line will appear here once it is written.");
@@ -104,7 +114,9 @@ describe("VoiceModeControl", () => {
     // Nov 27 2026 (Kasra's order): HookSnap passes asSlider — the
     // two choices stand as slider stops. Unpicked (ADR 0361), no
     // stop is pressed, the knob rests on the mode that will
-    // render, its name stands under the knob, and the note stays.
+    // render, and its name stands under the track. The note does
+    // not stand for the standing pick — it rises only when the
+    // user changes onto silent (later Nov 27 2026).
     const view = await mount({ value: "silent", pickedValue: "", asSlider: true });
     expect(view.q("voice-mode-slider")).not.toBeNull();
     const knob = view.q("voice-mode-knob");
@@ -114,9 +126,11 @@ describe("VoiceModeControl", () => {
     expect(view.q("voice-mode-talking").getAttribute("aria-pressed")).toBe("false");
     expect(view.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("false");
     expect(view.q("voice-mode-value").textContent).toBe("Character stays silent");
-    expect(view.q("voice-mode-silent-note")).not.toBeNull();
+    expect(view.q("voice-mode-silent-note")).toBeNull();
     await act(async () => { view.q("voice-mode-talking").click(); });
     expect(view.onChange).toHaveBeenCalledWith("talking");
+    await act(async () => { view.q("voice-mode-silent").click(); });
+    expect(view.q("voice-mode-silent-note")).not.toBeNull();
     await view.unmount();
   });
 

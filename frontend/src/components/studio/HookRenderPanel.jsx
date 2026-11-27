@@ -6,6 +6,7 @@ import { StatusBadge } from "../StatusBadge";
 import { Alert, AlertTitle, AlertDescription } from "../ui/alert";
 import { CONTROL_CLASS } from "../formControls";
 import { GroupLabel } from "../SectionCard";
+import { PickSlider } from "./HookPicksControl";
 import { GenerateAnotherConfirmDialog } from "./GenerateAnotherConfirmDialog";
 import PlatformPreview from "./PlatformPreview";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl, durableMediaUrl } from "../../lib/api";
@@ -478,45 +479,39 @@ export default function HookRenderPanel({
         // ADR 0329: no model dropdown — HeyGen Video is the only
         // model (ADR 0327), so there is nothing to pick; the panel
         // still resolves the model it renders on. The resolution
-        // stands side by side in the History verdict buttons' design
-        // when the model offers a choice beside its default.
+        // wears the one unified slider when the model offers a
+        // choice beside its default.
         <div className="space-y-2">
           {(capability?.supported_resolutions || []).some((r) => r !== capability?.resolution) && (
             <div className="space-y-2">
               <GroupLabel icon={Monitor}>Resolution</GroupLabel>
-              <div className="thumb-pair flex flex-wrap items-center gap-2" role="group" aria-label="Resolution" data-testid="hook-gen-resolution">
-                {[capability.resolution, ...(capability.supported_resolutions || []).filter((r) => r !== capability.resolution)].map((r) => {
-                  const isDefault = r === capability.resolution;
-                  const picked = isDefault
-                    ? !selectedResolution || selectedResolution === r
-                    : selectedResolution === r;
-                  return (
-                    <Button
-                      key={r}
-                      type="button"
-                      variant={picked ? "brand" : "secondary"}
-                      size="sm"
-                      className={`tap-chip option-btn${picked ? " thumb-selected" : ""}`}
-                      aria-pressed={picked}
-                      data-testid={`hook-gen-resolution-${r}`}
-                      disabled={Boolean(inFlight)}
-                      onClick={() => {
-                        const next = isDefault ? "" : r;
-                        setSelectedResolution(next);
-                        try {
-                          if (projectId) {
-                            if (next) window.localStorage.setItem(resolutionStorageKey(projectId), next);
-                            else window.localStorage.removeItem(resolutionStorageKey(projectId));
-                          }
-                        } catch {
-                          /* a choice that does not persist is still a choice for this render */
-                        }
-                      }}
-                    >
-                      {r}
-                    </Button>
-                  );
-                })}
+              {/* The unified slider (Kasra's order, Nov 27 2026): the
+                  model's own resolution stands first and stays the
+                  default — the slider's standing value is the
+                  override or, with none, the default itself, and
+                  picking the default stop clears the override
+                  exactly as its button did. */}
+              <div data-testid="hook-gen-resolution" data-value={selectedResolution || capability.resolution}>
+                <PickSlider
+                  options={[capability.resolution, ...(capability.supported_resolutions || []).filter((r) => r !== capability.resolution)]
+                    .map((r) => ({ value: r, label: r }))}
+                  current={selectedResolution || capability.resolution}
+                  onChange={(r) => {
+                    const next = r === capability.resolution ? "" : r;
+                    setSelectedResolution(next);
+                    try {
+                      if (projectId) {
+                        if (next) window.localStorage.setItem(resolutionStorageKey(projectId), next);
+                        else window.localStorage.removeItem(resolutionStorageKey(projectId));
+                      }
+                    } catch {
+                      /* a choice that does not persist is still a choice for this render */
+                    }
+                  }}
+                  disabled={Boolean(inFlight)}
+                  testId="hook-gen-resolution"
+                  ariaLabel="Resolution"
+                />
               </div>
             </div>
           )}

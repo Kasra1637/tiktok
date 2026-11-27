@@ -32,6 +32,7 @@ import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { useWizardDirections } from "./useWizardDirections";
 import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
 import { api, getErrorMessage } from "../lib/api";
+import { signalSaved } from "../lib/saveSignal";
 import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { sentenceCase } from "../lib/copyCase";
 import {
@@ -69,7 +70,8 @@ import {
  * background once an app is picked (a draft calls no model — ADR
  * 0122's click-to-generate rule is about generation, and nothing here
  * generates), and later changes ride the ~1-second debounced,
- * validated server PATCH behind the "All changes saved" line. No
+ * validated server PATCH, each completion signalled by the one
+ * green check in the top chrome (Nov 27 2026). No
  * mark-ready call follows it: the hook has no ready gate — its
  * readiness is its line, and the render panel below says so.
  */
@@ -226,7 +228,7 @@ export default function HookCta() {
       return false;
     }
     dispatch({ type: "draft-opened", project: opened });
-    setSaveStatus("All changes saved");
+    signalSaved();
     return true;
   }, []);
 
@@ -341,7 +343,7 @@ export default function HookCta() {
         });
         if (cancelled) return;
         dispatch({ type: "project-received", project: created });
-        setSaveStatus("All changes saved");
+        signalSaved();
       } catch (err) {
         if (!cancelled) setError(getErrorMessage(err));
       }
@@ -357,17 +359,19 @@ export default function HookCta() {
 
   // Autosave: save ~1s after the last pick change, through the same
   // validated PATCH every draft edit rides. Silent saves never block
-  // the pickers — the status line narrates them instead.
+  // the pickers — the chrome's green check signals each
+  // completed save instead, and a failure names itself beside
+  // the app picker.
   const savePicks = useCallback(async () => {
     if (!project) return;
     const savedEdits = { ...edits };
     if (!Object.keys(savedEdits).length) return;
     setAutosaving(true);
-    setSaveStatus("Saving…");
     try {
       const updated = await api.updateStudioProject(project.id, savedEdits);
       dispatch({ type: "picks-saved", project: updated, savedEdits });
-      setSaveStatus("All changes saved");
+      setSaveStatus("");
+      signalSaved();
     } catch (err) {
       setSaveStatus(`Could not autosave: ${getErrorMessage(err)}`);
     } finally {
@@ -542,7 +546,7 @@ export default function HookCta() {
       });
       dispatch({ type: "project-received", project: hooked });
       setPicksStale(false);
-      setSaveStatus("All changes saved");
+      signalSaved();
     } catch (err) {
       setHookError(getErrorMessage(err));
     } finally {
@@ -720,11 +724,13 @@ export default function HookCta() {
               <p className="text-sm text-muted-foreground" data-subtitle="">
                 Pick an approved app to start a fresh hook.
               </p>
-              {/* The pick and its save status share one row (ADR
-                  0359): the status used to stand alone under the
-                  card's wider rhythm, a full row of height for a
-                  whisper of text, and the card read as mostly air
-                  spread over four stacked rows. */}
+              {/* The pick stands alone in its row now (Nov 27 2026,
+                  Kasra's order, superseding ADR 0359's shared row):
+                  the autosave's saved signal is the one green check
+                  in the top chrome, and no save words stand on the
+                  page. A failed autosave still names itself here —
+                  a failure is not a status whisper, and a silent one
+                  would read as saved work that never landed. */}
               <div className="flex flex-wrap items-center gap-3">
                 <AppPicker
                   profiles={approved}
@@ -733,11 +739,11 @@ export default function HookCta() {
                   placeholder="Choose an app"
                   testId="hook-cta-app-picker"
                 />
-                {(project || saveStatus) && (
+                {saveStatus && (
                   <p
-                    role="status"
+                    role="alert"
                     data-testid="hook-cta-autosave-status"
-                    className="text-sm text-muted-foreground"
+                    className="text-sm text-destructive-text"
                   >
                     {saveStatus}
                   </p>

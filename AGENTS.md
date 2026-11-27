@@ -235,11 +235,27 @@ One render path, single-pass video generation via OpenRouter.
   nothing — every existing hook rule stands.
 - Direction groups as sliders (Nov 27 2026, Kasra's order): HookSnap's trio
   groups wear the same slider (`asSlider` on VoiceModeControl and
-  DirectionSelect; Create keeps the pills) — Voice's two choices are the
+  DirectionSelect; Create converted too by the unified spread below) —
+  Voice's two choices are the
   stops (the knob rests on the standing mode while no pick stands, ADR
   0361), Location and Wardrobe carry their two standing picks as stops
   (ADR 0365's last-seat rule included), and New options still reveals the
   full set as pills.
+- The unified toggle + the saved check (Nov 27 2026, Kasra's order): every
+  pick-one-of-a-few control wears the one PickSlider groove — a fixed-width
+  track, a dot per stop, the indigo grip-pill knob, a tint fill to the knob,
+  and only the current pick's name under it (no stop-names row, no smaller
+  duplicate line). It stands on HookSnap (Focus included — the pop-up form
+  stands only in the control's unused default rendering), Create's Camera
+  setup and direction section, both render panels' resolution (768p still
+  the default value), the Demo + CTA editor's five pick groups, and
+  History's copy and status filters; the sort stays a dropdown and the
+  verdict thumbs stay. A setting's note (the Voice silent note) shows only
+  after the user changes that slider this session, never for a standing
+  pick. Autosave writes no words anywhere: each completed save fires
+  `signalSaved()` and the one green check in the top chrome
+  (SaveSavedIndicator) remounts and pulses anew; a failed autosave still
+  names itself in the old seats.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no
