@@ -1279,7 +1279,12 @@ async function main() {
       if (!picked || picked.getAttribute("aria-pressed") !== "true") {
         throw new Error("the picked angle does not read as picked");
       }
-      await openStep(ctx, "Review & submit");
+      // The excursion leaves and returns by the rail, as a founder does.
+      // It goes to App Profile, not Review: Review is sealed until the
+      // whole Audience step completes (ADR 0376), and completing it here
+      // would bury the pick assertion under a full-flow setup. What is
+      // pinned is the pick's survival across step changes, either way.
+      await openStep(ctx, "App Profile");
       await openStep(ctx, "Audience & template");
       if (gate()) throw new Error("returning to the step raised a CTA over a picked set");
       if (!list()) throw new Error("the list was lost on return to the step");
@@ -2049,7 +2054,7 @@ async function main() {
         // a sentence in the panel's own words naming the step that holds
         // the pick, never a button and never the honesty rule's wording
         // for the step-1 gate.
-        global.__SMOKE_PARAMS = "?project=p1";
+        global.__SMOKE_PARAMS = "?project=p1&step=review";
         try {
           await withApi(
             {
@@ -2940,18 +2945,24 @@ async function main() {
   });
 
   await check("the plan is written before a character photo is attached", async (ctx) => {
-    global.__SMOKE_PARAMS = "";
     // The plan needs a profile, a template and a goal. The photo is required to
     // render, so it must not stop the plan from being written on Review —
     // the step's Generate click stays offered without one (ADR 0122).
+    // ADR 0376: the fixture arrives on Review by its deep link, carrying
+    // every plan input except the photo. Walking the Audience step to
+    // assemble them is no longer a route here — with no photo the step
+    // never reads done, so Review stays sealed to the rail — and the
+    // link is the app's own way past progress to a step whose guards
+    // speak. What is pinned is unchanged: the photo does not gate the plan.
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
     const plans = [];
     await withApi(
       {
-        createStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "", assets: [] }),
-        updateStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "", assets: [] }),
+        createStudioProject: async () => ({ ...BASE_PROJECT, assets: [] }),
+        updateStudioProject: async () => ({ ...BASE_PROJECT, assets: [] }),
         // The Review re-read must see the same unplanned, photo-less draft
         // the writes echo, or it adopts a planned fixture nobody generated.
-        getStudioProject: async () => ({ ...BASE_PROJECT, content_angle_id: "", assets: [] }),
+        getStudioProject: async () => ({ ...BASE_PROJECT, assets: [] }),
         generatePlanAndStrategy: async (id, payload) => {
           plans.push(payload);
           return PROJECT_WITH_STRATEGY;
@@ -2959,12 +2970,6 @@ async function main() {
       },
       async () => {
         await mount(CreateVideo, {})(ctx);
-        await openTemplateStep(ctx);
-        // The template arrives via the billed gate, not the goal pick — a
-        // plan needs all three: profile, template, goal.
-        await passTemplatesGate(ctx);
-        await act(async () => {});
-        await act(async () => {});
         await openStep(ctx, "Review & submit");
         await act(async () => {});
         await act(async () => {});
@@ -3105,7 +3110,7 @@ async function main() {
     // whose objective is empty). No plan can be written without one, so the
     // step must say so and offer the picker — never the generating spinner,
     // which previously showed while nothing was en route.
-    global.__SMOKE_PARAMS = "?project=p1";
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
     const plans = [];
     try {
       await withApi(
@@ -3171,7 +3176,7 @@ async function main() {
     // nothing re-fires on its own (ADR 0122), and the only button lived
     // behind a state the failure could not reach. The failure here is the
     // step's own Generate click, since entry alone fires nothing now.
-    global.__SMOKE_PARAMS = "?project=p1";
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
     try {
       await withApi(
         {
@@ -3261,6 +3266,73 @@ async function main() {
     // The rail band exists only under TikTok's furniture.
     if (zones.children.length !== 5) {
       throw new Error(`the TikTok zones should carry five bands including the rail, got ${zones.children.length}`);
+    }
+  });
+
+  // ADR 0378: at desktop widths the finished render stands BESIDE the
+  // panel's content — the panel lays out as a grid whose second column
+  // (sized for the 9:16 clip) carries the video alone, while the
+  // controls, the status and the post copy stay in the flexible first
+  // column. Below lg the grid is off, and the video stacks after the
+  // content column in DOM order instead of below everything.
+  await check("the finished render stands beside the render panel's content", async (ctx) => {
+    const kit = { caption: "A caption written to sell the watch.", hashtags: ["#focus"], cover_text: "Cover" };
+    await withApi({
+      getGenerations: async () => ({ generations: [{ ...SEGMENT, post_kit: kit }] }),
+    }, () => mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx));
+    const layout = ctx.container.querySelector('[data-testid="generation-panel-layout"]');
+    if (!layout) throw new Error("the render panel has no layout wrapper");
+    if (!/lg:grid/.test(layout.className) || !/lg:grid-cols-\[minmax\(0,1fr\)_320px\]/.test(layout.className)) {
+      throw new Error("the finished render does not stand in a desktop side column");
+    }
+    const main = layout.querySelector('[data-testid="generation-panel-main"]');
+    if (!main) throw new Error("the render panel has no content column");
+    const aside = layout.querySelector('[data-testid="generation-panel-video"]');
+    if (!aside) throw new Error("the finished render has no side column");
+    if (!aside.querySelector('[data-testid="platform-preview"]')) {
+      throw new Error("the side column does not carry the finished clip");
+    }
+    if (!/Download MP4/.test(aside.textContent || "")) {
+      throw new Error("the side column lost the download action");
+    }
+    if (main.querySelector('[data-testid="platform-preview"]')) {
+      throw new Error("the finished clip still renders inside the content column");
+    }
+    if (/sell the watch/.test(aside.textContent || "")) {
+      throw new Error("the post copy moved into the video column");
+    }
+    // The post kit stands in the content column's track, under the
+    // main column — a grid sibling of it, not part of the video column.
+    const kitEl = layout.querySelector('[data-testid="post-kit"]');
+    if (!kitEl || !/sell the watch/.test(kitEl.textContent || "")) {
+      throw new Error("the post copy no longer renders in the panel");
+    }
+    if (!/lg:col-start-1/.test(kitEl.parentElement.className || "")) {
+      throw new Error("the post copy does not stand in the content column");
+    }
+    // DOM order is the narrow layout: the video column follows the
+    // content column, so stacked, the clip stands after the status
+    // block rather than above it.
+    if (!(main.compareDocumentPosition(aside) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING)) {
+      throw new Error("the video column does not follow the content column in the stacked order");
+    }
+  });
+
+  // ADR 0378: with no finished video there is nothing to stand beside
+  // the content — the panel stays one column, and a failed render keeps
+  // its retry exactly where it stood.
+  await check("a failed render keeps its retry and grows no video column", async (ctx) => {
+    const failed = { ...SEGMENT, id: "gen-failed", status: "failed", video_url: null, playback_url: null, r2_url: null, error: "The provider refused the render.", retryable: true };
+    await withApi({
+      getGenerations: async () => ({ generations: [failed] }),
+    }, () => mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx));
+    expectText(ctx, "Render it again", "the failed render lost its retry action");
+    if (ctx.container.querySelector('[data-testid="generation-panel-video"]')) {
+      throw new Error("a failed render grew a video column");
+    }
+    const layout = ctx.container.querySelector('[data-testid="generation-panel-layout"]');
+    if (layout && /lg:grid/.test(layout.className)) {
+      throw new Error("the panel laid out a side column with no finished video to stand in it");
     }
   });
 
@@ -5717,7 +5789,13 @@ async function main() {
     }
     // Last step: there is nowhere to continue to. Review used to be that
     // step; the finishing step is now, so Review offers the Continue that
-    // walks into it and Demo + CTA offers none.
+    // walks into it and Demo + CTA offers none. Reached the way the
+    // founder reaches it — a project whose steps stand unlocked, opened
+    // by its rail segment (ADR 0376: no section header opens a step).
+    global.__SMOKE_PARAMS = "?project=p1";
+    await withApi({ getGenerations: async () => ({ generations: [] }) }, () =>
+      mount(CreateVideo, {})(ctx)
+    );
     await openStep(ctx, "Demo + CTA");
     if (ctx.container.querySelector('[data-testid="wizard-continue-button"]')) {
       throw new Error("Continue is offered on the last step");
@@ -5730,10 +5808,11 @@ async function main() {
   });
 
   // The wizard reads as one canvas now: all four step sections stand on the
-  // page at once, and exactly the active one is expanded. A section header is
-  // a control, not a label — opening a collapsed one walks there the same way
-  // its pill does, so progressive disclosure adds no second navigation model
-  // and queues nothing.
+  // page at once, and exactly the active one is expanded. A section header
+  // is a standing heading, not a control (ADR 0376): it names the step and
+  // its state, and clicking it walks nowhere — moving between steps
+  // belongs to the progress rail's segments and the sticky bar alone, so
+  // the canvas adds no second navigation model and queues nothing.
   await check("the canvas stacks all four sections and expands the active one", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
@@ -5762,14 +5841,49 @@ async function main() {
       ctx.container.querySelector('[data-testid="wizard-section-toggle-angle"]'),
       "the angle section header"
     );
-    if (!ctx.container.querySelector('[data-testid="wizard-section-body-angle"]')) {
-      throw new Error("clicking a collapsed section header did not open it");
+    if (ctx.container.querySelector('[data-testid="wizard-section-body-angle"]')) {
+      throw new Error("clicking a section header opened it — headers are headings, not navigation (ADR 0376)");
     }
-    if (ctx.container.querySelector('[data-testid="wizard-section-body-profile"]')) {
-      throw new Error("opening a section left the last one expanded");
+    if (!ctx.container.querySelector('[data-testid="wizard-section-body-profile"]')) {
+      throw new Error("clicking a section header moved the step in view");
     }
-    if (stepPill(ctx, "Audience & template").getAttribute("aria-current") !== "step") {
-      throw new Error("opening a section did not move the step");
+    if (stepPill(ctx, "Audience & template").getAttribute("aria-current") === "step") {
+      throw new Error("clicking a section header moved the step");
+    }
+    // The lock is still named where the founder reads the step: the
+    // header chip carries it, and the rail segment stands disabled.
+    const chip = ctx.container.querySelector('[data-testid="wizard-section-chip-angle"]');
+    if (!chip || !/locked/i.test(chip.textContent || "")) {
+      throw new Error("the locked step's header no longer names its lock");
+    }
+    if (!stepPill(ctx, "Audience & template").disabled) {
+      throw new Error("the locked step's rail segment is not disabled");
+    }
+  });
+
+  // ADR 0376: no header in the canvas is a button, and no header click
+  // moves the wizard — the four headers are the steps' standing
+  // headings. Navigation lives in the rail segments and the sticky bar
+  // alone (their walking is pinned by the arrows, segment and circuit
+  // checks around this one).
+  await check("the step headers are standing headings, not navigation", async (ctx) => {
+    global.__SMOKE_PARAMS = "";
+    await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
+      mount(CreateVideo, {})(ctx)
+    );
+    for (const key of ["profile", "angle", "review", "finish"]) {
+      const header = ctx.container.querySelector(`[data-testid="wizard-section-toggle-${key}"]`);
+      if (!header) throw new Error(`the ${key} step header is missing`);
+      if (header.tagName === "BUTTON") {
+        throw new Error(`the ${key} step header is still a button — it must stand as a heading`);
+      }
+      await clickEl(ctx, header, `the ${key} step header`);
+      if (!ctx.container.querySelector('[data-testid="wizard-section-body-profile"]')) {
+        throw new Error(`clicking the ${key} step header moved the wizard off the profile step`);
+      }
+      if (key !== "profile" && ctx.container.querySelector(`[data-testid="wizard-section-body-${key}"]`)) {
+        throw new Error(`clicking the ${key} step header opened its section`);
+      }
     }
   });
 
@@ -6561,7 +6675,7 @@ async function main() {
   // A review missing only the photo says exactly that — never a save it does
   // not owe — and a blocked review never offers the render shortcut.
   await check("a review missing only the photo names only the photo", async (ctx) => {
-    global.__SMOKE_PARAMS = "?project=p1";
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
     try {
       await withApi(
         { getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, assets: [] }) },
@@ -8489,7 +8603,10 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       getAppProfiles: async () => ({ profiles: [FRESH] }),
       getContentAngles: async () => ({ angles: [ANGLE, ANGLE_B] }),
     }, async () => {
-      global.__SMOKE_PARAMS = "";
+      // ADR 0376: the mount lands on Review by its deep link — with
+      // nothing picked, every segment ahead of it is sealed, and the
+      // link is the app's own way onto a step whose guards speak.
+      global.__SMOKE_PARAMS = "?step=review";
       await mount(CreateVideo, {})(ctx);
       await openStep(ctx, "Review & submit");
       if (ctx.container.querySelector('[data-testid="create-draft-button"]')) throw new Error("a draft action that cannot run competes with the missing-input action");
@@ -8508,7 +8625,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         throw new Error("an angle list rendered on Review instead of only its naming");
       }
       apiCalls.length = 0;
-      await openStep(ctx, "Audience & template");
+      // The walk home rides the sticky bar's Back, the one direction
+      // that stays free (ADR 0376): the Audience segment is sealed
+      // until a profile is picked, and this fixture picks none.
+      const back = ctx.container.querySelector('[data-testid="wizard-back-button"]');
+      if (!back) throw new Error("the sticky bar offers no Back from Review");
+      await clickEl(ctx, back, "no Back button on the sticky bar");
       if (apiCalls.includes("generateContentAngles") || apiCalls.includes("regenerateContentAngles")) {
         throw new Error("walking back to the angle step spent an angle call");
       }
@@ -9799,23 +9921,46 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           }
           // And Review names the gap in words instead of stranding the
           // founder under a plan that can never generate (ADR 0229: the
-          // panel carries no jump of its own). Two extra flushes after
-          // the pill: entering Review mounts effects that read the
-          // project from the API, and the state they set lands on the
-          // next act.
-          await openStep(ctx, "Review & submit");
-          await act(async () => {});
-          await act(async () => {});
-          if (ctx.container.querySelector('[data-testid="goto-first-gap-button"]')) {
-            throw new Error("the missing template still gets a jump button back to its step");
-          }
-          const gap = ctx.container.querySelector('[data-testid="first-gap-name"]');
-          if (!gap || !(gap.textContent || "").includes("Pick a template first")) {
-            throw new Error("the missing template is not named on Review");
-          }
-          if (ctx.text().includes("Template not found")) {
-            throw new Error("opening Review refires the dangling template id at the server");
-          }
+          // panel carries no jump of its own). ADR 0376: Review is
+          // reached by remounting on the draft's own link with the step
+          // named — the Audience step can never read done for a template
+          // that names no row, so the rail stays sealed, and the link is
+          // the app's own way onto a step whose guards speak. The
+          // resumed draft carries its angle and goal from the server
+          // row; the row's template names no row, which is the gap
+          // under test. Two extra flushes after the mount: entering
+          // Review mounts effects that read the project from the API,
+          // and the state they set lands on the next act.
+          await act(async () => ctx.root.render(null));
+          global.__SMOKE_PARAMS = "?project=p1&step=review";
+          // The remount's server holds the draft the way the story
+          // needs it: the draft itself names the gone template, so
+          // every source the wizard reads agrees the pick names no
+          // row — the first mount's echoes carried a live template id,
+          // which a resumed draft would otherwise adopt right back.
+          await withApi(
+            {
+              createStudioProject: async () => ({ ...BASE_PROJECT, template_id: "gone" }),
+              updateStudioProject: async () => ({ ...BASE_PROJECT, template_id: "gone" }),
+              getStudioProject: async () => ({ ...BASE_PROJECT, template_id: "gone" }),
+            },
+            async () => {
+              await mount(CreateVideo, {})(ctx);
+              await openStep(ctx, "Review & submit");
+              await act(async () => {});
+              await act(async () => {});
+              if (ctx.container.querySelector('[data-testid="goto-first-gap-button"]')) {
+                throw new Error("the missing template still gets a jump button back to its step");
+              }
+              const gap = ctx.container.querySelector('[data-testid="first-gap-name"]');
+              if (!gap || !(gap.textContent || "").includes("Pick a template first")) {
+                throw new Error("the missing template is not named on Review");
+              }
+              if (ctx.text().includes("Template not found")) {
+                throw new Error("opening Review refires the dangling template id at the server");
+              }
+            }
+          );
         }
       );
     } finally {
@@ -10743,7 +10888,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         generatePlanAndStrategy: async () => PROJECT_WITH_STRATEGY,
       },
       async () => {
-        global.__SMOKE_PARAMS = "?project=p1";
+        global.__SMOKE_PARAMS = "?project=p1&step=review";
         try {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
@@ -10800,7 +10945,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         generatePlanAndStrategy: async () => PROJECT_WITH_STRATEGY,
       },
       async () => {
-        global.__SMOKE_PARAMS = "?project=p1";
+        global.__SMOKE_PARAMS = "?project=p1&step=review";
         try {
           await mount(CreateVideo, {})(ctx);
           await openStep(ctx, "Review & submit");
@@ -10966,7 +11111,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (!notice.querySelector('[data-testid="angle-regen-notice-dismiss"]')) {
             throw new Error("the regen notice lost its Dismiss with its action");
           }
-          // The way to Review is the rail segment, as everywhere now.
+          // The way to Review is the rail segment, as everywhere now —
+          // and the segment stands open only once the Audience step
+          // reads done, so the walk finishes the step the way a
+          // founder does: the fresh angle's goal, then the template
+          // gate (ADR 0376).
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'), "no goal card for the fresh angle");
+          await passTemplatesGate(ctx);
+          await act(async () => {});
           await openStep(ctx, "Review & submit");
           const review = ctx.container.querySelector('[data-testid="studio-progress-segment-review"]');
           if (!review || review.getAttribute("aria-current") !== "step") {
@@ -11017,6 +11169,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
           if (ctx.container.querySelector('[data-testid="angle-regen-notice"]')) {
             throw new Error("the regen notice survives its own Dismiss");
           }
+          // The step walk rides the rail (ADR 0376): the fresh angle's
+          // goal and the template gate finish the Audience step, which
+          // is what stands the Review segment open.
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="angle-option-n0"]'), "no fresh angle row to pick");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="recommended-goal-address_user_problem"]'), "no goal card for the fresh angle");
+          await passTemplatesGate(ctx);
+          await act(async () => {});
           await openStep(ctx, "Review & submit");
           await openStep(ctx, "Audience & template");
           if (ctx.container.querySelector('[data-testid="angle-regen-notice"]')) {
@@ -11191,7 +11350,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   });
 
   await check("Review with a goal but no angle waits for a real angle before planning", async (ctx) => {
-    global.__SMOKE_PARAMS = "?project=p1";
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
     let plans = 0;
     try {
       await withApi({
@@ -11240,7 +11399,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // is missing, and never a jump button of its own: the walk back is
   // the rail segment's, as everywhere.
   await check("Review names a missing profile in words and offers no jump", async (ctx) => {
-    global.__SMOKE_PARAMS = "";
+    global.__SMOKE_PARAMS = "?step=review";
     try {
       await withApi({
         getAppProfiles: async () => ({ profiles: [] }),
@@ -11274,7 +11433,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // template present but no angle or goal, the panel names the angle
   // only; the goal waits for the angle that would rank it.
   await check("Review names only the gap actually missing, never two firsts", async (ctx) => {
-    global.__SMOKE_PARAMS = "?project=p1";
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
     try {
       await withApi({
         getStudioProject: async () => ({
@@ -11314,7 +11473,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
   // instead of generating). Re-mounting in one container would keep the
   // first draft's state and prove nothing about the second.
   await check("Review & submit's angle gap asks once, in words, in both states", async (ctx) => {
-    global.__SMOKE_PARAMS = "?project=p1";
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
     const second = dom.window.document.createElement("div");
     dom.window.document.body.appendChild(second);
     const secondRoot = createRoot(second);
@@ -11400,6 +11559,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       await openStep(ctx, "Audience & template");
       record("Audience & template", ctx.container.querySelector('[data-testid="generate-angles-button"]'), { button: true, hint: false });
     });
+    // ADR 0376: Review is recorded from a fresh mount on its step
+    // link — a blank draft's Audience step never reads done, so the
+    // rail stays sealed, and the link lands on the same still-missing
+    // panel the walk used to reach.
+    await act(async () => ctx.root.render(null));
+    global.__SMOKE_PARAMS = "?step=review";
+    await mount(CreateVideo, {})(ctx);
     await openStep(ctx, "Review & submit");
     record("Review & submit", ctx.container.querySelector('[data-testid="first-gap-name"]'));
 
@@ -11407,7 +11573,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     // the problem with no way out. A planned project, because the gate below
     // the plan only renders once a plan exists to approve. Recommendations are
     // empty so nothing is preselected into the template slot.
-    global.__SMOKE_PARAMS = "?project=p1";
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
     try {
       await withApi({
         getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, content_angle_id: "a1", template_id: "" }),
@@ -11483,8 +11649,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     const buttonWithText = (container, text) =>
       [...container.querySelectorAll("button")].find((b) => (b.textContent || "").trim() === text);
 
-    // The angle gate and the still-missing panel from one mount, walked
-    // the way a founder walks it, so no remount is involved. The gate is
+    // The angle gate from this mount, and the still-missing panel from
+    // a second mount on Review's step link (ADR 0376, below). The gate is
     // recorded in its surviving form on this step — the empty set's CTA
     // (Part 3) — so the mount stubs an empty set.
     global.__SMOKE_PARAMS = "";
@@ -11502,6 +11668,13 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         throw new Error("the angle gate still carries the removed CTA copy (ADR 0367)");
       }
     });
+    // ADR 0376: the still-missing panel is reached from a fresh mount
+    // on Review's step link — a blank draft's Audience step never
+    // reads done, so the rail stays sealed, and the link lands on the
+    // same panel the walk used to reach.
+    await act(async () => ctx.root.render(null));
+    global.__SMOKE_PARAMS = "?step=review";
+    await mount(CreateVideo, {})(ctx);
     await openStep(ctx, "Review & submit");
     before(
       ctx.container,
@@ -11511,7 +11684,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     );
 
     // The render gate: a planned project with no template.
-    global.__SMOKE_PARAMS = "?project=p1";
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
     try {
       await withApi({
         getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, content_angle_id: "a1", template_id: "" }),
@@ -11536,7 +11709,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
 
     // The failed-plan panel: the retry buttons precede the explanation.
-    global.__SMOKE_PARAMS = "?project=p1";
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
     try {
       await withApi({
         getStudioProject: async () => ({ ...BASE_PROJECT, script_version: 0, script: "" }),
@@ -11562,7 +11735,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
 
     // The photo gate: a planned project whose template still wants a photo.
-    global.__SMOKE_PARAMS = "?project=p1";
+    global.__SMOKE_PARAMS = "?project=p1&step=review";
     try {
       await withApi({
         getStudioProject: async () => ({ ...PROJECT_WITH_STRATEGY, assets: [] }),
@@ -27725,17 +27898,25 @@ function renderButton(ctx) {
  */
 async function openStep(ctx, label) {
   const pill = stepPill(ctx, label);
+  // Already standing on the step (a deep link or the draft load landed
+  // there): nothing to open, locked or not.
+  const segments = [...ctx.container.querySelectorAll('[data-testid^="studio-progress-segment-"]')];
+  const key = ["profile", "angle", "review", "finish"][segments.indexOf(pill)];
+  const section = key && ctx.container.querySelector(`[data-testid="wizard-section-${key}"]`);
+  if (section && section.getAttribute("data-active") === "true") return;
   // ADR 0328: a locked segment is disabled and cannot be clicked
-  // through. When the segment refuses, the harness opens the step by
-  // its section header instead — the standing path for reading a
-  // locked step's notice and, once active, its gates.
-  let target = pill;
+  // through. ADR 0376 removed the harness's old way around that — the
+  // section headers are standing headings now and open nothing — so a
+  // locked step can no longer be entered from a check at all: the
+  // fixture must complete the step that unlocks it, the way the
+  // founder does. Fail loudly here rather than clicking a heading and
+  // asserting against a step that never opened.
   if (pill.disabled) {
-    const segments = [...ctx.container.querySelectorAll('[data-testid^="studio-progress-segment-"]')];
-    const key = ["profile", "angle", "review", "finish"][segments.indexOf(pill)];
-    const toggle = key && ctx.container.querySelector(`[data-testid="wizard-section-toggle-${key}"]`);
-    if (toggle) target = toggle;
+    throw new Error(
+      `openStep: the "${label}" step is locked in this fixture — complete the step that unlocks it first (ADR 0376)`
+    );
   }
+  const target = pill;
   await act(async () => {
     target.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
   });

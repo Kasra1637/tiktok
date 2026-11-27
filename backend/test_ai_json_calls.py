@@ -3931,8 +3931,14 @@ class TestHookScriptContinuity:
     """
 
     HOOK = "My workday is still loud in my head."
+    # ADR 0377: the recorded production line also named its place ("in
+    # the car"), which is a hard defect of its own now — the gate refuses
+    # a named place outright. The fixture keeps the dangling "walk in"
+    # and drops the place, so the continuity point stands alone: what
+    # remains is grammatical, complete, fitting and defect-free, and
+    # only the advisory flags speak.
     DANGLING_SCRIPT = (
-        "I just start talking right here in the car. By the time I walk in, "
+        "I just start talking right here, coat still on. By the time I walk in, "
         "the day is written down and I can finally put it down. "
         "The house stays quiet."
     )

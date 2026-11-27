@@ -326,14 +326,18 @@ SHOT_S2 = "I still don't know what sets that flip off."
 SHOT_SCRIPT = SHOT_S1 + " " + SHOT_S2
 # Clearer replies a real provider gives: each shorter than the line it
 # replaces, the softener gone — and each inside its line's share of the
+# (ADR 0377: the clearer replies no longer name the desk — the gate
+# refuses a named place outright now, so a "clearer" line carrying one
+# could never be accepted; the stored script keeps its place, as the
+# flawed input the clicks exist to fix.)
 # set length (91 and 25 against the 135 ceiling the stored seconds
 # yield; the hook inside its 60). They used to sit a few characters
 # over the shares the old formula left and were accepted under the
 # own-length credit; ADR 0130's length rule removed the credit, so the
 # replies themselves had to learn to fit.
-SHOT_S1_CLEARER = "It turns at one, after lunch at my desk, and I notice the flipped mood is not random."
+SHOT_S1_CLEARER = "It turns at one, after lunch, and I notice the flipped mood is not random."
 SHOT_S2_CLEARER = "Unsure what flips it."
-SHOT_HOOK_CLEARER = "My mood flips at one daily, right after lunch at my desk."
+SHOT_HOOK_CLEARER = "My mood flips at one daily, right after lunch."
 
 
 def _shot_project(api):
@@ -862,12 +866,12 @@ def test_script_rewrite_unchanged_reply_raises(monkeypatch):
 def test_middle_rewrite_corrects_a_fragment_reply(monkeypatch):
     calls = []
     monkeypatch.setattr(ai_service, "_chat_json", _chat_fake([
-        {"line": "It turns at one, after lunch at my desk and"},
-        {"line": "It turns at one, right after lunch at my desk."},
+        {"line": "It turns at one, after lunch and"},
+        {"line": "It turns at one, right after lunch."},
     ], calls))
     line = asyncio.run(ai_service.rewrite_spoken_line(
         {}, None, FIRST_LINE, "middle", hook_line=HOOK, script=SCRIPT))
-    assert line == "It turns at one, right after lunch at my desk."
+    assert line == "It turns at one, right after lunch."
     assert len(calls) == 2
     assert "CORRECTION" in calls[1]["prompt"]
     assert "unfinished" in calls[1]["prompt"]

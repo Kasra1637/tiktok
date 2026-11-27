@@ -101,13 +101,19 @@ def _patch_provider(monkeypatch, provider):
 # re-measured when the rubric began rewarding first person (ADR 0145):
 # the first-person draft and best clean both rose, and the fixture
 # lines were re-cut so each test's ordering still holds.
+# Recalibrated for ADR 0377: the draft and the best clean both carried
+# "at my desk" — a named place the gate now refuses outright, so the
+# "clean" line was gated and the draft's own plan could not be written.
+# Both lines were re-cut without the place, and the suite's picks still
+# land as each test requires: the gated star still loses to the gate,
+# and the best clean still wins its set on craft.
 SCRIPT_1 = (
     "The blank page just sits there until one small prompt gives my hands "
     "somewhere to start. I still do not know why the first line is always the hard one."
 )
-DRAFT_HOOK = "Starting is hard for me every single morning at my desk."
+DRAFT_HOOK = "Starting is hard for me every single morning."
 LOW_CLEAN = "At 7 a.m. the first line never comes, whatever I try."
-BEST_CLEAN = "Every morning at my desk my page wins, work never starts."
+BEST_CLEAN = "Every morning my page wins, work never starts."
 GATED_STAR = "At bus stop every morning my page wins, work never starts."
 GATED_OFFICE = "At office the blank page wins again, every morning."
 # ADR 0135: otherwise clean and the strongest draw in its set (83,

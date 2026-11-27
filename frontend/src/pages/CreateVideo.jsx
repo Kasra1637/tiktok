@@ -926,11 +926,18 @@ export default function CreateVideo() {
             // as numbers: the wizard was seven steps and is now five, and a
             // hardcoded index is exactly what silently sent a deep link past
             // the end of the wizard.
-            setStep(
-              draft.script_version > 0
-                ? STEPS.findIndex((s) => s.key === "review")
-                : STEPS.findIndex((s) => s.key === "angle")
-            );
+            // A ?step= link names the step explicitly, so it survives this
+            // load the way it survives the profiles load below (ADR 0376):
+            // the auto-landing above is only for links that name no step.
+            // A step named past the draft's progress lands anyway, and its
+            // own guards say what is missing.
+            if (!params.get("step")) {
+              setStep(
+                draft.script_version > 0
+                  ? STEPS.findIndex((s) => s.key === "review")
+                  : STEPS.findIndex((s) => s.key === "angle")
+              );
+            }
           } catch (err) {
             if (cancelled) return;
             setError(getErrorMessage(err));
@@ -3767,16 +3774,13 @@ export default function CreateVideo() {
                 s.key === "angle" ? "surface-step-tight" : ""
               }`}
             >
-              <button
-                type="button"
-                onClick={() => setStep(i)}
-                aria-expanded={active}
-                aria-controls={`wizard-section-body-${s.key}`}
-                aria-label={
-                  isLocked
-                    ? `${s.label}: locked — finish ${lockedBy} to unlock`
-                    : `${s.label}: ${chipText}`
-                }
+              {/* ADR 0376: the header is the step's standing heading,
+                  not a control — it names the step and carries its
+                  state chip, and clicking it walks nowhere. Moving
+                  between steps belongs to the rail segments and the
+                  sticky bar alone, so the canvas offers no second
+                  navigation model inside its sections. */}
+              <div
                 data-testid={`wizard-section-toggle-${s.key}`}
                 className="flex w-full items-center gap-2.5 pb-3 text-left"
               >
@@ -3811,7 +3815,7 @@ export default function CreateVideo() {
                     }`}
                   />
                 )}
-              </button>
+              </div>
               {active && (
                 <div
                   id={`wizard-section-body-${s.key}`}

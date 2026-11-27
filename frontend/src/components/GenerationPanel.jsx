@@ -778,6 +778,14 @@ const handleGenerate = async () => {
   // download read the same source and cannot disagree about playability.
   const previewUrl = downloadUrl;
   const posterUrl = generation?.poster_url ? mediaUrl(generation.poster_url) : null;
+  // ADR 0378: a finished, playable render stands BESIDE the panel's
+  // content in its own column at desktop widths, so the layout below
+  // turns into a two-column grid exactly when this stands — and only
+  // then, so an idle or in-flight panel is never squeezed by an empty
+  // video column.
+  const finishedVideo = Boolean(
+    generation && generation.status === "completed" && downloadUrl
+  );
   // The length this project will render at, and whether the selected model can
   // do it in one pass. Shown before the click because the endpoint refuses
   // anything longer with a 400: the founder should read that here rather than
@@ -868,8 +876,27 @@ const handleGenerate = async () => {
        gutter and radius, which is what made this panel read as a stack
        of frames rather than one panel. They are divider-separated
        groups now, the level design_guidelines.md §4 calls "group
-       inside a card". */
-    <div className="surface space-y-3" data-testid="generation-panel">
+       inside a card". ADR 0378: inside the card the content stands in
+       one column, and a finished render stands beside it — at desktop
+       widths the layout is a grid whose flexible first column carries
+       the controls, the progress and the record, and whose second
+       column (320px, sized for the 9:16 clip) carries the video alone;
+       below that width the columns stack in DOM order, the video after
+       the content. With no finished video the grid never forms, so the
+       content keeps the full width it always had. */
+    <div className="surface" data-testid="generation-panel">
+      <div
+        data-testid="generation-panel-layout"
+        className={
+          finishedVideo
+            ? "lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-6"
+            : undefined
+        }
+      >
+      <div
+        data-testid="generation-panel-main"
+        className="min-w-0 space-y-3 lg:col-start-1 lg:row-start-1"
+      >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <GroupLabel icon={Clapperboard}>Generate your video</GroupLabel>
         {generation && <StatusBadge status={generation.status} />}
@@ -1144,103 +1171,13 @@ const handleGenerate = async () => {
             </Alert>
           )}
 
-          {generation.status === "completed" && downloadUrl && (
+          {generation.status === "completed" && downloadUrl && !onNavigate && (
             <>
-              {/* Says so when the clip cannot be played here. A player that
-                  renders its first frame and then does nothing on click looks
-                  like a broken app; the truth is usually a source the browser
-                  cannot stream (an expired provider link), and the download is
-                  the way through either way. */}
-              {/* Finished render: narrow video left, frozen post copy right on
-                  wide screens, stacked on narrow ones. Only the post-copy card
-                  sits beside the video; votes and Demo + CTA stay full-width below. */}
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                <div className="w-full max-w-[280px] shrink-0 space-y-2">
-                  <div
-                    className={`relative rounded-xl ${celebrating ? "render-celebrate" : ""}`}
-                    data-testid={celebrating ? "render-celebrate" : undefined}
-                  >
-                  {/* The finished render in the platform phone frame
-                      (ADR 0245): this finished block is where the
-                      founder judges the render before finishing, so
-                      the frame stands here — the clip under each
-                      platform's furniture, zones as guides over it.
-                      A clip that will not play says so inside the
-                      frame; the retry stays the panel's, below it. */}
-                  <PlatformPreview
-                    videoUrl={previewUrl}
-                    posterUrl={posterUrl || ""}
-                    videoBroken={previewBroken}
-                    onVideoError={() => setPreviewBroken(true)}
-                  />
-                  {celebrating && (
-                    <div aria-hidden="true" className="render-celebrate-dots">
-                      {CELEBRATE_DOTS.map((dot, i) => (
-                        <span
-                          key={i}
-                          style={{
-                            left: dot.left,
-                            top: dot.top,
-                            "--celebrate-dx": dot.dx,
-                            "--celebrate-dy": dot.dy,
-                            animationDelay: dot.delay,
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  </div>
-                  {previewBroken && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleRetryPreview}
-                      disabled={retryingPreview}
-                      busy={retryingPreview}
-                    >
-                      Try the preview again
-                    </Button>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="secondary" size="sm" asChild>
-                      <a
-                        href={saveUrl}
-                        download
-                        onClick={() => recordSignal("video_downloaded", "downloaded", {
-                          brand_profile_id: generation?.brand_profile_id || "",
-                          studio_project_id: generation?.studio_project_id || "",
-                          generation_id: generation?.id || "",
-                          template_id: generation?.template_id || "",
-                        })}
-                      >
-                        <Download className="h-3.5 w-3.5" /> Download MP4
-                      </a>
-                    </Button>
-                  </div>
-                </div>
-                {/* Frozen post copy for this render; pre-kit renders show nothing. */}
-                {generation.post_kit && (
-                  <div className="min-w-0 flex-1 space-y-3 sm:border-t sm:border-[color:var(--hairline)] sm:pt-3">
-                    <PostKitSection
-                      postKit={generation.post_kit}
-                      generationId={generation.id}
-                      ttsText={
-                        project?.voice_mode === "silent"
-                          ? [project?.hook_line, project?.script]
-                              .map((line) => String(line || "").trim())
-                              .filter(Boolean)
-                              .join(" ")
-                          : ""
-                      }
-                    />
-                  </div>
-                )}
-              </div>
               {/* No rating on the render here (ADR 0124): the panel used
                   to carry its own video thumbs, a second whole-video
                   judgment beside History's. The one verdict lives on the
                   finished video's History card, judged as posted. */}
-              {/* The native next step. The download above is the finish line for
+              {/* The native next step. The download in the video column is the finish line for
                   anyone who does not want it: this panel adds nothing to what
                   they already have, changes no gate, and takes nothing away.
                   Inside the wizard this block does not render at all (ADR
@@ -1251,7 +1188,6 @@ const handleGenerate = async () => {
                   steps would compete with it. Mounted without the wizard's
                   navigation (a direct mount), the block stands with its
                   route link to the standalone editor. */}
-              {!onNavigate && (
               <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3">
                 <GroupLabel icon={Smartphone}>Product Demo + CTA</GroupLabel>
                 <div className="flex flex-wrap gap-2">
@@ -1266,7 +1202,6 @@ const handleGenerate = async () => {
                   to add your demo and call to action — exports save beside the original.
                 </p>
               </div>
-              )}
             </>
           )}
 
@@ -1287,6 +1222,105 @@ const handleGenerate = async () => {
 
           </div>
       )}
+      </div>
+
+      {/* ADR 0378: the finished render stands in its own column beside
+          the content — the second grid column at desktop widths, and
+          stacked right after the content column below them. Says so
+          when the clip cannot be played here: a player that renders
+          its first frame and then does nothing on click looks like a
+          broken app; the truth is usually a source the browser cannot
+          stream (an expired provider link), and the download is the
+          way through either way. */}
+      {finishedVideo && (
+        <aside
+          data-testid="generation-panel-video"
+          className="mt-3 space-y-2 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0"
+        >
+          <div
+            className={`relative rounded-xl ${celebrating ? "render-celebrate" : ""}`}
+            data-testid={celebrating ? "render-celebrate" : undefined}
+          >
+            {/* The finished render in the platform phone frame
+                (ADR 0245): this column is where the founder judges
+                the render before finishing, so the frame stands
+                here — the clip under each platform's furniture,
+                zones as guides over it. A clip that will not play
+                says so inside the frame; the retry stays the
+                panel's, below it. */}
+            <PlatformPreview
+              videoUrl={previewUrl}
+              posterUrl={posterUrl || ""}
+              videoBroken={previewBroken}
+              onVideoError={() => setPreviewBroken(true)}
+            />
+            {celebrating && (
+              <div aria-hidden="true" className="render-celebrate-dots">
+                {CELEBRATE_DOTS.map((dot, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      left: dot.left,
+                      top: dot.top,
+                      "--celebrate-dx": dot.dx,
+                      "--celebrate-dy": dot.dy,
+                      animationDelay: dot.delay,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          {previewBroken && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleRetryPreview}
+              disabled={retryingPreview}
+              busy={retryingPreview}
+            >
+              Try the preview again
+            </Button>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" asChild>
+              <a
+                href={saveUrl}
+                download
+                onClick={() => recordSignal("video_downloaded", "downloaded", {
+                  brand_profile_id: generation?.brand_profile_id || "",
+                  studio_project_id: generation?.studio_project_id || "",
+                  generation_id: generation?.id || "",
+                  template_id: generation?.template_id || "",
+                })}
+              >
+                <Download className="h-3.5 w-3.5" /> Download MP4
+              </a>
+            </Button>
+          </div>
+        </aside>
+      )}
+
+      {/* Frozen post copy for this render; pre-kit renders show
+          nothing. It stays in the content column under the record —
+          only the video moved beside the content (ADR 0378). */}
+      {finishedVideo && generation.post_kit && (
+        <div className="mt-3 min-w-0 space-y-3 border-t border-[color:var(--hairline)] pt-3 lg:col-start-1 lg:row-start-2 lg:mt-0">
+          <PostKitSection
+            postKit={generation.post_kit}
+            generationId={generation.id}
+            ttsText={
+              project?.voice_mode === "silent"
+                ? [project?.hook_line, project?.script]
+                    .map((line) => String(line || "").trim())
+                    .filter(Boolean)
+                    .join(" ")
+                : ""
+            }
+          />
+        </div>
+      )}
+      </div>
 
       <GenerateAnotherConfirmDialog
         confirm={rerollConfirm}

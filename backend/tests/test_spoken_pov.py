@@ -91,7 +91,7 @@ def test_persistent_quotes_still_ship_a_quote_free_plan(monkeypatch):
     import asyncio
     import ai_service
     quoted = (
-        "At the desk, I say, 'Too much, too fast,' and the entry finally "
+        "Leaning in, I say, 'Too much, too fast,' and the entry finally "
         "steadies for the morning. The words slow down, and the page "
         "holds still for once."
     )
@@ -123,6 +123,67 @@ def test_script_stage_direction_is_a_hard_issue():
         ("stage" in issue.lower() or "narrat" in issue.lower() or "camera" in issue.lower())
         for issue in issues
     ), issues
+
+
+def _gate(hook, script):
+    return ai_spoken._generated_spoken_issues(hook, script, 100, 300)
+
+
+def test_script_naming_a_place_on_a_locative_phrase_is_a_hard_issue():
+    # Kasra's witnessed line (ADR 0377): the place rides mid-script on a
+    # possessive locative phrase — "on my harbour walk" — a shape the
+    # gate's older place checks (article slip, first-sentence scene)
+    # never charged, and "harbour" stood outside the scene vocabulary.
+    issues = _gate(
+        "I'm seeing where tension keeps showing in my body Wednesday.",
+        "I roll my shoulders and feel the pull in my neck. "
+        "After lunch on my harbour walk I point to it and I'm calmer. "
+        "I don't know what sets that tension off.",
+    )
+    assert any(
+        "names the place" in issue and "harbour walk" in issue
+        for issue in issues
+    ), issues
+
+
+def test_script_at_the_kitchen_table_is_a_hard_issue():
+    issues = _gate(
+        "I can't write in my journal when thoughts race like this.",
+        "I press my palm to my stomach and breathe. "
+        "At the kitchen table, the words still will not come. "
+        "I don't know what keeps them back.",
+    )
+    assert any(
+        "names the place" in issue and "kitchen table" in issue
+        for issue in issues
+    ), issues
+
+
+def test_hook_naming_a_place_is_a_hard_issue():
+    issues = _gate(
+        "I keep trying to name this tight feeling at the park.",
+        "I press my palm to my chest and breathe. "
+        "The tightness stays, and I still cannot name it.",
+    )
+    assert any(
+        issue.startswith("hook_line") and "names the place" in issue
+        for issue in issues
+    ), issues
+
+
+def test_time_grounding_and_body_sensations_name_no_place():
+    # The doctrine's allowed riders: light time grounding (after lunch,
+    # on Wednesday, Saturday morning) and body sensations under
+    # prepositions (in my chest, to my stomach) never charge — only a
+    # place noun on a locative phrase does.
+    issues = _gate(
+        "I'm trying to name this tight feeling after lunch before it slips away.",
+        "I press my palm to my stomach on Wednesday and feel it pull. "
+        "The tightness sits in my chest, and Saturday morning it is "
+        "still there. I still cannot name what sets it off.",
+    )
+    assert not any("names the place" in issue for issue in issues), issues
+    assert issues == [], issues
 
 
 def test_script_restating_the_hook_is_flagged_in_the_story_check():

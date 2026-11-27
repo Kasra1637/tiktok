@@ -9,7 +9,7 @@ import creative_quality
 
 SAMPLE_HOOK = "Every week I look back and my mood shifts surprise me again."
 SAMPLE_SCRIPT = (
-    "In the garden stretching, I speak my days out loud and notice shifts tend "
+    "Before breakfast stretching, I speak my days out loud and notice shifts "
     "to come after busy mornings. That surprise feels steadier, a rhythm I can spot."
 )
 REWRITE_HOOK = "Bad moods weren't random. They followed busy mornings."

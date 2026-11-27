@@ -479,6 +479,67 @@ def _bare_place_noun(phrase: str) -> str:
     noun = phrase.split(" ", 1)[1] if " " in phrase else phrase
     return noun[:-len(" days")] if noun.endswith(" days") else noun
 
+# Naming the place in the spoken words (ADR 0377, enforcing ADR 0294).
+# The no-place rule lived in the prompts alone, and it still shipped:
+# Kasra's live script carried "After lunch on my harbour walk I point
+# to it and I'm calmer." — the place named mid-script on a possessive
+# locative phrase. The gate's older place checks could not see it: the
+# article slip above only fires when the article is MISSING, and the
+# scene checks read the script's first and last sentences for the
+# story arithmetic, never as a defect. What is observable is the
+# construction itself: a locative preposition phrase built on a place
+# noun — "on my harbour walk", "at the kitchen table", "in the
+# garden". The noun carries the charge, so the doctrine's allowed
+# riders never fire: light TIME grounding names moments, not places
+# ("after lunch", "on Wednesday", "Saturday morning" — weekday and
+# mealtime words stand outside this vocabulary), and body sensations
+# name the body, not a place ("in my chest", "to my stomach"). The
+# vocabulary extends the scene cluster's place words (_SCENE_PLACES)
+# in its own style — single concrete location nouns, grown by
+# witnessed leaks ("harbour" is the witnessed one) — and the phrase
+# may carry one compound tail ("harbour walk", "kitchen table",
+# "bus stop"), because a place compound names the place just as
+# plainly as its head noun alone.
+_NAMED_PLACE_NOUNS = (
+    "car", "home", "house", "apartment", "flat", "dorm", "kitchen",
+    "desk", "office", "couch", "sofa", "bed", "bedroom", "bathroom",
+    "shower", "street", "train", "bus", "park", "gym", "store",
+    "shop", "cafe", "restaurant", "diner", "bar", "work", "school",
+    "library", "classroom", "porch", "driveway", "garage", "yard",
+    "backyard", "garden", "sidewalk", "elevator", "lobby", "hall",
+    "hallway", "stairs", "parking", "table", "counter", "window",
+    "door", "doorway", "closet", "basement", "attic", "balcony",
+    "patio", "deck", "playground", "field", "beach", "pool", "lake",
+    "river", "trail", "woods", "forest", "city", "town", "farm",
+    "room", "harbour", "harbor", "seafront", "promenade", "boardwalk",
+    "waterfront", "riverside", "lakeside", "pier", "coast", "shore",
+    "cliff", "hillside", "mountain", "valley", "island", "village",
+    "downtown", "neighborhood", "neighbourhood", "suburb", "station",
+    "airport", "market", "bakery", "clinic", "hospital", "church",
+    "museum", "cinema", "stadium", "campus",
+)
+_NAMED_PLACE_COMPOUNDS = (
+    "living room", "dining room", "waiting room",
+)
+_NAMED_PLACE_TAILS = (
+    "walk", "table", "stop", "room", "lot", "path", "front", "side",
+    "station", "shop", "road", "street",
+)
+_NAMED_PLACE_RE = re.compile(
+    r"\b(?:at|on|in|by|near|beside|outside|inside|along|across|around|past|into)"
+    r"(?:\s+(?:the|a|an|my|this|that|our|his|her|their))?"
+    r"\s+(?:"
+    + "|".join(_NAMED_PLACE_COMPOUNDS)
+    + "|(?:" + "|".join(_NAMED_PLACE_NOUNS) + r")s?"
+    r"(?:\s+(?:" + "|".join(_NAMED_PLACE_TAILS) + r"))?"
+    r")\b"
+)
+
+def _named_place_hit(text: str) -> str:
+    """The locative place phrase in a spoken line, else ""."""
+    match = _NAMED_PLACE_RE.search(_normalize_spoken(text))
+    return match.group(0) if match else ""
+
 # Working the app's controls out loud (ADR 0128). The profile's own
 # feature names are banned by the shared craft block; what leaked
 # instead was generic UI vocabulary — "I choose pleasant and calm
@@ -668,6 +729,20 @@ def _generated_spoken_issues(hook: str, script: str, hook_budget: int, script_bu
                 f"{name} drops the article before a place ('{bare_place}') — "
                 f"a real person says 'at the {_bare_place_noun(bare_place)}'; "
                 f"give the place its article or rephrase"
+            )
+        # The spoken words never name the place (ADR 0294, charged by
+        # ADR 0377): the viewer already sees where the speaker is, so
+        # a locative phrase built on a place noun is rewritten here
+        # instead of shipped. Time grounding and body sensations
+        # cannot trip it — their words stand outside the place
+        # vocabulary the charge is built on (see _NAMED_PLACE_RE).
+        named_place = _named_place_hit(text)
+        if named_place:
+            issues.append(
+                f"{name} names the place ('{named_place}') — "
+                f"the viewer already sees the place, so the words stay "
+                f"on what is done and felt there, never on where it is; "
+                f"drop the place and let the feeling carry the line"
             )
         # The app's controls are never worked out loud (ADR 0128): a
         # control verb governing "levels"/"sliders" speaks the UI, not

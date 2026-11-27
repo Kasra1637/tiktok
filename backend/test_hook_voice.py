@@ -22,12 +22,12 @@ SCRIPT = "One prompt helped me start writing and I finished the entry."
 
 WEAK_HOOK = "Every week I look back and my mood shifts surprise me again."
 WEAK_SCRIPT = (
-    "In the garden stretching, I speak my days out loud and notice shifts tend "
+    "Before breakfast stretching, I speak my days out loud and notice shifts "
     "to come after busy mornings. That surprise feels steadier, a rhythm I can spot."
 )
 STRONG_HOOK = "Bad moods weren't random. They followed busy mornings."
 STRONG_SCRIPT = (
-    "In the garden, I talked through my whole day. There it was again: flat afternoon, "
+    "I talked through my whole day out loud, slowly. There it was again: flat afternoon, "
     "busy morning. Now I can name it, but not what sets it off."
 )
 
@@ -300,20 +300,24 @@ def _plan(hook, script):
 
 def test_the_plan_loop_keeps_a_first_person_hook(monkeypatch):
     # ADR 0145: the editorial loop no longer rewrites a hook for speaking
-    # in first person. This pair — first person, a named place, an open
-    # ending — is calibrated to the shipped rubric: it totals over the
-    # craft-retry bar, so no craft retry fires either, and the draft
-    # lands as written with no EDITORIAL CORRECTION spent on it.
+    # in first person. This pair — first person, an open ending — is
+    # calibrated to the shipped rubric: it totals over the craft-retry
+    # bar, so no craft retry fires either, and the draft lands as
+    # written with no EDITORIAL CORRECTION spent on it.
     # Recalibrated for ADR 0188: first person and the open ending are
     # each paid in one category now, which cost this pair 4 points; the
     # script earns them back with an insight the old draft lacked
     # ("because I said it out loud") and one fewer abstract noun, and
     # the pair totals 80 again. Recalibrated for ADR 0255: the script
-    # also sits inside its delivery band (the porch step is named in
-    # it), and the pair totals 82 — still over the bar.
+    # also sits inside its delivery band, and the pair totals 82 —
+    # still over the bar. Recalibrated for ADR 0377: the pair's porch
+    # step came out — the gate now refuses a named place outright, so
+    # a "good draft" can no longer carry one; the hook's recurrence
+    # cue ("again", "still") earns back what the place words paid, and
+    # the pair stays over the same bar.
     good = _plan(
-        "Friday evening on my porch step my mood drops and I freeze.",
-        "I sit with my notebook open on the porch step and name it out loud. It only moves because I said it out loud. What sets it off is still unclear.",
+        "Friday evening my mood drops again and I still freeze.",
+        "I sit with my notebook open, pen in my hand, and name it out loud. It only moves because I said it out loud. What sets it off is still unclear.",
     )
     calls = []
 
@@ -340,8 +344,8 @@ def test_the_plan_loop_rewrites_a_question_hook(monkeypatch):
         "One prompt helped me start writing, and I finished the entry.",
     )
     good = _plan(
-        "Friday evening on my porch step my mood drops and I freeze.",
-        "I sit with my notebook open on the porch step and name it out loud. It only moves because I said it out loud. What sets it off is still unclear.",
+        "Friday evening my mood drops again and I still freeze.",
+        "I sit with my notebook open, pen in my hand, and name it out loud. It only moves because I said it out loud. What sets it off is still unclear.",
     )
     calls = []
 
@@ -671,7 +675,7 @@ CERTIFIED_ANGLE = {
 CERTIFIED_OUTCOME = "Start before the kettle boils"
 GOOD_HOOK = "I start before the kettle boils."
 GOOD_SCRIPT = (
-    "The kettle is on and the timer is already counting at my desk. "
+    "The kettle is on and the timer is counting beside my notebook. "
     "I start the task before my tea is ready, and the morning opens "
     "up instead of stalling."
 )
