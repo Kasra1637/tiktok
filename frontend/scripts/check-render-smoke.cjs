@@ -5735,6 +5735,75 @@ async function main() {
   // The panel no longer shows a warning when the length exceeds the model's
   // single-pass ceiling. The button is still disabled via the `tooLong` flag
   // so the founder cannot click into a 400, but there is no inline alert.
+  await check("the posted-link section stands below the Demo + CTA button", async (ctx) => {
+    // Kasra's order (Nov 27 2026): the History card's verdict +
+    // link section stands in the render flow directly below the
+    // Demo + CTA button, on the same render record and the same
+    // saves — the verdict toggles in one neat row with the field
+    // and its button, and a worked verdict plus a saved link reads
+    // as a winner here exactly as it does on the card.
+    const finished = {
+      ...SEGMENT,
+      id: "gen-1",
+      status: "completed",
+      video_url: "/api/media/videos/gen-1.mp4",
+      r2_url: null,
+      playback_url: "/api/media/videos/gen-1.mp4?exp=1&sig=abc",
+    };
+    const linkCalls = [];
+    const verdictCalls = [];
+    await withApi({
+      getGenerations: async () => ({ generations: [finished] }),
+      setTikTokLink: async (id, url) => {
+        linkCalls.push([id, url]);
+        return { tiktok_url: url || null };
+      },
+      setVideoVerdict: async (id, verdict) => {
+        verdictCalls.push([id, verdict]);
+        return { video_verdict: verdict };
+      },
+    }, async () => {
+      await mount(GenerationPanel, { project: PROJECT_WITH_STRATEGY })(ctx);
+      const open = [...ctx.container.querySelectorAll("a")].find((a) =>
+        (a.textContent || "").includes("Open in Demo + CTA")
+      );
+      if (!open) throw new Error("the Demo + CTA button is missing");
+      const section = ctx.container.querySelector('[data-testid="posted-link-section-gen-1"]');
+      if (!section) throw new Error("no posted-link section stands in the render flow");
+      if (!(open.compareDocumentPosition(section) & 4)) {
+        throw new Error("the posted-link section does not stand below the Demo + CTA button");
+      }
+      const rowEl = section.firstElementChild;
+      const up = section.querySelector('[data-testid="posted-link-verdict-gen-1-up"]');
+      const down = section.querySelector('[data-testid="posted-link-verdict-gen-1-down"]');
+      const input = section.querySelector('[data-testid="posted-link-input-gen-1"]');
+      if (!up || !down || !input || !rowEl.contains(up) || !rowEl.contains(down) || !rowEl.contains(input)) {
+        throw new Error("the verdict toggles do not share one row with the link field");
+      }
+      if (input.getAttribute("placeholder") !== "Paste the TikTok link once posted\u2026") {
+        throw new Error("the link field lost the History field's words");
+      }
+      if (!section.textContent.includes("Marks this render posted") || !section.textContent.includes("counts as a winner")) {
+        throw new Error("the winner line is missing under the row");
+      }
+      await clickEl(ctx, up);
+      if (JSON.stringify(verdictCalls) !== JSON.stringify([["gen-1", "up"]])) {
+        throw new Error(`the verdict toggle saved ${JSON.stringify(verdictCalls)}, expected the one worked verdict`);
+      }
+      await typeInto(ctx, input, "https://www.tiktok.com/@founder/video/123");
+      await clickEl(ctx, section.querySelector('[data-testid="posted-link-save-gen-1"]'));
+      if (JSON.stringify(linkCalls) !== JSON.stringify([["gen-1", "https://www.tiktok.com/@founder/video/123"]])) {
+        throw new Error(`the link saved ${JSON.stringify(linkCalls)}, expected the pasted link on this render`);
+      }
+      if (!section.querySelector('[data-testid="posted-link-posted-gen-1"]')) {
+        throw new Error("the saved link does not mark the render posted");
+      }
+      if (!section.querySelector('[data-testid="posted-link-winner-gen-1"]')) {
+        throw new Error("a worked verdict plus a link does not read as a winner here");
+      }
+    });
+  });
+
   await check("GenerationPanel disables Generate when length exceeds single pass", async (ctx) => {
     await mount(GenerationPanel, {
       // A project whose declared length is longer than the model's ceiling. A
@@ -15761,6 +15830,51 @@ async function runHookCtaChecks() {
     );
   });
 
+  await check("HookSnap shows the hook's Craft score beside the hook line (Nov 27 2026)", async (ctx) => {
+    // Kasra's order: the exact Craft indicator from Create stands
+    // in The hook section, scored on the hook only — HookSnap has
+    // no script. The score rides the hook generation response:
+    // before a hook exists there is no card; after Generate, the
+    // card stands inside the hook section beside the line, and
+    // never in the Post kit area.
+    const REPORT = { total: 71, score10: 7.5, grade: "B", band: "strong", dimensions: {} };
+    let row = blankRow({ id: "hook-cta-1" });
+    await inHookCta(
+      ctx,
+      {
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+        getAppProfile: async () => PROFILE,
+        createHookCtaProject: async () => row,
+        getGenerations: async () => ({ generations: [] }),
+        updateStudioProject: async (_id, patch) => {
+          row = { ...row, ...patch };
+          return row;
+        },
+        generateHookLine: async () => {
+          row = { ...row, hook_line: HOOK, quality_report: REPORT };
+          return hookRow({ id: "hook-cta-1", hook_line: HOOK, quality_report: REPORT });
+        },
+      },
+      "",
+      async () => {
+        if (ctx.container.querySelector('[data-testid="quality-report"]')) {
+          throw new Error("a Craft card stands before any hook exists");
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-generate"]'));
+        const card = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
+        const craft = card?.querySelector('[data-testid="quality-report"]');
+        if (!craft) throw new Error("the hook section carries no Craft card after generation");
+        if (!craft.textContent.includes("Craft check") || !craft.textContent.includes("7.5/10")) {
+          throw new Error("the Craft card does not show the hook's score out of 10");
+        }
+        const postKit = ctx.container.querySelector('[data-testid="hook-cta-post-kit"]');
+        if (postKit?.querySelector('[data-testid="quality-report"]')) {
+          throw new Error("the Craft card leaked into the post kit area");
+        }
+      }
+    );
+  });
+
   await check("a fresh hook from the current picks replaces the line on file (ADR 0265)", async (ctx) => {
     // Kasra's order (Nov 22 2026): after a hook exists, changing
     // the Focus pick left no way to write a brand-new hook from the
@@ -16242,6 +16356,35 @@ async function runHookCtaChecks() {
     const trackRule = css.slice(trackAt, css.indexOf("}", trackAt));
     if (!trackRule.includes("width: 9.375rem")) {
       throw new Error("the slider track does not carry the one fixed width");
+    }
+  });
+
+  await check("pick sliders glide on a switch and never lag a drag (Nov 27 2026)", async (ctx) => {
+    // Kasra's order: a toggle switch settles with a very soft,
+    // short ease instead of snapping. The glide is CSS on the
+    // knob and the fill, gated on the slider NOT being dragged —
+    // the component marks a live drag with .pick-slider-dragging,
+    // and the transition drops away while it stands, so the knob
+    // follows the hand directly. Reduced motion keeps the snap.
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    const glideAt = css.indexOf("The switch glide");
+    if (glideAt < 0) throw new Error("index.css carries no switch glide");
+    const glide = css.slice(glideAt, glideAt + 1400);
+    if (!glide.includes("@media (prefers-reduced-motion: no-preference)")) {
+      throw new Error("the switch glide is not gated on reduced-motion no-preference");
+    }
+    if (!glide.includes(".pick-slider:not(.pick-slider-dragging) .pick-slider-knob") || !glide.includes("transition: left 180ms ease")) {
+      throw new Error("the knob does not glide to its new seat when not dragging");
+    }
+    if (!glide.includes(".pick-slider:not(.pick-slider-dragging) .pick-slider-fill") || !glide.includes("transition: width 180ms ease")) {
+      throw new Error("the fill does not glide with the knob");
+    }
+    if (!glide.includes("@keyframes pick-slider-value-settle")) {
+      throw new Error("the pick's name does not settle with the switch");
+    }
+    const sliderSource = fs.readFileSync(path.join(SRC, "components", "studio", "HookPicksControl.jsx"), "utf8");
+    if (!sliderSource.includes("pick-slider-dragging") || !sliderSource.includes("setDragging(true)")) {
+      throw new Error("the slider never marks a live drag, so the glide would lag the hand");
     }
   });
 
@@ -24754,8 +24897,8 @@ async function runDemoCtaChecks() {
     if (!/\.history-stage-flush\s*\{[^}]*padding:\s*0/.test(css)) {
       throw new Error("the stage does not go flush when the clip plays");
     }
-    if (!/\.history-card-compact \.history-preview-frame\s*\{[^}]*width:\s*max-content/.test(css)) {
-      throw new Error("compact clips draw frame-only gutters beside the fixed-width video");
+    if (/\.history-card-compact/.test(css)) {
+      throw new Error("the compact card face survives in index.css after the full-cards-only removal");
     }
     const panelSource = fs.readFileSync(path.join(SRC, "components/GenerationPanel.jsx"), "utf8");
     if (!panelSource.includes("PlatformPreview")) {
@@ -24825,8 +24968,8 @@ async function runDemoCtaChecks() {
         global.__SMOKE_PARAMS = "?copy=without";
         await mount(GenerationHistory)(ctx);
         const compact = ctx.container.querySelector("#generation-brand-frame-compact");
-        if (!compact?.classList.contains("history-card-compact") || !compact.querySelector('[data-testid="history-brand-frame"] video')) {
-          throw new Error("compact History cards lost the frame around their clip");
+        if (!compact || compact.classList.contains("history-card-compact") || !compact.querySelector('[data-testid="history-brand-frame"] video')) {
+          throw new Error("without-copy History cards no longer stand as full cards with the frame around their clip");
         }
       });
     } finally {
@@ -25139,7 +25282,7 @@ async function runDemoCtaChecks() {
     });
   });
 
-  await check("History polling feedback and compact results access are actionable", async (ctx) => {
+  await check("History polling feedback and results access are actionable", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const previous = global.__SMOKE_PARAMS;
     global.__SMOKE_PARAMS = "?copy=without";
@@ -25152,8 +25295,9 @@ async function runDemoCtaChecks() {
         const poll = ctx.container.querySelector('[data-testid="history-poll-state-poll-job"]');
         if (!poll || !poll.textContent.includes("Automatic checks are active")) throw new Error("no active polling feedback");
         expectAbsent(ctx, "nothing has checked since", "stale polling explanation remains");
-        const record = ctx.container.querySelector('[data-testid="history-record-results-results-job"]');
-        if (!record) throw new Error("compact card has no results shortcut");
+        const card = ctx.container.querySelector("#generation-results-job");
+        const record = [...card.querySelectorAll("button")].find((b) => b.textContent.includes("Not posted yet"));
+        if (!record) throw new Error("the card's journey line has no results access");
         await act(async () => { record.click(); await new Promise((r) => setTimeout(r, 35)); });
         const input = ctx.container.querySelector('[data-testid="history-tiktok-input-results-job"]');
         if (dom.window.document.activeElement !== input) throw new Error("results shortcut did not focus the existing input");
@@ -25275,10 +25419,10 @@ async function runDemoCtaChecks() {
       });
       const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
       const desktop = css.slice(css.indexOf("@media (min-width: 900px)"));
-      if (!/\.history-card:not\(\.history-card-compact\) \.history-row-grid \{\s*align-items: stretch;/.test(desktop)) {
+      if (!/\.history-card \.history-row-grid \{\s*align-items: stretch;/.test(desktop)) {
         throw new Error("the desktop history row does not stretch its columns equal");
       }
-      if (/\.history-card:not\(\.history-card-compact\) \.history-record \{[^}]*justify-content: space-between;/.test(desktop)) {
+      if (/\.history-card \.history-record \{[^}]*justify-content: space-between;/.test(desktop)) {
         throw new Error("the record column still distributes its blocks as filler over the filled height");
       }
     } finally {
@@ -25402,7 +25546,10 @@ async function runDemoCtaChecks() {
   // sentence only. ADR 0207 removes the kit-less banner outright, so the
   // attention this check seats beside the toggle is the repair action
   // alone, raised here by a completed render with no durable copy.
-  await check("History filters share one row, and the attention action sits beside the view toggle", async (ctx) => {
+  // Nov 27 2026: the view toggle itself is gone — full cards are the
+  // only view — so the right cluster now holds the attention action
+  // alone and closes the row by itself.
+  await check("History filters share one row, and the attention action closes it", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
@@ -25417,8 +25564,10 @@ async function runDemoCtaChecks() {
         const search = bar.querySelector('#history-search');
         const copyFilter = bar.querySelector('#history-copy-filter');
         const secondary = bar.querySelector('#history-secondary-filters');
-        const toggle = bar.querySelector('[data-testid="history-view-toggle"]');
-        if (!search || !copyFilter || !secondary || !toggle) {
+        if (bar.querySelector('[data-testid="history-view-toggle"]')) {
+          throw new Error("the view toggle survives the full-cards-only removal");
+        }
+        if (!search || !copyFilter || !secondary) {
           throw new Error("the toolbar lost one of its controls");
         }
         // One row: the search, the copy filter and the secondary wrapper
@@ -25430,9 +25579,9 @@ async function runDemoCtaChecks() {
         if (!row.contains(copyFilter) || secondary.parentElement !== row) {
           throw new Error("the five filter controls do not share one row");
         }
-        const cluster = toggle.parentElement;
+        const cluster = bar.querySelector('[data-testid="history-attention-review"]')?.closest(".ml-auto");
         if (!cluster || cluster.parentElement !== row) {
-          throw new Error("the view toggle does not sit in the toolbar row");
+          throw new Error("the right cluster does not sit in the toolbar row");
         }
         if (!/(^|\s)ml-auto(\s|$)/.test(cluster.className || "")) {
           throw new Error("the toolbar's right cluster is not right-aligned");
@@ -25450,9 +25599,9 @@ async function runDemoCtaChecks() {
         if (!/\.history-secondary-filters[^{]*\{[^}]*display:\s*contents/.test(block)) {
           throw new Error("index.css lost the desktop one-row rule for the secondary filters");
         }
-        // The attention action lives in the right cluster, before the
-        // toggle, with its exact label — and the banner keeps its
-        // sentence only, with no link inside it.
+        // The attention action lives in the right cluster, with its
+        // exact label — and the banner keeps its sentence only, with
+        // no link inside it.
         const banner = ctx.container.querySelector('[data-testid="history-attention"]');
         if (!banner) throw new Error("the repair banner does not render");
         const group = banner.querySelector('[data-testid="history-attention-text"]');
@@ -25464,10 +25613,7 @@ async function runDemoCtaChecks() {
         }
         const action = cluster.querySelector('[data-testid="history-attention-review"]');
         if (!action || !/Review repair/.test(action.textContent || "")) {
-          throw new Error("the attention action does not sit beside the view toggle with its label");
-        }
-        if (!(action.compareDocumentPosition(toggle) & 4)) {
-          throw new Error("the attention action must come before the view toggle in the right cluster");
+          throw new Error("the attention action does not sit in the right cluster with its label");
         }
       });
       // No banner, no action: a render with its post copy filed shows
@@ -27852,10 +27998,11 @@ await check(
     }
   });
 
-  await check("a compact History card keeps its feedback in the record", async (ctx) => {
-    // ADR 0153's media-column move is standard cards only: a compact
-    // card's feedback stays in the record's secondary area, behind
-    // its toggle on mobile, exactly where it has always lived.
+  await check("a History card without copy keeps its feedback in the media column", async (ctx) => {
+    // Full cards only (Nov 27 2026): a card on the without-copy side
+    // is a full card like any other — its feedback rides in the
+    // media column (ADR 0153's seat), never in a record-side
+    // secondary area, and the card wears no compact face.
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
@@ -27866,15 +28013,15 @@ await check(
         global.__SMOKE_PARAMS = "?copy=without";
         await mount(GenerationHistory)(ctx);
         const card = ctx.container.querySelector("#generation-pair-compact");
-        if (!card?.classList.contains("history-card-compact")) {
-          throw new Error("the bare row is not a compact card");
+        if (!card || card.classList.contains("history-card-compact")) {
+          throw new Error("the bare row is not a full card");
         }
         const feedback = card.querySelector('[data-testid="history-feedback-pair-compact"]');
-        if (!feedback || !feedback.closest(".history-compact-secondary")) {
-          throw new Error("the compact card's feedback left the record's secondary area");
+        if (!feedback || !feedback.closest(".history-media-feedback")) {
+          throw new Error("the without-copy card's feedback left the media column");
         }
-        if (card.querySelector(".history-media")?.contains(feedback)) {
-          throw new Error("the compact card's feedback moved into the media column");
+        if (card.querySelector(".history-compact-secondary")) {
+          throw new Error("a secondary area survives on the card");
         }
       });
     } finally {
@@ -28001,15 +28148,16 @@ await check(
     }
   });
 
-  // Compact scan view (ADR 0159): History can trade the full cards
-  // for slim scan rows — hook, status and the verdict in the row,
-  // the video and the full record one tap away — and the choice is
-  // remembered across visits. Full cards stay the default.
-  await check("History offers a compact scan view beside the full cards", async (ctx) => {
+  // Full cards only (Kasra's order, Nov 27 2026): the compact scan
+  // view (ADR 0159) is removed — no toggle, no scan rows, no
+  // remembered view. A stale stored preference changes nothing:
+  // every visit opens on the full cards because they are the only
+  // cards there are.
+  await check("History shows full cards only, with no view toggle", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
-      dom.window.localStorage.removeItem("vocolens.historyView");
+      dom.window.localStorage.setItem("vocolens.historyView", "compact");
       await withApi({
         getGenerationHistory: async () => ({ generations: [{
           ...COMPLETED,
@@ -28022,43 +28170,18 @@ await check(
       }, async () => {
         global.__SMOKE_PARAMS = "?copy=with";
         await mount(GenerationHistory)(ctx);
-        const toggle = ctx.container.querySelector('[data-testid="history-view-toggle"]');
-        if (!toggle) throw new Error("History has no view toggle");
-        if (!ctx.container.querySelector('[data-testid="history-card"]')) {
-          throw new Error("History does not open on the full cards");
+        if (ctx.container.querySelector('[data-testid="history-view-toggle"]')) {
+          throw new Error("History still offers a view toggle");
         }
         if (ctx.container.querySelector('[data-testid="history-scan-row-scan-1"]')) {
-          throw new Error("a scan row renders before the founder asks for the compact view");
+          throw new Error("a scan row renders in the full-cards-only History");
         }
-        await clickEl(ctx, toggle.querySelector('[data-testid="history-view-compact"]'), "switch to the compact view");
-        const row = ctx.container.querySelector('[data-testid="history-scan-row-scan-1"]');
-        if (!row) throw new Error("the compact view shows no scan row");
-        if (!row.textContent.includes("A pier at dawn")) {
-          throw new Error("the scan row lost the hook line");
-        }
-        if (!row.textContent.includes("Completed")) {
-          throw new Error("the scan row lost the render's status");
-        }
-        if (!row.querySelector('[data-testid="history-verdict-scan-1-up"]')) {
-          throw new Error("the scan row buries the verdict");
-        }
-        if (row.querySelector("video")) {
-          throw new Error("the scan row mounts the video before it is opened");
-        }
-        if (ctx.container.querySelector('[data-testid="history-card"]')) {
-          throw new Error("the full card still renders in the compact view");
-        }
-        if (dom.window.localStorage.getItem("vocolens.historyView") !== "compact") {
-          throw new Error("the compact choice is not remembered across visits");
-        }
-        await clickEl(ctx, row.querySelector('[data-testid="history-scan-toggle-scan-1"]'), "open the scan row");
         const card = ctx.container.querySelector('[data-testid="history-card"]');
         if (!card || !card.querySelector("video")) {
-          throw new Error("opening a scan row does not bring the full card with its video");
+          throw new Error("History does not open on the full cards");
         }
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="history-view-full"]'), "switch back to full cards");
-        if (dom.window.localStorage.getItem("vocolens.historyView") !== "full") {
-          throw new Error("the full choice is not remembered across visits");
+        if (!card.textContent.includes("A pier at dawn")) {
+          throw new Error("the full card lost the hook line");
         }
       });
     } finally {
@@ -28137,10 +28260,6 @@ await check(
         const more = [...ctx.container.querySelectorAll("button")].find((b) => b.textContent.includes("More filters"));
         if (!more || more.getAttribute("data-active") !== "true") {
           throw new Error("More filters does not read as active while a filter behind it is on");
-        }
-        const pressed = ctx.container.querySelector('[data-testid="history-view-full"]');
-        if (!pressed.className.includes("filter-control") || pressed.getAttribute("aria-pressed") !== "true") {
-          throw new Error("the view toggle does not wear the filter treatment");
         }
       });
     } finally {
@@ -28308,15 +28427,14 @@ await check(
     }
   });
 
-  await check("History uses compact aligned cards only without copy or context", async (ctx) => {
+  await check("History renders full cards in the without-copy section too", async (ctx) => {
+    // Full cards only (Nov 27 2026): the without-copy section lost
+    // its compact grid and compact card face — its renders stand
+    // as the same full cards the with-copy section shows, and the
+    // compact rules are out of the stylesheet.
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
-    if (!/\.history-compact-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(css) ||
-        !/@media\s*\(min-width:\s*1200px\)[\s\S]*?\.history-compact-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/.test(css)) {
-      throw new Error("the without-copy grid must be one column on narrow screens and two on wide screens");
-    }
-    if (!/\.history-card-compact\s+\.history-preview\s*\{[^}]*height:\s*240px[^}]*object-fit:\s*contain/.test(css) ||
-        !/\.history-card-compact\s+\.history-row-grid\s*\{[^}]*height:\s*100%/.test(css)) {
-      throw new Error("compact cards need equally sized contained previews and stretched rows");
+    if (/\.history-compact-grid/.test(css) || /\.history-card-compact/.test(css)) {
+      throw new Error("the compact grid or card face survives in index.css");
     }
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
@@ -28331,16 +28449,19 @@ await check(
       }, async () => {
         global.__SMOKE_PARAMS = "?copy=without";
         await mount(GenerationHistory)(ctx);
-        const grid = ctx.container.querySelector('[data-testid="history-section-without"] .history-compact-grid');
-        const cards = grid && grid.querySelectorAll('[data-testid="history-card"].history-card-compact');
-        if (!cards || cards.length !== 2 || [...cards].some((card) => !card.querySelector("video") || !card.querySelector('[data-testid="history-media-actions"]') || !card.querySelector('[data-testid="history-detail-panel"]'))) {
-          throw new Error("the without-copy grid must keep each video, actions and record attached");
+        const section = ctx.container.querySelector('[data-testid="history-section-without"]');
+        if (!section || section.querySelector(".history-compact-grid")) {
+          throw new Error("the without-copy section kept its compact grid");
+        }
+        const cards = section.querySelectorAll('[data-testid="history-card"]');
+        if (!cards || cards.length !== 2 || [...cards].some((card) => card.classList.contains("history-card-compact") || !card.querySelector("video") || !card.querySelector('[data-testid="history-media-actions"]') || !card.querySelector('[data-testid="history-detail-panel"]'))) {
+          throw new Error("the without-copy section must hold full cards with each video, actions and record attached");
         }
         global.__SMOKE_PARAMS = "?copy=with";
         await mount(GenerationHistory)(ctx);
         const regular = ctx.container.querySelector('#generation-regular-1');
-        if (!regular || regular.classList.contains("history-card-compact") || ctx.container.querySelector(".history-compact-grid")) {
-          throw new Error("compact layout must not affect the with-copy section");
+        if (!regular || regular.classList.contains("history-card-compact")) {
+          throw new Error("the with-copy section's card is not a plain full card");
         }
       });
     } finally {
@@ -28348,7 +28469,7 @@ await check(
     }
   });
 
-  await check("History compact cards keep download readable and notices in the record", async (ctx) => {
+  await check("History cards keep download readable and notices in the stage", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
@@ -28366,21 +28487,24 @@ await check(
         const playable = ctx.container.querySelector('#generation-compact-playable');
         const actions = playable.querySelector('[data-testid="history-media-actions"]');
         // Download and Delete share the row below the video; nothing removable
-        // floats over the compact footage.
+        // floats over the footage. Full cards (Nov 27 2026) use the
+        // standard 36px delete target everywhere.
         const remove = actions.querySelector('button[aria-label="Delete this render"]');
         if (!actions.querySelector('a[download]') || !remove || remove.textContent.trim() !== "" ||
-            !remove.classList.contains("h-11") || !remove.classList.contains("w-11")) {
-          throw new Error("compact playable needs an icon-only 44px delete beside Download");
+            !remove.classList.contains("h-9") || !remove.classList.contains("w-9")) {
+          throw new Error("a playable card needs an icon-only delete beside Download");
         }
         const overlay = playable.querySelector('[data-testid="history-preview-duration"]');
         if (!overlay || overlay.querySelector("button")) {
-          throw new Error("the compact preview must carry no control over the footage");
+          throw new Error("the preview must carry no control over the footage");
         }
+        // Notices stand in the media stage on every card now —
+        // the without-copy side reads exactly like the with side.
         for (const [id, message] of [["compact-missing", "No durable copy"], ["compact-failed", "Provider error"]]) {
           const card = ctx.container.querySelector(`#generation-${id}`);
-          const details = card.querySelector('[data-testid="history-detail-panel"]');
-          if (!details.textContent.includes(message) || card.querySelector('.history-media .history-stage-empty')) {
-            throw new Error(`the ${id} notice must be readable in the wide record`);
+          const stage = card.querySelector('.history-media .history-stage-empty');
+          if (!stage || !stage.textContent.includes(message)) {
+            throw new Error(`the ${id} notice must stand in the media stage`);
           }
         }
         global.__SMOKE_PARAMS = "?copy=with";
@@ -28395,7 +28519,11 @@ await check(
     }
   });
 
-  await check("History compact mobile details open without hiding repair actions", async (ctx) => {
+  await check("History cards keep feedback and repair actions standing open", async (ctx) => {
+    // Full cards only (Nov 27 2026): there is no Results & actions
+    // disclosure to open — the feedback stands in the media column
+    // and the repair actions stand in the record, on every card,
+    // with nothing hidden behind a toggle.
     const History = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     const previousHash = global.__SMOKE_HASH;
@@ -28412,28 +28540,31 @@ await check(
       }, async () => {
         await mount(History)(ctx);
         const card = ctx.container.querySelector('#generation-mobile-playable');
-        const toggle = card.querySelector('button[aria-controls][aria-expanded="false"]');
+        if ([...card.querySelectorAll("button")].some((b) => b.textContent.includes("Results & actions"))) {
+          throw new Error("a Results & actions disclosure survives on the card");
+        }
+        const feedback = card.querySelector('[data-testid="history-feedback-mobile-playable"]');
+        if (!feedback || !feedback.closest(".history-media-feedback")) {
+          throw new Error("the card's feedback does not stand open in the media column");
+        }
         const trash = card.querySelector('[aria-label="Delete this render"]');
-        if (!toggle || !toggle.textContent.includes("Results & actions") || !trash.classList.contains("h-11") || !trash.classList.contains("w-11")) {
-          throw new Error("compact mobile cards need a collapsed results disclosure and a 44px trash target");
+        if (!trash.classList.contains("h-9") || !trash.classList.contains("w-9")) {
+          throw new Error("the delete target is not the standard full-card size");
         }
-        const content = card.querySelector(`#${toggle.getAttribute('aria-controls')}`);
-        if (!content || content.dataset.expanded !== "false" || !card.querySelector('a[download]')) {
-          throw new Error("video actions must stay visible outside collapsed secondary details");
-        }
-        await clickEl(ctx, toggle);
-        if (toggle.getAttribute("aria-expanded") !== "true" || content.dataset.expanded !== "true" || !content.querySelector('[data-testid="history-feedback-mobile-playable"]')) {
-          throw new Error("the results disclosure must open the row's feedback and actions");
+        if (ctx.container.querySelector(".history-compact-secondary")) {
+          throw new Error("a secondary area survives somewhere on the page");
         }
         for (const [id, selector] of [["mobile-missing", '[data-testid="retry-storage-mobile-missing"]'], ["mobile-failed", 'button']]) {
           const repairCard = ctx.container.querySelector(`#generation-${id}`);
           const repair = id === "mobile-failed" ? [...repairCard.querySelectorAll(selector)].find((b) => b.textContent.includes("Retry render")) : repairCard.querySelector(selector);
-          if (!repair || repair.closest('.history-compact-secondary')) throw new Error(`${id} repair action is hidden behind secondary details`);
+          if (!repair) throw new Error(`${id} repair action is missing from the open record`);
         }
         global.__SMOKE_HASH = "#generation-mobile-playable";
         await mount(History)(ctx);
         const linked = ctx.container.querySelector('#generation-mobile-playable');
-        if (linked.querySelector('button[aria-controls]')?.getAttribute('aria-expanded') !== 'true') throw new Error("a deep link must reveal its awaiting TikTok input");
+        if (!linked.querySelector('[data-testid="history-tiktok-input-mobile-playable"]')?.closest(".history-media-feedback")) {
+          throw new Error("a deep link does not land on the standing-open TikTok input");
+        }
       });
     } finally {
       global.__SMOKE_PARAMS = previousParams;

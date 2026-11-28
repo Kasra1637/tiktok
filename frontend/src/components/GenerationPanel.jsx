@@ -8,6 +8,7 @@ import { api, getErrorMessage, mediaUrl, downloadMediaUrl, durableMediaUrl } fro
 import { recordSignal } from "../lib/feedback";
 import { directionDrifted } from "../lib/strategyStaleness";
 import { PostKitSection } from "./PostKitSection";
+import { PostedLinkSection } from "./PostedLinkSection";
 import { CONTROL_CLASS } from "./formControls";
 import {
   exceedsSinglePass, readPieceSeconds, singlePassCeiling,
@@ -462,6 +463,19 @@ export function GenerationPanel({ project, onGenerationChange, onProjectChange, 
     setGeneration(updated);
     onGenerationChange?.(updated);
     return updated.status === "submitted" || updated.status === "generating";
+  }, [onGenerationChange]);
+
+  // A posted-link or verdict save from the section below the
+  // Demo + CTA button: the patch merges into the panel's row and
+  // rides up like a poll's update, so the page and History read
+  // the same record.
+  const handlePostedUpdated = useCallback((id, patch) => {
+    setGeneration((current) => {
+      if (!current || current.id !== id) return current;
+      const next = { ...current, ...patch };
+      onGenerationChange?.(next);
+      return next;
+    });
   }, [onGenerationChange]);
 
   const pollOnce = useCallback(async (id) => {
@@ -1199,6 +1213,16 @@ const handleGenerate = async () => {
                   to add your demo and call to action — exports save beside the original.
                 </p>
               </div>
+
+              {/* The posted-link section (Kasra's order, Nov 27
+                  2026): the History card's verdict + link block,
+                  standing directly below the Demo + CTA button so
+                  the founder marks the render posted where the
+                  finishing flow ends. Same record, same saves —
+                  PostedLinkSection calls the History card's own
+                  endpoints, and its saves merge back into this
+                  panel's generation like a poll's would. */}
+              <PostedLinkSection generation={generation} onUpdated={handlePostedUpdated} />
             </>
           )}
 

@@ -293,6 +293,20 @@ One render path, single-pass video generation via OpenRouter.
   tracks wear the `.trim-timeline` density of `.inset-panel`, and the
   second clip's sequence stands as a wrapping row of item tiles with
   the add tile last.
+- Posted link, full-card History, switch glide, HookSnap score (Nov 27
+  2026, Kasra's order): the render panel carries the History card's
+  verdict + TikTok link section (`components/PostedLinkSection.jsx`)
+  directly below the Demo + CTA button — one row of verdict toggles,
+  link field and Save link on the same `setVideoVerdict` /
+  `setTikTokLink` saves, so a winner reads the same everywhere.
+  History is full cards only: the Full/Compact toggle, the compact
+  scan rows and their CSS are removed (ADR 0159 superseded;
+  `lib/historyView.js` stands orphaned until a deletion round).
+  PickSlider switches settle with a 180ms glide on knob and fill,
+  gated on not-dragging and on reduced-motion no-preference. HookSnap
+  shows Create's Craft card (`components/CraftCheckCard.jsx`, shared)
+  beside the hook line; the /hook response scores the hook alone with
+  the model evaluator, exactly as the studio single-project GET does.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no

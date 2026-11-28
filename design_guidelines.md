@@ -586,7 +586,11 @@ for an artificial minimum; reduced motion leaves both the skeleton and page
 content static. On Analytics the resolve crossfades (ADR 0166): the
 skeleton fades out over 250ms on the same ease (`skeleton-fade`) while
 the content rises, the two sharing one grid cell so nothing shifts;
-reduced motion swaps instantly.
+reduced motion swaps instantly. Pick switches settle with a soft glide
+(Nov 27 2026): the PickSlider's knob and fill ease 180ms to the new stop
+and the pick's name fades in with them — only when the slider is not
+being dragged (a live drag follows the hand directly) and only under
+the no-preference gate; reduced motion keeps the instant snap.
 
 **Hard rules:**
 

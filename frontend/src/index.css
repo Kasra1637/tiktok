@@ -1091,22 +1091,21 @@ h1,
        its blocks over the height — Kasra read the spread gaps as
        filler between boxes, not as one cohesive card. The blocks keep
        their natural space-y-5 rhythm and any leftover height collects
-       at the column's foot, inside the body's own padding. Standard
-       cards only; compact cards keep their own geometry. The loading
+       at the column's foot, inside the body's own padding. The loading
        skeleton wears the same classes, so it fills the same way. */
-    .history-card:not(.history-card-compact) .history-row-grid {
+    .history-card .history-row-grid {
         align-items: stretch;
     }
-    .history-card:not(.history-card-compact) .history-detail {
+    .history-card .history-detail {
         display: flex;
         flex-direction: column;
     }
-    .history-card:not(.history-card-compact) .history-body {
+    .history-card .history-body {
         flex: 1;
         display: flex;
         flex-direction: column;
     }
-    .history-card:not(.history-card-compact) .history-record {
+    .history-card .history-record {
         flex: 1;
         display: flex;
         flex-direction: column;
@@ -1148,8 +1147,7 @@ h1,
  * fixed box, no stage slab — the frame fills the media column edge to
  * edge at every width. A regular card's empty/notice state takes the
  * same flush stage and stands in the finished frame's geometry
- * (ADR 0143, .history-stage-frame below). Compact cards never take
- * this class; their stage stays a small centered stage by design. */
+ * (ADR 0143, .history-stage-frame below). */
 .history-stage-flush {
     min-height: 0;
     padding: 0;
@@ -1166,76 +1164,6 @@ h1,
     align-items: center;
     justify-content: center;
     aspect-ratio: 9 / 16;
-}
-
-/* Without-copy records are shorter: pair them only where the available
- * viewport leaves enough room for each record. Grid rows stretch to the
- * tallest card, while long content and repair messages can still grow. */
-.history-compact-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
-    gap: 1rem;
-}
-.history-card-compact {
-    container-type: inline-size;
-}
-.history-card-compact .history-row-grid {
-    height: 100%;
-    grid-template-columns: minmax(0, 1fr);
-}
-.history-card-compact .history-media {
-    border-right: 0;
-    border-bottom: 1px solid var(--hairline);
-}
-.history-card-compact .history-stage {
-    min-height: 264px;
-    padding: 12px;
-}
-.history-card-compact .history-preview-frame {
-    /* Shrink to the compact clip rather than leaving frame-only gutters
-       beside a fixed 135px video. */
-    width: max-content;
-    max-width: 100%;
-}
-.history-card-compact .history-preview {
-    width: 135px;
-    max-width: 100%;
-    height: 240px;
-    max-height: none;
-    aspect-ratio: 9 / 16;
-    object-fit: contain;
-}
-.history-card-compact .history-body {
-    padding: 20px;
-}
-.history-compact-toggle {
-    display: flex;
-}
-.history-compact-secondary[data-expanded="false"] {
-    display: none;
-}
-@media (min-width: 768px) {
-    .history-compact-toggle {
-        display: none;
-    }
-    .history-compact-secondary[data-expanded="false"] {
-        display: block;
-    }
-}
-@container (min-width: 520px) {
-    .history-card-compact .history-row-grid {
-        grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
-    }
-    .history-card-compact .history-media {
-        border-right: 1px solid var(--hairline);
-        border-bottom: 0;
-    }
-}
-@media (min-width: 1200px) {
-    .history-compact-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
 }
 
 /* ---------- Brand accents ---------- */
@@ -2692,6 +2620,35 @@ h1,
     font-size: 0.875rem;
     font-weight: 600;
     color: var(--foreground);
+}
+
+/* The switch glide (Nov 27 2026, Kasra's order): a pick change
+   settles instead of snapping — the knob and the fill ease to the
+   new seat over one short, soft glide, and the pick's name fades
+   in with it. The glide belongs to the switch, never to the drag:
+   while the pointer is down the component adds
+   .pick-slider-dragging and the transition drops away, so the
+   knob follows the hand directly with nothing lagging it.
+   Declared only inside the reduced-motion no-preference gate,
+   like the app's other settles — reduced motion keeps the snap. */
+@media (prefers-reduced-motion: no-preference) {
+    .pick-slider:not(.pick-slider-dragging) .pick-slider-knob {
+        transition: left 180ms ease;
+    }
+    .pick-slider:not(.pick-slider-dragging) .pick-slider-fill {
+        transition: width 180ms ease;
+    }
+    .pick-slider-value {
+        animation: pick-slider-value-settle 180ms ease;
+    }
+}
+@keyframes pick-slider-value-settle {
+    from {
+        opacity: 0.35;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 /* The pick explainer (Nov 27 2026): the brief meaning of the

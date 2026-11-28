@@ -200,6 +200,12 @@ export function PickSlider({ options, current, onChange, disabled, testId, ariaL
   // local interaction state, and the explainer stands only while
   // the current value is the stop that change landed on.
   const [touchedValue, setTouchedValue] = useState(null);
+  // The switch glide (Kasra's order, Nov 27 2026): while the
+  // pointer is down the knob follows the hand directly; the soft
+  // ease in index.css applies only when the slider is not being
+  // dragged, so a tap, a stop button or a key press settles into
+  // its seat instead of snapping, and a drag never lags.
+  const [dragging, setDragging] = useState(false);
   const found = options.findIndex((option) => option.value === current);
   // The knob's seat: the pick itself when one stands. A caller
   // whose standing state is not a pick (the voice pick before a
@@ -245,9 +251,11 @@ export function PickSlider({ options, current, onChange, disabled, testId, ariaL
   };
   const onPointerDown = (event) => {
     if (disabled) return;
+    setDragging(true);
     event.currentTarget.setPointerCapture?.(event.pointerId);
     jump(indexFromClientX(event.clientX));
   };
+  const onPointerEnd = () => setDragging(false);
   const onPointerMove = (event) => {
     if (disabled || !event.buttons) return;
     jump(indexFromClientX(event.clientX));
@@ -269,12 +277,14 @@ export function PickSlider({ options, current, onChange, disabled, testId, ariaL
     }
   };
   return (
-    <div className="pick-slider" data-testid={`${testId}-slider`}>
+    <div className={`pick-slider${dragging ? " pick-slider-dragging" : ""}`} data-testid={`${testId}-slider`}>
       <div
         ref={trackRef}
         className="pick-slider-track"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
       >
         <div className="pick-slider-fill" style={{ width: seatLeft(ratio) }} aria-hidden="true" />
         {options.map((option, i) => (
@@ -309,7 +319,7 @@ export function PickSlider({ options, current, onChange, disabled, testId, ariaL
           <span aria-hidden="true" />
         </div>
       </div>
-      <div className="pick-slider-value" data-testid={`${testId}-value`}>
+      <div className="pick-slider-value" data-testid={`${testId}-value`} key={valueLabel}>
         {valueLabel}
       </div>
       {explainText && (

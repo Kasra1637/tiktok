@@ -28,7 +28,6 @@ import { HistoryFeedback } from "../components/HistoryFeedback";
 import { VideoVerdict } from "../components/VideoVerdict";
 import { recordSignal } from "../lib/feedback";
 import { isWinnerRow } from "../lib/nextTake";
-import { readHistoryView, rememberHistoryView } from "../lib/historyView";
 import { COPY_FILTER_EXPLAINERS, STATUS_FILTER_EXPLAINERS } from "../lib/pickExplainers";
 import { listPendingSaves } from "../demoCta/saveOutbox";
 import { PendingSaveCard } from "./PendingSaveCard";
@@ -266,25 +265,23 @@ function describeSnapshot(snapshot) {
 // deep-link state while the rows stay put. Props are stable callbacks plus
 // row objects react-query structurally shares, so untouched rows skip the
 // re-render and only the changed row pays for one.
-const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, onKitGenerated, deepLinked = false, draftIds = null, compact = false, pollState = "active" }) {
+const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, onKitGenerated, deepLinked = false, draftIds = null, pollState = "active" }) {
   // A #generation- deep link (export "View in History", Analytics "View
   // render") opens this row; when it is still awaiting its TikTok link,
   // finish the job by focusing that input, so the founder lands with the
   // cursor where the next action is instead of having to remember the link
   // step and find the field inside the band. Scoped to the deep-linked
-  // row and the awaiting state only: a manual expand never steals focus,
-  // and a row that already has its link keeps focus where it was.
+  // row and the awaiting state only: an ordinary visit never steals
+  // focus, and a row that already has its link keeps focus where it
+  // was. Full cards only (Nov 27 2026): the feedback block always
+  // stands open in the media column, so the focus lands directly —
+  // there is no secondary area left to open first.
   const linkAwaiting = deepLinked && !row.tiktok_url;
-  const [secondaryOpen, setSecondaryOpen] = useState(linkAwaiting);
   useEffect(() => {
-    if (linkAwaiting) setSecondaryOpen(true);
-  }, [linkAwaiting]);
-  useEffect(() => {
-    if (!linkAwaiting || !secondaryOpen) return;
+    if (!linkAwaiting) return;
     document.querySelector(`[data-testid="history-tiktok-input-${row.id}"]`)?.focus?.();
-  }, [linkAwaiting, row.id, secondaryOpen]);
+  }, [linkAwaiting, row.id]);
   const openResults = () => {
-    setSecondaryOpen(true);
     requestAnimationFrame(() => {
       const suffix = row.tiktok_url ? "views-input" : "input";
       const input = document.querySelector(`[data-testid="history-tiktok-${suffix}-${row.id}"]`);
@@ -544,7 +541,6 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
       {busy ? "Retrying save" : "Retry durable save"}
     </Button>
   );
-  const compactNotice = compact && (!downloadUrl || previewBroken);
   // The joined finished → posted state shows only on a card that holds a
   // finished, fetchable clip: before that the stage notice above is the
   // honest surface, and a journey line would promise an export that does
@@ -570,7 +566,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   const isHookCta = row.project_surface === "hook_cta";
   const showEmptyKit = !isStory && !row.post_kit && (row.status === "completed" || row.status === "archived");
   const showEmptyStoryKit = isStory && !row.story_kit && (row.status === "completed" || row.status === "archived");
-  const sectionsPaired = !compact && (Boolean(row.post_kit) || Boolean(row.story_kit) || showEmptyKit || showEmptyStoryKit) && hasContext;
+  const sectionsPaired = (Boolean(row.post_kit) || Boolean(row.story_kit) || showEmptyKit || showEmptyStoryKit) && hasContext;
   // The journey line's kit item walks to the control that owns it:
   // the kit itself when one is written (scrolling to its solid section),
   // the generate prompt when none is. One click from the state to the
@@ -604,12 +600,12 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   return (
     <article
       id={`generation-${row.id}`}
-      className={`surface surface-flush history-card history-row min-w-0 scroll-mt-6${compact ? " history-card-compact" : ""}`}
+      className="surface surface-flush history-card history-row min-w-0 scroll-mt-6"
       data-testid="history-card"
     >
       <div className="history-row-grid">
         <div className="history-media min-w-0">
-          {!compactNotice && <div className={`history-stage${!compact ? " history-stage-flush" : ""}`}>
+          <div className="history-stage history-stage-flush">
             {downloadUrl && !previewBroken ? (
               /* The idle frame carries exactly two facts and no controls: the
                  goal angle top-left (where a viewer looks first) and the
@@ -686,16 +682,15 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                  shift. The notice keeps its words and its repair meaning —
                  only its footprint changes. It deliberately does not take
                  the playable clip's history-brand-frame testid: no clip
-                 is being claimed. Compact cards never reach this branch;
-                 their notices live in the record. */
+                 is being claimed. */
               <span className="history-preview-frame history-stage-frame relative block w-full max-w-full">
                 {notice}
               </span>
             )}
-          </div>}
+          </div>
 
           <div
-            className={`flex gap-2 border-t border-[color:var(--hairline)] py-2 ${compact ? "px-2" : "px-3"}`}
+            className="flex gap-2 border-t border-[color:var(--hairline)] py-2 px-3"
             data-testid="history-media-actions"
           >
             {saveUrl && (
@@ -717,7 +712,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
             <Button
               variant="secondary"
               size="icon"
-              className={`shrink-0 text-muted-foreground hover:text-destructive-text${compact ? " h-11 w-11" : " h-9 w-9"}`}
+              className="shrink-0 text-muted-foreground hover:text-destructive-text h-9 w-9"
               disabled={busy}
               onClick={() => {
                 setDeleteError(null);
@@ -786,18 +781,17 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
             </div>
           </div>
 
-          {/* The feedback block rides in the media column on a
-              standard card (ADR 0153): the posted link and the results
-              are actions on the render itself, so they join its action
-              stack under the Work row — and their real height goes to
-              the column that had room, instead of lengthening a record
-              that already runs tall on a full card. Compact cards keep
-              the block in the record's secondary area below. */}
-          {!compact && (
-            <div className="history-media-feedback">
-              <HistoryFeedback row={row} signalRefs={signalRefs} onUpdated={onUpdated} />
-            </div>
-          )}
+          {/* The feedback block rides in the media column (ADR
+              0153): the posted link and the results are actions on
+              the render itself, so they join its action stack under
+              the Work row — and their real height goes to the column
+              that had room, instead of lengthening a record that
+              already runs tall on a full card. Full cards are the
+              only cards now (Nov 27 2026), so the block always
+              stands here, open. */}
+          <div className="history-media-feedback">
+            <HistoryFeedback row={row} signalRefs={signalRefs} onUpdated={onUpdated} />
+          </div>
 
         </div>
 
@@ -810,7 +804,6 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
         >
           <div className="history-body">
             <div className="history-record min-w-0 space-y-5">
-              {compactNotice && notice}
               {/* The render's identity opens the record (ADR 0150). Read
                   top to bottom in the order a founder actually scans: which
                   render this is (app, state, date), with its provenance
@@ -1054,34 +1047,8 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
                     : "Automatic checks are active — this render is still with the provider, and the finished video will appear here on its own when it lands."}
                 </p>
               )}
-              {compact && hasClip && (
-                <Button variant="secondary" size="sm" onClick={openResults} data-testid={`history-record-results-${row.id}`}>
-                  Record results
-                </Button>
-              )}
               {(retryRenderButton || recheckButton || retryStorageButton) && (
                 <div className="flex flex-wrap justify-center gap-2">{retryRenderButton}{recheckButton}{retryStorageButton}</div>
-              )}
-              {/* The Results & actions disclosure belongs to compact
-                  cards: their feedback block still lives here, behind
-                  the toggle on mobile. A standard card's feedback
-                  rides in its media column (ADR 0153), so the record
-                  carries no disclosure and no dead toggle. */}
-              {compact && (
-                <>
-                  <button
-                    type="button"
-                    className="history-compact-toggle w-full items-center justify-between gap-2 rounded-lg border border-[color:var(--hairline)] px-3 py-3 text-sm font-semibold hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-expanded={secondaryOpen}
-                    aria-controls={`${detailId}-secondary`}
-                    onClick={() => setSecondaryOpen((open) => !open)}
-                  >
-                    Results &amp; actions <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform ${secondaryOpen ? "rotate-180" : ""}`} />
-                  </button>
-                  <div id={`${detailId}-secondary`} className="history-compact-secondary space-y-5" data-expanded={secondaryOpen}>
-                    <HistoryFeedback row={row} signalRefs={signalRefs} onUpdated={onUpdated} />
-                  </div>
-                </>
               )}
             </div>
           </div>
@@ -1147,71 +1114,6 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
   );
 });
 
-/**
- * One render as a scan row (ADR 0159): the compact view's unit.
- *
- * The full card is a reading surface; a page of fifty is not. The scan
- * row carries what triage needs — the hook that names the render, its
- * status and date, its results line, and the one verdict, which stays
- * in the row because it is the app's steering signal and burying it
- * behind the expansion would bury the loop with it. The video and the
- * whole record are one tap away: opening the row mounts the full card
- * under its face, with every control the card owns, and collapsing
- * unmounts it again, so a page of scan rows stays light no matter how
- * long History gets. The row carries the card's anchor while it is
- * collapsed, so a deep link lands on the row it named either way.
- */
-const HistoryScanRow = memo(function HistoryScanRow(props) {
-  const { row, deepLinked = false } = props;
-  const [expanded, setExpanded] = useState(Boolean(deepLinked));
-  useEffect(() => {
-    if (deepLinked) setExpanded(true);
-  }, [deepLinked]);
-  const title = row.hook_line
-    ? sentenceCase(row.hook_line)
-    : `${row.segment_role === "demo_cta" ? "Demo + CTA export" : "Render"} \u00b7 ${row.id.slice(0, 8)}`;
-  const judgeable = row.status === "completed" || row.status === "archived";
-  return (
-    <div
-      className="history-scan-row space-y-3"
-      data-testid={`history-scan-row-${row.id}`}
-      id={expanded ? undefined : `generation-${row.id}`}
-    >
-      <div className="surface-compact">
-        <button
-          type="button"
-          className="focus-ring flex w-full min-w-0 items-start gap-2.5 text-left"
-          aria-expanded={expanded}
-          data-testid={`history-scan-toggle-${row.id}`}
-          onClick={() => setExpanded((open) => !open)}
-        >
-          <ChevronDown
-            aria-hidden="true"
-            className={`mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`}
-          />
-          <span className="min-w-0 space-y-1">
-            <span className="block break-words text-base font-semibold">{title}</span>
-            <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <StatusBadge status={row.status} />
-              <span>{formatRenderDate(row.created_at)}</span>
-              <span>{describeResults(row)}</span>
-              {isWinnerRow(row) && <FactChip>Winner</FactChip>}
-            </span>
-          </span>
-        </button>
-        {judgeable && !expanded && (
-          <VideoVerdict
-            generationId={row.id}
-            value={row.video_verdict ?? null}
-            onChanged={(video_verdict) => props.onUpdated?.(row.id, { video_verdict })}
-          />
-        )}
-      </div>
-      {expanded && <GenerationRow {...props} />}
-    </div>
-  );
-});
-
 export default function GenerationHistory() {
   const [rows, setRows] = useState([]);
   const [profiles, setProfiles] = useState([]);
@@ -1266,15 +1168,9 @@ export default function GenerationHistory() {
   // app + status filters, the page owns presentation. Uncounted renders
   // (no pasted-back views) always sort after counted ones.
   const [sort, setSort] = useState("newest");
-  // The card view (ADR 0159): the full cards, or the compact scan
-  // rows. A stored preference, like the app selection — the founder
-  // who scans a long History in compact rows finds it that way on
-  // the next visit instead of re-choosing it every time.
-  const [viewMode, setViewMode] = useState(readHistoryView);
-  const chooseView = (mode) => {
-    setViewMode(mode);
-    rememberHistoryView(mode);
-  };
+  // Full cards only (Kasra's order, Nov 27 2026): the view toggle
+  // and its compact scan rows are gone — every render stands as a
+  // full card, by default and with no switch to flip.
   const updateRow = useCallback((id, patch) => {
     setRows((current) => current.map((row) => row.id === id ? { ...row, ...patch } : row));
   }, []);
@@ -1389,23 +1285,6 @@ export default function GenerationHistory() {
     <GenerationRow
       key={row.id}
       row={row}
-      compact={effectiveCopy === "without"}
-      onChanged={load}
-      onUpdated={updateRow}
-      onKitGenerated={() => setFilter("copy", "with")}
-      deepLinked={hashId !== "" && hashId === row.id}
-      draftIds={draftIds}
-      pollState={pollStates[row.id] || "active"}
-    />
-  );
-  // The same row in the compact view: the scan row forwards every
-  // prop to the full card when it opens, so the two views can never
-  // disagree about what a render offers.
-  const renderScanRow = (row) => (
-    <HistoryScanRow
-      key={row.id}
-      row={row}
-      compact={effectiveCopy === "without"}
       onChanged={load}
       onUpdated={updateRow}
       onKitGenerated={() => setFilter("copy", "with")}
@@ -1568,13 +1447,14 @@ export default function GenerationHistory() {
             />
           </div>
           {/* The toolbar's right cluster (ADR 0204): the attention
-              banner's action renders here, immediately before the view
-              toggle, whenever the banner shows — the banner itself
-              keeps its sentence only. Same button, same label, same
-              link the banner carried under ADR 0189; only the seat
-              changed. The cluster carries the far-right seat (ml-auto)
-              ADR 0189 gave the toggle, apart from the filters it does
-              not belong to. */}
+              banner's action renders here whenever the banner shows —
+              the banner itself keeps its sentence only. Same button,
+              same label, same link the banner carried under
+              ADR 0189; only the seat changed. The cluster carries
+              the far-right seat (ml-auto), apart from the filters it
+              does not belong to. The view toggle that shared this
+              cluster is gone (Nov 27 2026): full cards are the only
+              view, so there is nothing left to switch. */}
           <div className="ml-auto flex items-center gap-2">
             {attention && (
               <Button variant="secondary" size="sm" asChild>
@@ -1583,29 +1463,6 @@ export default function GenerationHistory() {
                 </Link>
               </Button>
             )}
-            {/* The view toggle (ADR 0159): the full cards, or the
-                compact scan rows for a long History. Presentation
-                only — the same rows, filters and pager either way. */}
-            <div className="flex items-center gap-1" role="group" aria-label="Card view" data-testid="history-view-toggle">
-              <button
-                type="button"
-                data-testid="history-view-full"
-                aria-pressed={viewMode === "full"}
-                onClick={() => chooseView("full")}
-                className="pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold text-muted-foreground"
-              >
-                Full cards
-              </button>
-              <button
-                type="button"
-                data-testid="history-view-compact"
-                aria-pressed={viewMode === "compact"}
-                onClick={() => chooseView("compact")}
-                className="pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold text-muted-foreground"
-              >
-                Compact
-              </button>
-            </div>
           </div>
         </div>
         {profilesError && (
@@ -1779,7 +1636,7 @@ export default function GenerationHistory() {
                   Clips with a saved caption, audience, Location, or demo brief attached.
                 </p>
               </div>
-              {pagedWith.map(viewMode === "compact" ? renderScanRow : renderRow)}
+              {pagedWith.map(renderRow)}
             </section>
           )}
           {effectiveCopy === "without" && pagedWithout.length > 0 && (
@@ -1796,15 +1653,7 @@ export default function GenerationHistory() {
                   Clips with no saved copy or context yet.
                 </p>
               </div>
-              {viewMode === "compact" ? (
-                <div className="space-y-3">
-                  {pagedWithout.map(renderScanRow)}
-                </div>
-              ) : (
-                <div className="history-compact-grid">
-                  {pagedWithout.map(renderRow)}
-                </div>
-              )}
+              {pagedWithout.map(renderRow)}
             </section>
           )}
           {rows.length >= limit && limit < 200 && (

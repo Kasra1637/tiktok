@@ -28,6 +28,7 @@ import HookRenderPanel from "../components/studio/HookRenderPanel";
 import VoiceModeControl from "../components/studio/VoiceModeControl";
 import HookPicksControl, { profileOutcomeLines, profileOutcomeMenuStale } from "../components/studio/HookPicksControl";
 import PostKitSection from "../components/PostKitSection";
+import { CraftCheckCard } from "../components/CraftCheckCard";
 import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { useWizardDirections } from "./useWizardDirections";
 import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
@@ -925,6 +926,19 @@ export default function HookCta() {
                     clipLabel="short hook clip"
                     suggestClearerHook={false}
                   />
+                )}
+
+                {/* The hook's Craft score (Kasra's order, Nov 27
+                    2026): the exact indicator Create's Review shows,
+                    from the shared component, standing beside the
+                    hook line here in The hook section — never in the
+                    cover area. The report is the hook endpoint's own
+                    payload: the model evaluation of the hook alone
+                    (this page has no script), scored when the hook
+                    was generated, so the card reads the line on file,
+                    not an unsaved edit. */}
+                {lineRevealed && project.quality_report && (
+                  <CraftCheckCard report={project.quality_report} />
                 )}
 
                 {/* The card's ONE hook button (ADR 0313,

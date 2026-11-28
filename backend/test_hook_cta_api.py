@@ -227,6 +227,30 @@ class TestHookEndpoint:
         # The shared strategy normalizer punctuates the scene's place.
         assert strategy["scene"]["location"] == "A quiet bedroom in the evening."
 
+    def test_hook_response_carries_the_model_craft_score_of_the_hook_only(self, api, monkeypatch):
+        # Kasra's order (Nov 27 2026): HookSnap shows the same Craft
+        # score indicator as Create, scored on the hook only — this
+        # page has no script. The score is the model evaluation
+        # (ADR 0312) run at generation time on the line just written,
+        # replacing the deterministic mirror _public_project attaches,
+        # exactly as the studio single-project read replaces it.
+        project, _ = _hook_cta(api, "Hook Score")
+        calls = []
+
+        async def fake_evaluation(hook_line, script, **kwargs):
+            calls.append((hook_line, script, kwargs))
+            return {"total": 71, "score10": 7.5, "grade": "B", "dimensions": {}}
+
+        monkeypatch.setattr(
+            api.ai_service, "assess_spoken_quality_with_model", fake_evaluation)
+        out = _write_hook(api, project["id"], monkeypatch)
+        assert out["quality_report"]["score10"] == 7.5
+        assert len(calls) == 1
+        hook_arg, script_arg, _ = calls[0]
+        assert hook_arg == HOOK
+        # The hook only: no script is ever scored on this page.
+        assert script_arg == ""
+
     def test_hook_pick_of_four_shortens_the_draft(self, api, monkeypatch):
         from models import GenerateHookLineRequest
         project, _ = _hook_cta(api, "Hook Pick")

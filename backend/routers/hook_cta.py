@@ -308,10 +308,29 @@ async def generate_hook_cta_hook(
             json.dumps(strategy), now_iso(), project_id, user_id,
         ),
     )
-    return _public_project(
+    payload = _public_project(
         await _fetch_one("SELECT * FROM studio_projects WHERE id = ?", (project_id,)),
         brand_name=(profile.get("brand_name") or "").strip(),
     )
+    # The hook's Craft score (Kasra's order, Nov 27 2026): the page
+    # shows the same Craft check Create shows, scored on the hook
+    # only — this page has no script, so the script side of the
+    # evaluation is empty. The score is the model evaluation
+    # (ADR 0312), run here at generation time on the line just
+    # written, replacing _public_project's deterministic mirror
+    # exactly as the studio single-project read replaces it; the
+    # evaluation's own fallback is that same mirror, so a failed
+    # model call still returns a report.
+    payload["quality_report"] = await ai_service.assess_spoken_quality_with_model(
+        payload.get("hook_line"),
+        "",
+        hook_seconds=payload.get("hook_seconds") or 3,
+        total_seconds=payload.get("duration_seconds") or 0,
+        app_name="",
+        spoken_check=payload.get("spoken_check"),
+        cover_text=payload.get("cover_text") or "",
+    )
+    return payload
 
 
 @router.post("/hook-cta/projects/{project_id}/generate", status_code=202)
