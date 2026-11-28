@@ -151,7 +151,7 @@ afterEach(async () => {
 describe("history kit-less rescue flow", () => {
   test("a kit-less finished row is rescued by Generate post copy", async () => {
     api.regeneratePostKit.mockResolvedValue({ post_kit: { ...KIT } });
-    const { container } = await renderHistoryPage("copy=without");
+    const { container } = await renderHistoryPage("");
 
     // The offer: the row itself offers to write its copy — no page
     // banner names the missing copy and no toolbar action points at it
@@ -176,10 +176,12 @@ describe("history kit-less rescue flow", () => {
     // appears after it.
     expect(container.querySelector('[data-testid="history-attention"]')).toBeNull();
 
-    // The press follows the row to the with-copy side through a real
-    // router turn: the query flips and the fresh kit reads as Post copy
-    // with no manual re-render in between.
-    expect(global.__testRouter.query).toBe("copy=with");
+    // The press never moves the row: the list no longer splits on
+    // post copy, so nothing navigates — the fresh kit lands in the
+    // row's own Post copy section where it stands, with no manual
+    // re-render in between.
+    expect(global.__testRouter.navigations).toHaveLength(0);
+    expect(global.__testRouter.query).toBe("");
     expect(container.textContent).toContain(KIT.caption);
     expect(container.querySelector('[data-testid="history-attention"]')).toBeNull();
   });
@@ -189,7 +191,7 @@ describe("history kit-less rescue flow", () => {
     api.regeneratePostKit.mockRejectedValue({
       response: { status: 404, data: { detail: "That draft is gone, so there is no material to write." } },
     });
-    const { container } = await renderHistoryPage("copy=without");
+    const { container } = await renderHistoryPage("");
     const button = container.querySelector(
       '[data-testid="history-generate-post-copy-button-kitless-1"]'
     );
@@ -203,7 +205,7 @@ describe("history kit-less rescue flow", () => {
     // ...no banner appears for the missing copy, nothing navigated away...
     expect(container.querySelector('[data-testid="history-attention"]')).toBeNull();
     expect(global.__testRouter.navigations).toHaveLength(0);
-    expect(global.__testRouter.query).toBe("copy=without");
+    expect(global.__testRouter.query).toBe("");
     // ...and the button is pressable again.
     expect(button.textContent).toContain("Generate post copy");
     expect(button.disabled).toBe(false);
@@ -213,7 +215,7 @@ describe("history kit-less rescue flow", () => {
     // No provider answer at all: the fallback names the dropped connection
     // and the action, instead of a status code or silence.
     api.regeneratePostKit.mockRejectedValue({ message: "Network Error" });
-    const { container } = await renderHistoryPage("copy=without");
+    const { container } = await renderHistoryPage("");
     const button = container.querySelector(
       '[data-testid="history-generate-post-copy-button-kitless-1"]'
     );
@@ -226,7 +228,7 @@ describe("history kit-less rescue flow", () => {
     expect(container.textContent).toContain("write this render's post copy");
     expect(container.querySelector('[data-testid="history-attention"]')).toBeNull();
     expect(global.__testRouter.navigations).toHaveLength(0);
-    expect(global.__testRouter.query).toBe("copy=without");
+    expect(global.__testRouter.query).toBe("");
     expect(button.textContent).toContain("Generate post copy");
     expect(button.disabled).toBe(false);
   });

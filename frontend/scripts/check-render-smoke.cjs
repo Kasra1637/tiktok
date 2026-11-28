@@ -650,11 +650,12 @@ const cache = new Map();
 // across renders. CreateVideo's mount effect depends on `params`, so handing it
 // a new object each call spins the effect in an endless fetch loop.
 //
-// History's copy filter defaults to the copy-carrying side, so History
-// fixtures carry an audience (and so read on the default side) unless the
-// check is about the without-copy side or the filter itself — which opt
-// into ?copy=without explicitly. A fixture with no copy or context would
-// mount an empty list and pass absence assertions vacuously.
+// History stands every render in one list (Nov 27 2026): the copy
+// filter and its two sections are gone, so a fixture's rows mount
+// whether or not they carry post copy or plan context. A check that
+// asserts an absence must still give its rows copy or context when
+// the absence only reads on a carrying card, or the absence passes
+// vacuously against an empty stage.
 const searchParamCache = new Map();
 function searchParams() {
   const query = global.__SMOKE_PARAMS || "";
@@ -3068,7 +3069,7 @@ async function main() {
         ] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=without";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         const journey = ctx.container.querySelector('[data-testid="history-journey-journey-1"]');
         if (!journey) throw new Error("the finished card carries no joined journey state");
@@ -16192,9 +16193,19 @@ async function runHookCtaChecks() {
     // is far under the old silent note's ~200 characters. A future
     // explainer that drifts out of the band fails here.
     const ex = load("lib/pickExplainers.js");
+    // The copy filter is removed whole (Nov 27 2026): its explainer
+    // map goes with it, and the status slider's All statuses stop
+    // carries no explainer — the band below measures only the texts
+    // that stand.
+    if (ex.COPY_FILTER_EXPLAINERS !== undefined) {
+      throw new Error("the removed copy filter's explainer map still stands in pickExplainers");
+    }
+    if (ex.STATUS_FILTER_EXPLAINERS[""] !== undefined) {
+      throw new Error("the All statuses stop still carries an explainer — Kasra ordered the line removed (Nov 27 2026)");
+    }
     const fixedMaps = [
       ex.VOICE_EXPLAINERS, ex.CAMERA_EXPLAINERS, ex.TONE_EXPLAINERS,
-      ex.SHAPE_EXPLAINERS, ex.OPENING_EXPLAINERS, ex.COPY_FILTER_EXPLAINERS,
+      ex.SHAPE_EXPLAINERS, ex.OPENING_EXPLAINERS,
       ex.STATUS_FILTER_EXPLAINERS, ex.CLIP_STYLE_EXPLAINERS,
       ex.TRANSITION_EXPLAINERS,
     ];
@@ -24923,7 +24934,7 @@ async function runDemoCtaChecks() {
         }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=with";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         const card = ctx.container.querySelector("#generation-brand-frame");
         const framed = card?.querySelector('[data-testid="history-brand-frame"]');
@@ -24965,11 +24976,11 @@ async function runDemoCtaChecks() {
         if (!card.querySelector('[data-testid="history-brand-frame"]')) {
           throw new Error("the frame disappears once the clip starts playing");
         }
-        global.__SMOKE_PARAMS = "?copy=without";
-        await mount(GenerationHistory)(ctx);
+        // The copy-less card stands in the same one list, a full
+        // card with the frame around its clip like any other.
         const compact = ctx.container.querySelector("#generation-brand-frame-compact");
         if (!compact || compact.classList.contains("history-card-compact") || !compact.querySelector('[data-testid="history-brand-frame"] video')) {
-          throw new Error("without-copy History cards no longer stand as full cards with the frame around their clip");
+          throw new Error("a copy-less History card no longer stands as a full card with the frame around its clip");
         }
       });
     } finally {
@@ -24988,11 +24999,12 @@ async function runDemoCtaChecks() {
         ] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        // The copy-carrying card reads on the with-copy side.
-        global.__SMOKE_PARAMS = "?copy=with";
+        // Both cards — the copy-carrying one and its copy-less
+        // neighbor — stand in the one list (Nov 27 2026).
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
-        if (!grid || grid.querySelectorAll('[data-testid="history-card"]').length !== 1) throw new Error("history cards are not in the responsive grid");
+        if (!grid || grid.querySelectorAll('[data-testid="history-card"]').length !== 2) throw new Error("history cards are not in the responsive grid");
         if (ctx.container.querySelector('[data-testid="history-expand"]')) {
           throw new Error("a card still exposes an expand control; records are always visible now");
         }
@@ -25086,10 +25098,9 @@ async function runDemoCtaChecks() {
         if (headlineCopies !== 1) {
           throw new Error(`the hook headline lives ${headlineCopies} times in the card instead of once`);
         }
-        // The copy-less neighbor reads on the without-copy side, attached the same way.
-        global.__SMOKE_PARAMS = "?copy=without";
-        await mount(GenerationHistory)(ctx);
-        const neighbor = ctx.container.querySelector('[data-testid="history-card"]');
+        // The copy-less neighbor stands in the same list, attached
+        // the same way.
+        const neighbor = ctx.container.querySelector('#generation-dense-2');
         if (!neighbor?.querySelector("video.history-preview")) throw new Error("the neighbor card lost its attached preview");
         if (!neighbor.textContent.includes("A second render.")) throw new Error("the neighbor card lost its own record");
       });
@@ -25109,23 +25120,25 @@ async function runDemoCtaChecks() {
         ] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        // Each copy side reads on its own: one attached card per render, no
-        // pair wrappers regrouping them, the record inside its card.
-        for (const [side, id, owns] of [
-          ["?copy=with", "band-1", "history-context"],
-          ["?copy=without", "band-2", "Download"],
+        // Both renders stand in the one list: one attached card per
+        // render, no pair wrappers regrouping them, the record inside
+        // its card.
+        global.__SMOKE_PARAMS = "";
+        await mount(GenerationHistory)(ctx);
+        const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
+        if (grid.querySelector(':scope > [data-testid="history-detail-panel"], :scope > [data-testid="history-detail-slot"]')) {
+          throw new Error("the record renders as a separate grid section instead of inside its card");
+        }
+        const cards = grid.querySelectorAll('[data-testid="history-card"]');
+        if (cards.length !== 2) {
+          throw new Error("the one list does not hold both renders as cards");
+        }
+        for (const [id, owns] of [
+          ["band-1", "history-context"],
+          ["band-2", "Download"],
         ]) {
-          global.__SMOKE_PARAMS = side;
-          await mount(GenerationHistory)(ctx);
-          const grid = ctx.container.querySelector('[data-testid="history-list"].history-grid');
-          if (grid.querySelector(':scope > [data-testid="history-detail-panel"], :scope > [data-testid="history-detail-slot"]')) {
-            throw new Error("the record renders as a separate grid section instead of inside its card");
-          }
-          const cards = grid.querySelectorAll('[data-testid="history-card"]');
-          if (cards.length !== 1 || cards[0].getAttribute("id") !== `generation-${id}`) {
-            throw new Error(`the ${side} side does not hold exactly its own card`);
-          }
-          const card = cards[0];
+          const card = ctx.container.querySelector(`#generation-${id}`);
+          if (!card) throw new Error(`the list lost the ${id} card`);
           if (!card.querySelector(':scope .history-row-grid > [data-testid="history-detail-panel"]')) {
             throw new Error("a card does not carry its record attached beside its clip");
           }
@@ -25285,7 +25298,7 @@ async function runDemoCtaChecks() {
   await check("History polling feedback and results access are actionable", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const previous = global.__SMOKE_PARAMS;
-    global.__SMOKE_PARAMS = "?copy=without";
+    global.__SMOKE_PARAMS = "";
     try {
       await withApi({ getGenerationHistory: async () => ({ generations: [
         { ...COMPLETED, id: "poll-job", status: "generating", video_url: null, r2_url: null, playback_url: null },
@@ -25313,7 +25326,7 @@ async function runDemoCtaChecks() {
     // clip's testid and never renders a video element.
     const History = load("pages/GenerationHistory.jsx").default;
     const previous = global.__SMOKE_PARAMS;
-    global.__SMOKE_PARAMS = "?copy=with";
+    global.__SMOKE_PARAMS = "";
     try {
       await withApi({ getGenerationHistory: async () => ({ generations: [
         { ...COMPLETED, id: "frame-job", status: "generating", video_url: null, r2_url: null, playback_url: null, audience: "Night scrollers" },
@@ -25401,7 +25414,7 @@ async function runDemoCtaChecks() {
     const History = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
-      global.__SMOKE_PARAMS = "?copy=with";
+      global.__SMOKE_PARAMS = "";
       await withApi({
         getGenerationHistory: async () => ({
           generations: [
@@ -25477,11 +25490,11 @@ async function runDemoCtaChecks() {
     });
   });
 
-  await check("History repair link reaches the correct filtered section", async (ctx) => {
+  await check("History repair link reaches its render in the one list", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
-      global.__SMOKE_PARAMS = "profile=b1&status=completed&copy=with&q=unrelated";
+      global.__SMOKE_PARAMS = "profile=b1&status=completed&copy=without&q=unrelated";
       await withApi({
         getGenerationHistory: async () => ({ generations: [
           { ...COMPLETED, id: "needs-repair", video_url: null, playback_url: null, r2_url: null },
@@ -25492,8 +25505,8 @@ async function runDemoCtaChecks() {
         await mount(History)(ctx);
         const link = ctx.container.querySelector('[data-testid="history-attention-review"]');
         const url = new URL(link.getAttribute('href'), 'http://localhost/history');
-        if (url.hash !== '#generation-needs-repair' || url.searchParams.get('copy') !== 'without' || url.searchParams.has('q') || url.searchParams.get('profile') !== 'b1' || url.searchParams.get('status') !== 'completed') {
-          throw new Error('repair navigation must select the target section and clear obstructing search while preserving server filters');
+        if (url.hash !== '#generation-needs-repair' || url.searchParams.has('copy') || url.searchParams.has('q') || url.searchParams.get('profile') !== 'b1' || url.searchParams.get('status') !== 'completed') {
+          throw new Error('repair navigation must name the target render, carry no copy param, and clear obstructing search while preserving server filters');
         }
         global.__SMOKE_PARAMS = url.search;
         global.__SMOKE_HASH = url.hash;
@@ -25538,9 +25551,9 @@ async function runDemoCtaChecks() {
   // beside the group label) was refused as a mis-scope; the approved split
   // keeps the search and every dropdown grouped on the left under the title
   // and moves only the Full cards / Compact toggle to the far right of the
-  // toolbar row. ADR 0204 amends that split: the five filter controls share
+  // toolbar row. ADR 0204 amends that split: the filter controls share
   // ONE row at desktop widths (the secondary wrapper renders as contents,
-  // so its three controls are items of the same row instead of a stacked
+  // so its controls are items of the same row instead of a stacked
   // second row), and the attention banner's action leaves the banner for
   // the toolbar's right cluster, beside the toggle — the banner keeps its
   // sentence only. ADR 0207 removes the kit-less banner outright, so the
@@ -25548,7 +25561,10 @@ async function runDemoCtaChecks() {
   // alone, raised here by a completed render with no durable copy.
   // Nov 27 2026: the view toggle itself is gone — full cards are the
   // only view — so the right cluster now holds the attention action
-  // alone and closes the row by itself.
+  // alone and closes the row by itself. Later the same day the copy
+  // filter is removed whole, and the top row holds only three controls
+  // adjacent, in Kasra's order: the search, the app picker, the sort.
+  // The status slider stays in the secondary wrapper where it lives.
   await check("History filters share one row, and the attention action closes it", async (ctx) => {
     const History = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
@@ -25562,22 +25578,34 @@ async function runDemoCtaChecks() {
         const bar = ctx.container.querySelector('.history-filters');
         if (!bar) throw new Error("History has no filter toolbar");
         const search = bar.querySelector('#history-search');
-        const copyFilter = bar.querySelector('#history-copy-filter');
         const secondary = bar.querySelector('#history-secondary-filters');
         if (bar.querySelector('[data-testid="history-view-toggle"]')) {
           throw new Error("the view toggle survives the full-cards-only removal");
         }
-        if (!search || !copyFilter || !secondary) {
+        if (bar.querySelector('#history-copy-filter')) {
+          throw new Error("the copy filter survives its removal from the toolbar");
+        }
+        if (!search || !secondary) {
           throw new Error("the toolbar lost one of its controls");
         }
-        // One row: the search, the copy filter and the secondary wrapper
-        // live in the same flex row, in the founder's order, and the
-        // toggle's cluster closes that row. (The dropdowns render inside
-        // their app-select span, so they are pinned by containment; the
-        // wrapper and the cluster are the row's own children.)
+        // The top row's three controls stand adjacent in Kasra's
+        // order — search, app picker, sort — and the secondary
+        // wrapper (the status slider's home) follows them in the
+        // same row, which the attention cluster closes.
+        const picker = bar.querySelector('[aria-label="Filter by app"]');
+        const sort = bar.querySelector('#history-sort');
+        if (!picker || !sort) {
+          throw new Error("the toolbar lost the app picker or the sort");
+        }
         const row = search.parentElement;
-        if (!row.contains(copyFilter) || secondary.parentElement !== row) {
-          throw new Error("the five filter controls do not share one row");
+        if (!row.contains(picker) || !row.contains(sort) || secondary.parentElement !== row) {
+          throw new Error("the filter controls do not share one row");
+        }
+        if (!(search.compareDocumentPosition(picker) & 4) || !(picker.compareDocumentPosition(sort) & 4)) {
+          throw new Error("the top row order changed: the app picker must sit between the search and the sort");
+        }
+        if (!secondary.querySelector('#history-status-filter')) {
+          throw new Error("the status slider left the secondary filters group");
         }
         const cluster = bar.querySelector('[data-testid="history-attention-review"]')?.closest(".ml-auto");
         if (!cluster || cluster.parentElement !== row) {
@@ -25586,15 +25614,14 @@ async function runDemoCtaChecks() {
         if (!/(^|\s)ml-auto(\s|$)/.test(cluster.className || "")) {
           throw new Error("the toolbar's right cluster is not right-aligned");
         }
-        const sort = bar.querySelector('#history-sort');
-        if (!(copyFilter.compareDocumentPosition(secondary) & 4) || !(sort.compareDocumentPosition(cluster) & 4)) {
-          throw new Error("the filter order changed: the secondary filters must sit between the copy filter and the right cluster");
+        if (!(sort.compareDocumentPosition(secondary) & 4) || !(sort.compareDocumentPosition(cluster) & 4)) {
+          throw new Error("the filter order changed: the secondary filters and the right cluster must follow the top row's three controls");
         }
         // The desktop rule itself: at 768px the secondary wrapper renders
-        // as contents, so All apps, All statuses and the sort are items of
-        // the one row rather than a second stacked row.
+        // as contents, so All statuses is an item of the one row rather
+        // than a second stacked row.
         const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.css'), 'utf8');
-        const mediaAt = css.indexOf('@media (min-width: 768px)', css.indexOf('/* Keep the main search and copy filter visible'));
+        const mediaAt = css.indexOf('@media (min-width: 768px)', css.indexOf('/* Keep the search, the app picker and the sort visible'));
         const block = mediaAt === -1 ? "" : css.slice(mediaAt, mediaAt + 600);
         if (!/\.history-secondary-filters[^{]*\{[^}]*display:\s*contents/.test(block)) {
           throw new Error("index.css lost the desktop one-row rule for the secondary filters");
@@ -25646,7 +25673,7 @@ async function runDemoCtaChecks() {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
-      global.__SMOKE_PARAMS = "?copy=with";
+      global.__SMOKE_PARAMS = "";
       await withApi({
         getGenerationHistory: async () => ({ generations: [{
           ...COMPLETED,
@@ -25794,7 +25821,7 @@ async function runDemoCtaChecks() {
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
         await mount(History)(ctx);
-        global.__SMOKE_PARAMS = "profile=p1&status=completed&copy=without";
+        global.__SMOKE_PARAMS = "profile=p1&status=completed";
         global.__SMOKE_HASH = "#generation-anchor-two";
         await mount(History)(ctx);
         if (ctx.container.querySelector('[data-testid="history-search"]').value !== "") throw new Error("old search hid linked clip");
@@ -25819,7 +25846,7 @@ async function runDemoCtaChecks() {
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
         regeneratePostKit: async () => ({ post_kit: freshKit }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=with";
+        global.__SMOKE_PARAMS = "";
         await mount(History)(ctx);
         await clickEl(ctx, ctx.container.querySelector('[data-testid="postkit-regenerate"]'));
         expectText(ctx, freshKit.caption, "regenerated copy did not land in the attached record");
@@ -27506,7 +27533,7 @@ await check(
         getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kit-1", post_kit: POST_KIT }] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=with";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
       // The frozen kit is one caption: "Caption 1" anywhere on the card
       // means the retired three-caption layout leaked back in.
@@ -27537,8 +27564,8 @@ await check(
           return { post_kit: POST_KIT };
         },
       }, async () => {
-        // Kit-less rows live under the without-copy filter.
-        global.__SMOKE_PARAMS = "?copy=without";
+        // A kit-less row stands in the one list like any other.
+        global.__SMOKE_PARAMS = "";
         global.__SMOKE_NAVIGATIONS = [];
         await mount(GenerationHistory)(ctx);
         const box = ctx.container.querySelector('[data-testid="history-generate-post-copy-nokit-1"]');
@@ -27555,13 +27582,17 @@ await check(
           "generate the missing post copy"
         );
         if (regenerated !== 1) throw new Error("generating post copy did not call regenerate once");
-        // The fresh kit moves the row to the with-copy side: the page must
-        // follow it there instead of unmounting the row mid-click, so the
-        // new copy is what lands on screen — and the generate box must be
-        // gone rather than offering a second write.
+        // The fresh kit lands in the row where it stands: the list no
+        // longer splits on post copy, so the press navigates nowhere —
+        // the new copy is what lands on screen, in the row's own Post
+        // copy section — and the generate box must be gone rather than
+        // offering a second write.
         const navs = global.__SMOKE_NAVIGATIONS || [];
-        if (!navs.some((to) => to && typeof to === "object" && /copy=with/.test(to.search || ""))) {
-          throw new Error("generating post copy did not follow the row to the with-copy side");
+        if (navs.length !== 0) {
+          throw new Error(`generating post copy navigated instead of leaving the row in place: ${JSON.stringify(navs)}`);
+        }
+        if (!ctx.container.querySelector('[data-testid="history-post-copy-nokit-1"]')) {
+          throw new Error("the fresh kit did not land in the row's Post copy section");
         }
         if (ctx.container.querySelector('[data-testid="history-generate-post-copy-nokit-1"]')) {
           throw new Error("the generate box survived its own kit");
@@ -27595,7 +27626,7 @@ await check(
         getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "story-1", project_kind: "story", story_kit: STORY_KIT_ROW, post_kit: null, audience: "Night scrollers" }] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=with";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         const section = ctx.container.querySelector('[data-testid="history-story-kit-story-1"]');
         if (!section) throw new Error("a story render shows no story kit section in History");
@@ -27630,7 +27661,7 @@ await check(
         getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "story-2", project_kind: "story", story_kit: null, post_kit: null, audience: "Night scrollers" }] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=with";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         const box = ctx.container.querySelector('[data-testid="history-story-kit-missing-story-2"]');
         if (!box) throw new Error("a kit-less story render does not say its kit is missing");
@@ -27690,7 +27721,7 @@ await check(
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
         getStudioProjects: async () => ({ projects: [{ id: "wiz-proj-1" }, { id: "hook-proj-1" }] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=with";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         await act(async () => {});
         if (ctx.container.querySelector('[data-testid="story-kit-checklist"]')) {
@@ -27781,7 +27812,7 @@ await check(
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
         regeneratePostKit: async () => { throw new Error("text model is down"); },
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=without";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         await clickEl(
           ctx,
@@ -27820,7 +27851,7 @@ await check(
         },
         async () => {
           const previousParams = global.__SMOKE_PARAMS;
-          global.__SMOKE_PARAMS = "?copy=with";
+          global.__SMOKE_PARAMS = "";
           try {
             await mount(GenerationHistory)(ctx);
             const copy = ctx.container.querySelector('[data-testid="history-post-copy-fold-1"]');
@@ -27901,7 +27932,7 @@ await check(
         ] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=with";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         const full = ctx.container.querySelector("#generation-pair-full");
         if (!full || full.classList.contains("history-card-compact")) {
@@ -27974,7 +28005,7 @@ await check(
         ] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=with";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         const card = ctx.container.querySelector("#generation-pair-empty");
         const stack = card?.querySelector(".history-record-sections");
@@ -27999,9 +28030,9 @@ await check(
   });
 
   await check("a History card without copy keeps its feedback in the media column", async (ctx) => {
-    // Full cards only (Nov 27 2026): a card on the without-copy side
-    // is a full card like any other — its feedback rides in the
-    // media column (ADR 0153's seat), never in a record-side
+    // Full cards only (Nov 27 2026): a copy-less card in the one
+    // list is a full card like any other — its feedback rides in
+    // the media column (ADR 0153's seat), never in a record-side
     // secondary area, and the card wears no compact face.
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
@@ -28010,7 +28041,7 @@ await check(
         getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "pair-compact" }] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=without";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         const card = ctx.container.querySelector("#generation-pair-compact");
         if (!card || card.classList.contains("history-card-compact")) {
@@ -28018,7 +28049,7 @@ await check(
         }
         const feedback = card.querySelector('[data-testid="history-feedback-pair-compact"]');
         if (!feedback || !feedback.closest(".history-media-feedback")) {
-          throw new Error("the without-copy card's feedback left the media column");
+          throw new Error("the copy-less card's feedback left the media column");
         }
         if (card.querySelector(".history-compact-secondary")) {
           throw new Error("a secondary area survives on the card");
@@ -28049,7 +28080,7 @@ await check(
         }] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=with";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         const sections = [
           [ctx.container.querySelector('[data-testid="history-post-copy-stack-1"]'), "post copy"],
@@ -28102,7 +28133,7 @@ await check(
         }] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=with";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         const context = ctx.container.querySelector('[data-testid="history-context"]');
         if (!context) throw new Error("plan context is missing");
@@ -28130,7 +28161,7 @@ await check(
         getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "kit-2", post_kit: POST_KIT }] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=with";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         const copy = ctx.container.querySelector('[data-testid="history-post-copy-kit-2"]');
         if (!copy) throw new Error("post copy section is missing");
@@ -28168,7 +28199,7 @@ await check(
         }] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=with";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         if (ctx.container.querySelector('[data-testid="history-view-toggle"]')) {
           throw new Error("History still offers a view toggle");
@@ -28223,7 +28254,7 @@ await check(
         }] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=without&status=failed&q=pier";
+        global.__SMOKE_PARAMS = "?status=failed&q=pier";
         await mount(GenerationHistory)(ctx);
         const search = ctx.container.querySelector('[data-testid="history-search"]');
         if (!search.className.includes("filter-control")) {
@@ -28232,9 +28263,8 @@ await check(
         if (search.getAttribute("data-active") !== "true") {
           throw new Error("a search holding text does not read as an active filter");
         }
-        const copy = ctx.container.querySelector('[data-testid="history-copy-filter"]');
-        if (copy.getAttribute("data-active") !== "true") {
-          throw new Error("the copy filter on its non-default side does not read as active");
+        if (ctx.container.querySelector('[data-testid="history-copy-filter"]')) {
+          throw new Error("the copy filter survives its removal from the filter bar");
         }
         const status = ctx.container.querySelector("#history-status-filter");
         if (status.getAttribute("data-active") !== "true") {
@@ -28337,11 +28367,13 @@ await check(
     }
   });
 
-  // Renders carrying post copy or plan context stack under one heading and
-  // renders carrying neither under another, and the two sides never share
-  // the screen: the copy filter shows one side at a time, leading with the
-  // copy-carrying section.
-  await check("History shows one copy section at a time", async (ctx) => {
+  // One list (Kasra's order, Nov 27 2026): the copy filter and its
+  // two sections are removed whole. Renders carrying post copy or
+  // plan context and renders carrying neither stand in the same run,
+  // in the loaded order, under no section heading — and a stray copy
+  // param in the URL changes nothing, because the param is no
+  // longer read.
+  await check("History stands every render in one list, with no copy filter or copy sections", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const withCopy = {
       ...COMPLETED,
@@ -28351,13 +28383,6 @@ await check(
     };
     const generations = [withCopy, { ...COMPLETED, id: "sec-without" }];
     const previousParams = global.__SMOKE_PARAMS;
-    const previousNavigations = global.__SMOKE_NAVIGATIONS;
-    const previousRouteChange = global.__SMOKE_ROUTE_CHANGE;
-    global.__SMOKE_NAVIGATIONS = [];
-    // The slider walk below needs the route change applied, the
-    // way the stale-filter check installs it: a stop only fires
-    // for a value the page does not already stand on.
-    global.__SMOKE_ROUTE_CHANGE = (to) => { global.__SMOKE_PARAMS = to.search; ctx.root.render(React.createElement(GenerationHistory)); };
     try {
       await withApi({
         getGenerationHistory: async () => ({ generations }),
@@ -28365,59 +28390,72 @@ await check(
       }, async () => {
         global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
-        // The page leads with the copy-carrying side; the other side is
-        // off-screen until the filter asks for it.
-        const withSection = ctx.container.querySelector('[data-testid="history-section-with"]');
-        if (!withSection) {
-          throw new Error("History lost the copy-carrying section");
+        if (ctx.container.querySelector('#history-copy-filter')) {
+          throw new Error("the copy filter control still stands in the filter bar");
         }
-        if (!withSection.querySelector("#generation-sec-with") || withSection.querySelector("#generation-sec-without")) {
-          throw new Error("the with-copy section does not hold exactly the copy-carrying card");
+        if (ctx.container.querySelector('[data-testid="history-section-with"]') || ctx.container.querySelector('[data-testid="history-section-without"]')) {
+          throw new Error("a copy section still wraps part of the list");
         }
-        if (ctx.container.querySelector('[data-testid="history-section-without"]')) {
-          throw new Error("both copy sections share the screen");
+        if (ctx.container.textContent.includes("With post copy & plan context") || ctx.container.textContent.includes("Without post copy & context")) {
+          throw new Error("a copy section heading or filter label still stands on the page");
         }
-        // Page-level sections carry the shared section heading plus a
-        // one-line explainer — not a bare in-card group label — and the
-        // count names the window total so a paged list never reads short.
-        if (!withSection.querySelector("h2.section-heading")) {
-          throw new Error("history-section-with lost the shared section heading");
+        const list = ctx.container.querySelector('[data-testid="history-list"]');
+        const cards = [...list.querySelectorAll('[data-testid="history-card"]')];
+        if (cards.length !== 2 || cards[0].id !== "generation-sec-with" || cards[1].id !== "generation-sec-without") {
+          throw new Error("the one list does not hold both renders in the loaded order");
         }
-        if (!withSection.textContent.includes("saved caption") || !withSection.textContent.includes("total")) {
-          throw new Error("history-section-with lost its explainer or window-total count");
-        }
-        // The filter control is URL-owned: picking a side navigates the
-        // copy param, so back/forward agree with the section on screen.
-        // The page already stands on the with-copy side, and a slider
-        // stop standing picked does not re-fire (the knob's rule), so
-        // the walk goes to the other side and back.
-        const filter = ctx.container.querySelector('#history-copy-filter');
-        if (!filter) throw new Error("History lost the copy/context filter");
-        await clickEl(ctx, filter.querySelector('[data-value="without"]'), "no without-copy stop on the copy slider");
-        const filterBack = ctx.container.querySelector('#history-copy-filter');
-        await clickEl(ctx, filterBack.querySelector('[data-value="with"]'), "no with-copy stop on the copy slider");
-        const went = (global.__SMOKE_NAVIGATIONS || []).map((to) => (to && to.search) || "");
-        if (!went.some((search) => new URLSearchParams(search).get("copy") === "with")) {
-          throw new Error(`the copy filter did not navigate the copy param: ${JSON.stringify(went)}`);
-        }
-        // Asking for the other side swaps the screen to it alone.
+        // A stray copy param is not read: both renders still stand.
         global.__SMOKE_PARAMS = "?copy=without";
         await mount(GenerationHistory)(ctx);
-        const withoutSection = ctx.container.querySelector('[data-testid="history-section-without"]');
-        if (!withoutSection) {
-          throw new Error("the copy filter lost the without-copy section");
+        const again = [...ctx.container.querySelectorAll('[data-testid="history-card"]')];
+        if (again.length !== 2) {
+          throw new Error("a stray copy param still narrows the list");
         }
-        if (!withoutSection.querySelector("#generation-sec-without") || withoutSection.querySelector("#generation-sec-with")) {
-          throw new Error("the without-copy section does not hold exactly the copy-less card");
+      });
+    } finally {
+      global.__SMOKE_PARAMS = previousParams;
+    }
+  });
+
+  // The status slider's explainers (Nov 27 2026): a changed stop
+  // shows its brief note under the pick's name — except All
+  // statuses, whose explainer Kasra ordered removed. Landing on
+  // All statuses after a change shows no note at all, and the
+  // removed sentence stands nowhere on the page.
+  await check("the status slider explains a changed stop, and All statuses carries no explainer", async (ctx) => {
+    const GenerationHistory = load("pages/GenerationHistory.jsx").default;
+    const previousParams = global.__SMOKE_PARAMS;
+    const previousNavigations = global.__SMOKE_NAVIGATIONS;
+    const previousRouteChange = global.__SMOKE_ROUTE_CHANGE;
+    global.__SMOKE_NAVIGATIONS = [];
+    // The slider walk needs the route change applied, the way the
+    // stale-filter check installs it: a stop only fires for a value
+    // the page does not already stand on, and the note belongs to
+    // the stop the change landed on.
+    global.__SMOKE_ROUTE_CHANGE = (to) => { global.__SMOKE_PARAMS = to.search; ctx.root.render(React.createElement(GenerationHistory)); };
+    try {
+      await withApi({
+        getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "status-note", audience: "Night scrollers" }] }),
+        getAppProfiles: async () => ({ profiles: [PROFILE] }),
+      }, async () => {
+        global.__SMOKE_PARAMS = "";
+        await mount(GenerationHistory)(ctx);
+        const slider = () => ctx.container.querySelector('#history-status-filter');
+        if (!slider()) throw new Error("History lost the status filter");
+        if (slider().querySelector('[data-testid="history-status-filter-explain"]')) {
+          throw new Error("a status explainer stands before any change — notes belong to the change, not the standing state");
         }
-        if (!withoutSection.querySelector("h2.section-heading")) {
-          throw new Error("history-section-without lost the shared section heading");
+        await clickEl(ctx, slider().querySelector('[data-value="completed"]'), "no completed stop on the status slider");
+        const note = slider().querySelector('[data-testid="history-status-filter-explain"]');
+        if (!note || !note.textContent.includes("Shows only renders that finished and stand ready to use.")) {
+          throw new Error("the completed stop shows no explainer after the change");
         }
-        if (!withoutSection.textContent.includes("no saved copy") || !withoutSection.textContent.includes("total")) {
-          throw new Error("history-section-without lost its explainer or window-total count");
+        await clickEl(ctx, slider().querySelector('[data-value=""]'), "no All statuses stop on the status slider");
+        if (slider().querySelector('[data-testid="history-status-filter-explain"]')) {
+          throw new Error("the All statuses stop shows an explainer — its line was ordered removed");
         }
-        if (ctx.container.querySelector('[data-testid="history-section-with"]')) {
-          throw new Error("the copy filter left the with-copy section mounted");
+        if (ctx.container.textContent.includes("Shows renders in every state")) {
+          throw new Error("the removed All statuses sentence still stands on the page");
         }
       });
     } finally {
@@ -28427,10 +28465,10 @@ await check(
     }
   });
 
-  await check("History renders full cards in the without-copy section too", async (ctx) => {
-    // Full cards only (Nov 27 2026): the without-copy section lost
-    // its compact grid and compact card face — its renders stand
-    // as the same full cards the with-copy section shows, and the
+  await check("History renders copy-less renders as full cards in the one list", async (ctx) => {
+    // Full cards only (Nov 27 2026): copy-less renders lost their
+    // compact grid and compact card face — they stand in the one
+    // list as the same full cards as any other render, and the
     // compact rules are out of the stylesheet.
     const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
     if (/\.history-compact-grid/.test(css) || /\.history-card-compact/.test(css)) {
@@ -28447,21 +28485,21 @@ await check(
         ] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=without";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
-        const section = ctx.container.querySelector('[data-testid="history-section-without"]');
-        if (!section || section.querySelector(".history-compact-grid")) {
-          throw new Error("the without-copy section kept its compact grid");
+        const list = ctx.container.querySelector('[data-testid="history-list"]');
+        if (!list || list.querySelector(".history-compact-grid")) {
+          throw new Error("the one list kept a compact grid");
         }
-        const cards = section.querySelectorAll('[data-testid="history-card"]');
-        if (!cards || cards.length !== 2 || [...cards].some((card) => card.classList.contains("history-card-compact") || !card.querySelector("video") || !card.querySelector('[data-testid="history-media-actions"]') || !card.querySelector('[data-testid="history-detail-panel"]'))) {
-          throw new Error("the without-copy section must hold full cards with each video, actions and record attached");
+        for (const id of ["compact-1", "compact-2"]) {
+          const card = ctx.container.querySelector(`#generation-${id}`);
+          if (!card || card.classList.contains("history-card-compact") || !card.querySelector("video") || !card.querySelector('[data-testid="history-media-actions"]') || !card.querySelector('[data-testid="history-detail-panel"]')) {
+            throw new Error("a copy-less render must stand as a full card with its video, actions and record attached");
+          }
         }
-        global.__SMOKE_PARAMS = "?copy=with";
-        await mount(GenerationHistory)(ctx);
         const regular = ctx.container.querySelector('#generation-regular-1');
         if (!regular || regular.classList.contains("history-card-compact")) {
-          throw new Error("the with-copy section's card is not a plain full card");
+          throw new Error("the copy-carrying card is not a plain full card");
         }
       });
     } finally {
@@ -28482,7 +28520,7 @@ await check(
         ] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),
       }, async () => {
-        global.__SMOKE_PARAMS = "?copy=without";
+        global.__SMOKE_PARAMS = "";
         await mount(GenerationHistory)(ctx);
         const playable = ctx.container.querySelector('#generation-compact-playable');
         const actions = playable.querySelector('[data-testid="history-media-actions"]');
@@ -28499,7 +28537,8 @@ await check(
           throw new Error("the preview must carry no control over the footage");
         }
         // Notices stand in the media stage on every card now —
-        // the without-copy side reads exactly like the with side.
+        // copy-less and copy-carrying cards read exactly alike in
+        // the one list.
         for (const [id, message] of [["compact-missing", "No durable copy"], ["compact-failed", "Provider error"]]) {
           const card = ctx.container.querySelector(`#generation-${id}`);
           const stage = card.querySelector('.history-media .history-stage-empty');
@@ -28507,8 +28546,6 @@ await check(
             throw new Error(`the ${id} notice must stand in the media stage`);
           }
         }
-        global.__SMOKE_PARAMS = "?copy=with";
-        await mount(GenerationHistory)(ctx);
         const regular = ctx.container.querySelector('#generation-regular-missing');
         if (!regular.querySelector('.history-media .history-stage-empty')) {
           throw new Error("the regular card's notice must remain in the video stage");
@@ -28528,7 +28565,7 @@ await check(
     const previousParams = global.__SMOKE_PARAMS;
     const previousHash = global.__SMOKE_HASH;
     try {
-      global.__SMOKE_PARAMS = "?copy=without";
+      global.__SMOKE_PARAMS = "";
       global.__SMOKE_HASH = "";
       await withApi({
         getGenerationHistory: async () => ({ generations: [
@@ -28594,9 +28631,9 @@ await check(
         // Every chip control on this bar is a thumb target on a
         // phone: the shared pill-select class and the toggle must
         // both carry the coarse-pointer rule, or half the bar
-        // stays 32px. The copy and status filters wear the
-        // unified slider now (Nov 27 2026), not chips — their
-        // seat in the opened row is the slider itself.
+        // stays 32px. The status filter wears the unified slider
+        // (Nov 27 2026), not a chip — its seat in the opened row
+        // is the slider itself. The copy filter is gone whole.
         for (const el of [
           toggle,
           ctx.container.querySelector('#history-search'),
@@ -28605,8 +28642,10 @@ await check(
             throw new Error('a History filter control lost its coarse-pointer tap target');
           }
         }
+        if (ctx.container.querySelector('#history-copy-filter')) {
+          throw new Error('the copy filter survives in the opened filter row');
+        }
         for (const el of [
-          ctx.container.querySelector('#history-copy-filter'),
           filters.querySelector('#history-status-filter'),
         ]) {
           if (!el || !el.querySelector('.pick-slider')) {
@@ -28639,7 +28678,7 @@ await check(
     const History = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     try {
-      global.__SMOKE_PARAMS = "?copy=with";
+      global.__SMOKE_PARAMS = "";
       await withApi({
         getGenerationHistory: async () => ({ generations: [{ ...COMPLETED, id: "mobile-copy", post_kit: { caption: "A caption", hashtags: ["#tag"] }, audience: "Everyone" }] }),
         getAppProfiles: async () => ({ profiles: [PROFILE] }),

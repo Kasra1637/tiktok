@@ -53,7 +53,6 @@ import {
   needsHistoryRepairRow,
   isAwaitingProvider,
   isThrottlingError,
-  effectiveCopyFilter,
   getHistoryAttention,
   describeHistoryAttention,
   historyAttentionLink,
@@ -131,16 +130,6 @@ describe("needsHistoryRepairRow", () => {
 });
 
 describe("history deep-link and pager helpers", () => {
-  test.each([
-    ["a copy-less export resolves to the without side", "with", { post_kit: null, audience: "", demo_brief: "" }, "without"],
-    ["a copy-carrying render resolves to the with side", "without", { audience: "QA" }, "with"],
-    ["a story-kit-carrying render resolves to the with side", "without", { story_kit: { caption: "Losing count, again." } }, "with"],
-    ["without a target the with side is kept", "with", null, "with"],
-    ["without a target the without side is kept", "without", null, "without"],
-  ])("deep link %s", (_label, param, row, expected) => {
-    expect(effectiveCopyFilter(param, row)).toBe(expected);
-  });
-
   test("a deep link jumps to its page exactly once", () => {
     expect(shouldApplyDeepLinkPage(null, "abc")).toBe(true);
     expect(shouldApplyDeepLinkPage("abc", "abc")).toBe(false);
@@ -193,8 +182,13 @@ describe("history attention contract", () => {
   });
 
   // The page passes the live URLSearchParams object, not a string.
+  // The link names its first clip by anchor, clears the hook-text
+  // search so the target is never filtered out, and carries no copy
+  // param — the list no longer splits on post copy or plan context.
+  // Server filters (app, status) ride along untouched.
   test.each([
-    ["repair links to the side holding its first clip", [{ id: "f1", status: "failed", audience: "QA" }], "", "?copy=with", "#generation-f1"],
+    ["repair links to its first clip and drops the search", [{ id: "f1", status: "failed", audience: "QA" }], "q=pier", "", "#generation-f1"],
+    ["repair keeps the server filters and drops a stale copy param", [{ id: "f1", status: "failed", audience: "QA" }], "profile=b1&status=failed&copy=without", "?profile=b1&status=failed", "#generation-f1"],
   ])("link: %s", (_label, rows, params, search, hash) => {
     const link = historyAttentionLink(new URLSearchParams(params), getHistoryAttention(rows));
     expect(link.search).toBe(search);

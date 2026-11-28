@@ -307,6 +307,17 @@ One render path, single-pass video generation via OpenRouter.
   shows Create's Craft card (`components/CraftCheckCard.jsx`, shared)
   beside the hook line; the /hook response scores the hook alone with
   the model evaluator, exactly as the studio single-project GET does.
+- History one list + filter row (Nov 27 2026, Kasra's order): the copy
+  filter is removed whole — the `copy` URL param is read and written
+  nowhere, the two copy sections and their per-side counts are gone,
+  and every render the search and server filters leave stands in one
+  run of full cards; `hasCopyContext` still drives everything inside
+  the cards. The status slider's All statuses stop carries no
+  explainer (the line was removed; the other five stand). The top
+  filter row holds only the search, the app picker and the sort,
+  adjacent in that order; the status slider stays in the secondary
+  group, and the More filters button reads active off it alone. The
+  unified-toggle note above now covers History's status filter only.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no

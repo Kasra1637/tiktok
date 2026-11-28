@@ -84,23 +84,23 @@ export function describeHistoryAttention(attention) {
 }
 
 /**
- * Where the banner's link lands: the side holding its first clip, with the
- * hook-text search cleared so the target is never filtered out. Server
- * filters (app, status) are kept; only presentation moves.
+ * Where the banner's link lands: its first clip, named by the anchor,
+ * with the hook-text search cleared so the target is never filtered
+ * out. Server filters (app, status) are kept; only presentation moves.
  */
 export function historyAttentionLink(searchParams, attention) {
   const params = new URLSearchParams(searchParams);
-  params.set("copy", hasCopyContext(attention.first) ? "with" : "without");
+  params.delete("copy");
   params.delete("q");
-  return { search: `?${params.toString()}`, hash: `#generation-${attention.first.id}` };
+  const search = params.toString();
+  return { search: search ? `?${search}` : "", hash: `#generation-${attention.first.id}` };
 }
 
 /**
  * Whether a render carries anything for the copy/context section: a frozen
  * post kit or story kit (ADR 0242 — a story render's kit is its copy), an
  * audience, a Location, or a demo brief. Single owner for the rule the
- * list filter and the deep-link resolver share, so a linked clip and the
- * side that shows it cannot disagree.
+ * card's own sections and the journey line share.
  */
 export function hasCopyContext(row) {
   return Boolean(row?.post_kit || row?.story_kit || row?.audience || row?.location || row?.demo_brief);
@@ -129,17 +129,6 @@ export function needsHistoryRepairRow(row) {
   if (isAwaitingProvider(row)) return true;
   if (row.status === "completed" && !durableMediaUrl(row)) return true;
   return false;
-}
-
-/**
- * Which copy/context side a deep link must land on. A linked clip forces
- * its own side: a standalone Demo + CTA export carries no copy or context,
- * so the default with-side would hide the very clip the link names.
- * Without a linked target the chosen filter is kept as-is.
- */
-export function effectiveCopyFilter(copyParam, targetRow) {
-  if (targetRow) return hasCopyContext(targetRow) ? "with" : "without";
-  return copyParam === "without" ? "without" : "with";
 }
 
 /**

@@ -19,7 +19,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { AppPicker, PILL_SELECT_CLASS } from "../components/AppPicker";
 import { AppSelect } from "../components/AppSelect";
 import { PickSlider } from "../components/studio/HookPicksControl";
-import { GroupLabel, SectionHeading } from "../components/SectionCard";
+import { GroupLabel } from "../components/SectionCard";
 import { Skeleton } from "../components/ui/skeleton";
 import { api, getErrorMessage, durableMediaUrl, downloadMediaUrl, mediaUrl } from "../lib/api";
 import { FactChip } from "../components/FactChip";
@@ -28,14 +28,12 @@ import { HistoryFeedback } from "../components/HistoryFeedback";
 import { VideoVerdict } from "../components/VideoVerdict";
 import { recordSignal } from "../lib/feedback";
 import { isWinnerRow } from "../lib/nextTake";
-import { COPY_FILTER_EXPLAINERS, STATUS_FILTER_EXPLAINERS } from "../lib/pickExplainers";
+import { STATUS_FILTER_EXPLAINERS } from "../lib/pickExplainers";
 import { listPendingSaves } from "../demoCta/saveOutbox";
 import { PendingSaveCard } from "./PendingSaveCard";
 import {
   historyActionError,
-  hasCopyContext,
   isAwaitingProvider,
-  effectiveCopyFilter,
   getHistoryAttention,
   describeHistoryAttention,
   historyAttentionLink,
@@ -265,7 +263,7 @@ function describeSnapshot(snapshot) {
 // deep-link state while the rows stay put. Props are stable callbacks plus
 // row objects react-query structurally shares, so untouched rows skip the
 // re-render and only the changed row pays for one.
-const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, onKitGenerated, deepLinked = false, draftIds = null, pollState = "active" }) {
+const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, deepLinked = false, draftIds = null, pollState = "active" }) {
   // A #generation- deep link (export "View in History", Analytics "View
   // render") opens this row; when it is still awaiting its TikTok link,
   // finish the job by focusing that input, so the founder lands with the
@@ -479,11 +477,10 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, o
       if (!kit || typeof kit !== "object") {
         throw new Error("The server answered without post copy.");
       }
+      // The fresh kit lands in this row's own Post copy section through
+      // the update above: the row stays exactly where it stands in the
+      // one list, and the generated copy is what lands on screen.
       onUpdated(row.id, { post_kit: kit });
-      // The fresh kit moves the row to the with-copy side, which would
-      // unmount it out from under the founder mid-click. Follow it there
-      // instead, so the generated copy is what lands on screen.
-      onKitGenerated?.();
     } catch (err) {
       setError(historyActionError(err, "write this render's post copy"));
     } finally {
@@ -1138,16 +1135,9 @@ export default function GenerationHistory() {
   const profileFilter = searchParams.get("profile") || "";
   const statusFilter = searchParams.get("status") || "";
   const query = searchParams.get("q") || "";
-  // Availability of post copy & plan context, URL-owned like the other
-  // filters so back/forward agree. The two sides never share the screen:
-  // "with" shows only cards carrying copy or context, "without" only
-  // cards carrying neither. Anything else (including a missing param)
-  // reads as "with", the section that leads the page.
-  const copyFilter = searchParams.get("copy") === "without" ? "without" : "with";
-  // A #generation-<id> deep link names one render, not one side of the
-  // copy/context split. Resolve it early so the target's side wins: a
-  // standalone Demo + CTA export would otherwise stay hidden behind the
-  // default with-side while the URL claims to show it.
+  // A #generation-<id> deep link names one render. Resolve it early:
+  // the pager and the scroll below settle on the named card once the
+  // rows land.
   const hashId = (location.hash || "").startsWith("#generation-")
     ? location.hash.slice("#generation-".length)
     : "";
@@ -1253,23 +1243,15 @@ export default function GenerationHistory() {
     );
   })();
 
-  // The copy/context filter narrows after the hook-text search: both are
-  // client-side presentation over the same fetched window. A deep link
-  // forces its target's side so the named clip is never filtered out.
-  const hashTarget = hashId ? rows.find((row) => row.id === hashId) : null;
-  const effectiveCopy = effectiveCopyFilter(copyFilter, hashTarget || null);
-  const copyVisible = effectiveCopy === "without"
-    ? visible.filter((row) => !hasCopyContext(row))
-    : visible.filter(hasCopyContext);
-  const completed = copyVisible.filter((r) => r.status === "completed").length;
-  const failed = copyVisible.filter((r) => r.status === "failed").length;
+  // One list (Kasra's order, Nov 27 2026): every render the search and
+  // the server filters leave stands in a single run, whether or not it
+  // carries post copy or plan context — the copy filter and its two
+  // sections are gone, and the cards' own sections carry the copy.
+  const completed = visible.filter((r) => r.status === "completed").length;
+  const failed = visible.filter((r) => r.status === "failed").length;
   const ordered = sort === "views"
-    ? [...copyVisible].sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1))
-    : copyVisible;
-  // Window counts behind the two section headings: the pager below owns how
-  // many cards mount, the headings own how many each side holds in full.
-  const orderedWith = ordered.filter(hasCopyContext);
-  const orderedWithout = ordered.filter((row) => !hasCopyContext(row));
+    ? [...visible].sort((a, b) => (b.tiktok_views ?? -1) - (a.tiktok_views ?? -1))
+    : visible;
   // The render window over the loaded rows: at most one page mounts. The
   // fetch window above still owns how many rows arrive; this owns how many
   // are in the DOM. Clamped, never empty-headed: a shrink lands on page 1
@@ -1277,17 +1259,12 @@ export default function GenerationHistory() {
   const pageCount = Math.max(1, Math.ceil(ordered.length / HISTORY_PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const paged = ordered.slice((safePage - 1) * HISTORY_PAGE_SIZE, safePage * HISTORY_PAGE_SIZE);
-  // The current page split the same way as the window: each section mounts
-  // only its own cards, so the two kinds are never mixed in one run.
-  const pagedWith = paged.filter(hasCopyContext);
-  const pagedWithout = paged.filter((row) => !hasCopyContext(row));
   const renderRow = (row) => (
     <GenerationRow
       key={row.id}
       row={row}
       onChanged={load}
       onUpdated={updateRow}
-      onKitGenerated={() => setFilter("copy", "with")}
       deepLinked={hashId !== "" && hashId === row.id}
       draftIds={draftIds}
       pollState={pollStates[row.id] || "active"}
@@ -1312,7 +1289,7 @@ export default function GenerationHistory() {
   // reset stay mounted, so focus is already somewhere sensible.
   useEffect(() => {
     setPage(1);
-  }, [profileFilter, statusFilter, query, sort, limit, effectiveCopy]);
+  }, [profileFilter, statusFilter, query, sort, limit]);
 
   // A #generation-<id> deep link (Analytics "View render") lands on a page
   // whose rows arrive after the fetch, so the browser's native anchor scroll
@@ -1371,45 +1348,45 @@ export default function GenerationHistory() {
             data-active={query ? "true" : undefined}
             className={PILL_SELECT_CLASS}
           />
-          <label className="sr-only" htmlFor="history-copy-filter">Filter by post copy and plan context</label>
-          {/* The unified slider (Kasra's order, Nov 27 2026): the
-              copy filter is a pick-one-of-two, so it wears the one
-              groove face, writing the same filter value the
-              dropdown wrote. The sort beside it stays a dropdown —
-              it is a true sort, not a filter pick. */}
-          <div id="history-copy-filter" data-testid="history-copy-filter" data-value={effectiveCopy}
-            data-active={effectiveCopy === "without" ? "true" : undefined}>
-            <PickSlider
-              options={[
-                { value: "with", label: "With post copy & context" },
-                { value: "without", label: "Without post copy & context" },
-              ]}
-              explainers={COPY_FILTER_EXPLAINERS}
-              current={effectiveCopy}
-              onChange={(value) => setFilter("copy", value)}
-              testId="history-copy-filter"
-              ariaLabel="Filter by post copy and plan context"
-            />
-          </div>
+          {/* The top row's three controls (Kasra's order, Nov 27
+              2026): the search, the app picker and the sort stand
+              adjacent, in that order. The sort stays a dropdown —
+              it is a true sort, not a filter pick. The copy filter
+              that stood here is gone whole: the list no longer
+              splits on post copy or plan context. */}
+          <AppPicker
+            profiles={profiles}
+            value={profileFilter}
+            onChange={(value) => setFilter("profile", value)}
+            allLabel="All apps"
+            ariaLabel="Filter by app"
+          />
+          <label className="sr-only" htmlFor="history-sort">Sort history</label>
+          <AppSelect
+            id="history-sort"
+            value={sort}
+            onChange={setSort}
+            ariaLabel="Sort history"
+            testId="history-sort"
+            dataActive={sort !== "newest"}
+            className={PILL_SELECT_CLASS}
+            options={[
+              { value: "newest", label: "Newest first" },
+              { value: "views", label: "Most viewed" },
+            ]}
+          />
           <button type="button" className="history-more-filters pill-studio tap-chip filter-control focus-ring h-8 rounded-full border border-[color:var(--hairline)] px-3 text-sm font-semibold"
-            data-active={(profileFilter || statusFilter || sort !== "newest") ? "true" : undefined}
+            data-active={statusFilter ? "true" : undefined}
             aria-expanded={moreFiltersOpen} aria-controls="history-secondary-filters" onClick={() => setMoreFiltersOpen((open) => !open)}>
-            More filters{(profileFilter || statusFilter || sort !== "newest") ? " (active)" : ""} <ChevronDown aria-hidden="true" className={`inline h-3.5 w-3.5 ${moreFiltersOpen ? "rotate-180" : ""}`} />
+            More filters{statusFilter ? " (active)" : ""} <ChevronDown aria-hidden="true" className={`inline h-3.5 w-3.5 ${moreFiltersOpen ? "rotate-180" : ""}`} />
           </button>
-          {/* The secondary filters (All apps, All statuses, sort) are
-              items of this same row (ADR 0204): at desktop widths the
-              wrapper renders as contents in index.css, so the five
-              filter controls stand in one row instead of stacking into
-              two; below that width the wrapper keeps its disclosure
-              behaviour, opening as a full-width row of its own. */}
+          {/* The secondary group holds the status filter alone now:
+              at desktop widths the wrapper renders as contents in
+              index.css, so the status slider stands as an item of
+              this same row; below that width the wrapper keeps its
+              disclosure behaviour, opening as a full-width row of
+              its own. */}
           <div id="history-secondary-filters" className="history-secondary-filters flex-wrap items-center gap-2" data-expanded={moreFiltersOpen}>
-            <AppPicker
-              profiles={profiles}
-              value={profileFilter}
-              onChange={(value) => setFilter("profile", value)}
-              allLabel="All apps"
-              ariaLabel="Filter by app"
-            />
             <label className="sr-only" htmlFor="history-status-filter">Filter by status</label>
             {/* The unified slider (Kasra's order, Nov 27 2026): the
                 status filter's six standings are the slider's
@@ -1431,20 +1408,6 @@ export default function GenerationHistory() {
                 ariaLabel="Filter by status"
               />
             </div>
-            <label className="sr-only" htmlFor="history-sort">Sort history</label>
-            <AppSelect
-              id="history-sort"
-              value={sort}
-              onChange={setSort}
-              ariaLabel="Sort history"
-              testId="history-sort"
-              dataActive={sort !== "newest"}
-              className={PILL_SELECT_CLASS}
-              options={[
-                { value: "newest", label: "Newest first" },
-                { value: "views", label: "Most viewed" },
-              ]}
-            />
           </div>
           {/* The toolbar's right cluster (ADR 0204): the attention
               banner's action renders here whenever the banner shows —
@@ -1605,57 +1568,25 @@ export default function GenerationHistory() {
         />
       ) : (
         <div className="history-grid page-content-enter" data-testid="history-list" ref={listRef}>
-          {copyVisible.length > 1 && (
+          {visible.length > 1 && (
             <p className="col-span-full text-sm text-muted-foreground">
-              {copyVisible.length} results · {completed} completed · {failed} failed
+              {visible.length} results · {completed} completed · {failed} failed
             </p>
           )}
-          {copyVisible.length === 0 && rows.length > 0 && (
+          {visible.length === 0 && rows.length > 0 && (
             <p className="col-span-full text-sm text-muted-foreground" role="status">
               {query.trim()
                 ? <>No renders match “{query.trim()}”. Clear the search to see everything.</>
                 : <>No renders match this filter. Clear the filters to see everything.</>}
             </p>
           )}
-          {/* Two page sections, never mixed: renders carrying post copy or
-              plan context stack under one heading, renders carrying neither
-              under another. Without-copy cards pair on wide screens and
-              remain single-column on phones; stable row keys let React reorder without remounting, so sorting
-              or filtering never drops focus and typed input mid-edit. */}
-          {effectiveCopy === "with" && pagedWith.length > 0 && (
-            <section
-              aria-label="Renders with post copy and plan context"
-              data-testid="history-section-with"
-              className="col-span-full space-y-4"
-            >
-              <div className="space-y-1">
-                <SectionHeading as="h2" icon={MessageSquareText}>
-                  With post copy & plan context · {orderedWith.length} total
-                </SectionHeading>
-                <p className="text-sm text-muted-foreground">
-                  Clips with a saved caption, audience, Location, or demo brief attached.
-                </p>
-              </div>
-              {pagedWith.map(renderRow)}
-            </section>
-          )}
-          {effectiveCopy === "without" && pagedWithout.length > 0 && (
-            <section
-              aria-label="Renders without post copy and plan context"
-              data-testid="history-section-without"
-              className="col-span-full space-y-4"
-            >
-              <div className="space-y-1">
-                <SectionHeading as="h2" icon={Film}>
-                  Without post copy & context · {orderedWithout.length} total
-                </SectionHeading>
-                <p className="text-sm text-muted-foreground">
-                  Clips with no saved copy or context yet.
-                </p>
-              </div>
-              {pagedWithout.map(renderRow)}
-            </section>
-          )}
+          {/* One run of cards (Kasra's order, Nov 27 2026): renders
+              carrying post copy or plan context and renders carrying
+              neither stand in the same list, in the sorted order —
+              no section split, no per-side counts. Stable row keys
+              let React reorder without remounting, so sorting or
+              filtering never drops focus and typed input mid-edit. */}
+          {paged.map(renderRow)}
           {rows.length >= limit && limit < 200 && (
             <div className="col-span-full flex justify-center pt-2">
               <Button

@@ -58,13 +58,7 @@ export const FOCUS_APP_EXPLAINER =
 export const FOCUS_LINE_EXPLAINER =
   "The hook leads with the outcome named under the knob here.";
 
-export const COPY_FILTER_EXPLAINERS = {
-  with: "Shows only renders that carry post copy and plan context.",
-  without: "Shows only renders still missing post copy and context.",
-};
-
 export const STATUS_FILTER_EXPLAINERS = {
-  "": "Shows renders in every state, from finished to archived.",
   completed: "Shows only renders that finished and stand ready to use.",
   failed: "Shows only renders that failed, so they can be retried.",
   generating: "Shows only renders being made right now, still in flight.",

@@ -2,7 +2,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { useWizardDirections } from "./useWizardDirections";
-import { hasCopyContext, effectiveCopyFilter } from "./historyRepair";
+import { hasCopyContext } from "./historyRepair";
 
 jest.mock("../lib/api", () => ({
   api: { getDirectionOptions: jest.fn(), refreshDirectionOptions: jest.fn() },
@@ -58,10 +58,6 @@ test("strategy scene renders one Location row and no retired place rows", async 
 
 test("Location-only result is classified as containing context", () => {
   expect(hasCopyContext({ location: "A city rooftop at noon." })).toBe(true);
-});
-
-test("History deep link selects the context side for a Location-only result", () => {
-  expect(effectiveCopyFilter("without", { location: "A city rooftop at noon." })).toBe("with");
 });
 
 test("direction Location selection dispatches the same editable Location field", async () => {
