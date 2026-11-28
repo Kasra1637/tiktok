@@ -265,6 +265,14 @@ One render path, single-pass video generation via OpenRouter.
   that slider this session; the silent stop's explainer replaces the long
   silent-voice sentence, and the note that remains on HookSnap is the
   text-to-speech handover alone.
+- The pick text's quiet face (Nov 27 2026, Kasra's order): the pick's name
+  (`.pick-slider-value`) and its explainer (`.pick-slider-explain`) stand in
+  one matched voice everywhere the PickSlider stands — the same 0.875rem
+  size, both at regular weight 400 (the name's old bold 600 is gone), the
+  name in the foreground tone and the explainer one tone quieter in the
+  muted foreground, smoke-pinned in the hook-picks slider check. The
+  explainers themselves stay — a toggle like Focus means nothing with no
+  word on what it selects.
 - Demo + CTA library picker + second-clip sequence (Nov 27 2026, Kasra's
   order): both clip slots' add doors open the Assets library pop-up
   (`demoCta/LibraryPicker.jsx`, the pop-scrim portal shell) listing the

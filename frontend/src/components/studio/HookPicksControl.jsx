@@ -185,7 +185,7 @@ export function PickPills({ options, current, onChange, disabled, testId, ariaLa
 // short pill branded in the app's own selection tokens (the
 // indigo family and its glow — coral never carries selection)
 // with grip lines, so it reads as a handle. Under the track ONLY
-// the current pick's name stands, in the bigger bold font: there
+// the current pick's name stands, in the one regular-weight font: there
 // is no row naming every stop, and no smaller second line
 // repeating the pick — the other stops reveal themselves on the
 // change itself. Dragging is never the only way: every stop dot

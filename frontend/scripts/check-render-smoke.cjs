@@ -16368,6 +16368,30 @@ async function runHookCtaChecks() {
     if (!trackRule.includes("width: 9.375rem")) {
       throw new Error("the slider track does not carry the one fixed width");
     }
+    // The pick's name and its explainer stand in one quiet,
+    // matched voice (Nov 27 2026, Kasra's order): the same
+    // 0.875rem size and the same regular weight — the name in
+    // the foreground tone, the explainer one tone quieter in
+    // the muted foreground. The old bold value face (weight
+    // 600) made the pair read as one bold white block.
+    const valueAt = css.indexOf(".pick-slider-value");
+    if (valueAt < 0) throw new Error("index.css carries no pick slider value");
+    const valueRule = css.slice(valueAt, css.indexOf("}", valueAt));
+    if (!valueRule.includes("font-size: 0.875rem") || !valueRule.includes("color: var(--foreground)")) {
+      throw new Error("the pick's name lost its size or foreground tone");
+    }
+    if (!valueRule.includes("font-weight: 400") || valueRule.includes("font-weight: 600")) {
+      throw new Error("the pick's name still shouts — it must stand at regular weight, not bold");
+    }
+    const explainAt = css.indexOf(".pick-slider-explain");
+    if (explainAt < 0) throw new Error("index.css carries no pick slider explainer");
+    const explainRule = css.slice(explainAt, css.indexOf("}", explainAt));
+    if (!explainRule.includes("font-size: 0.875rem") || !explainRule.includes("font-weight: 400")) {
+      throw new Error("the explainer is not matched to the pick's name in size and regular weight");
+    }
+    if (!explainRule.includes("color: var(--muted-foreground)")) {
+      throw new Error("the explainer does not stand in the muted tone, one step quieter than the name");
+    }
   });
 
   await check("pick sliders glide on a switch and never lag a drag (Nov 27 2026)", async (ctx) => {
