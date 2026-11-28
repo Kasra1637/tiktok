@@ -1185,10 +1185,11 @@ async def _migration_0010_project_voice_mode(conn):
     pick is per project, so the row carries it; every existing row
     becomes 'talking' by the column default, which is the behavior
     every render has had until now. Added only when missing, so a
-    database that already has it passes through untouched. The
-    default here is that historical backfill only: rows created
-    since ADR 0248 are written 'silent' explicitly at creation,
-    because a new project starts silent."""
+    database that already has it passes through untouched. Rows
+    created at the endpoint are likewise written 'talking'
+    explicitly at creation (Kasra's order, Nov 27 2026: toggles
+    rest on the left by default; this supersedes ADR 0248's brief
+    silent start)."""
     cursor = await conn.execute("PRAGMA table_info(studio_projects)")
     cols = {row[1] for row in await cursor.fetchall()}
     if "voice_mode" not in cols:

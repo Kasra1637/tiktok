@@ -1639,13 +1639,15 @@ async function main() {
   await check("no direction button stands picked until the founder picks it", async (ctx) => {
     // ADR 0361 (Kasra's order, Nov 25 2026): on a fresh project the
     // direction pairs show their standing defaults as VALUES — the
-    // plan still renders handheld and silent — but no button stands
-    // picked: a button earns the picked face only from a click, and
-    // a saved pick off the default (a click that was stored) stands
-    // picked on return. The write side already defined this: picking
-    // the default stores nothing (omitDefault in the draft reducer).
+    // plan still renders handheld and talking (the voice default
+    // is talking since Kasra's left-stop order, Nov 27 2026) —
+    // but no button stands picked: a button earns the picked face
+    // only from a click, and a saved pick off the default (a click
+    // that was stored) stands picked on return. The write side
+    // already defined this: picking the default stores nothing
+    // (omitDefault in the draft reducer).
     global.__SMOKE_PARAMS = "?project=p1";
-    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", voice_mode: "silent" };
+    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", voice_mode: "talking" };
     try {
       await withApi({
         getStudioProject: async () => saved,
@@ -1673,15 +1675,16 @@ async function main() {
             throw new Error("a voice button stands picked before any click (ADR 0361)");
           }
         }
-        // The default still renders — a fresh project is silent at
-        // render (ADR 0248) — but the note that used to name it no
-        // longer stands on this page: ADR 0362 took every
-        // descriptive line out of Create's direction section, the
-        // voice note among them, so Create passes hideNote and the
-        // note's absence here is the new pin. HookSnap passes
-        // nothing and keeps the note; its own checks below pin it
-        // there. What 0361 still promises on this page is the value
-        // and the faces, asserted above and below.
+        // The default still renders — a fresh project is talking
+        // at render (Kasra's left-stop order, Nov 27 2026) — but
+        // the note that used to name the other mode no longer
+        // stands on this page: ADR 0362 took every descriptive
+        // line out of Create's direction section, the voice note
+        // among them, so Create passes hideNote and the note's
+        // absence here is the new pin. HookSnap passes nothing and
+        // keeps the note; its own checks below pin it there. What
+        // 0361 still promises on this page is the value and the
+        // faces, asserted above and below.
         if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
           throw new Error("the voice note stands on Create — ADR 0362 removed the section's descriptive lines");
         }
@@ -1695,13 +1698,13 @@ async function main() {
         }
         // A saved pick off the default stands picked on return.
         await act(async () => ctx.root.render(null));
-        saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "fixed", voice_mode: "talking" };
+        saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "fixed", voice_mode: "silent" };
         await mount(CreateVideo, {})(ctx);
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
         if (ctx.container.querySelector('[data-testid="camera-setup"] [data-value="fixed"]').getAttribute("aria-pressed") !== "true") {
           throw new Error("the saved camera pick does not stand picked on return (ADR 0361)");
         }
-        if (ctx.container.querySelector('[data-testid="voice-mode-talking"]').getAttribute("aria-pressed") !== "true") {
+        if (ctx.container.querySelector('[data-testid="voice-mode-silent"]').getAttribute("aria-pressed") !== "true") {
           throw new Error("the saved voice pick does not stand picked on return (ADR 0361)");
         }
       });
@@ -1710,21 +1713,24 @@ async function main() {
     }
   });
 
-  await check("clicking Character stays silent picks it on Create (ADR 0373)", async (ctx) => {
+  await check("clicking Character talks picks it on Create, and silent after it (ADR 0373)", async (ctx) => {
     // The bug Kasra hit live (Nov 26 2026): on a fresh project —
-    // silent since its creation (ADR 0248) — the Character stays
-    // silent button could not be clicked. The tap restated the
-    // saved value, so the draft's omitDefault rule stored no edit,
-    // and ADR 0361's read derives the picked face from the value,
-    // where a default-valued field reads as no pick: the button
-    // never lit, nothing on screen changed, and only Character
-    // talks — standing off the default — answered. The repair
-    // (ADR 0373): the draft remembers a pick-shaped click as a
-    // pick in its own record, and editPick reads the record first.
-    // A clicked silent stands picked; an untouched project still
-    // shows no pick (ADR 0361's check above stands unchanged).
+    // standing on its creation default — the default's own button
+    // could not be clicked. The tap restated the saved value, so
+    // the draft's omitDefault rule stored no edit, and ADR 0361's
+    // read derives the picked face from the value, where a
+    // default-valued field reads as no pick: the button never
+    // lit, nothing on screen changed, and only the off-default
+    // stop answered. The creation default was silent then (ADR
+    // 0248) and is talking since Kasra's left-stop order (Nov 27
+    // 2026), so the dead stop this check exercises is now
+    // Character talks; the repair is the same (ADR 0373): the
+    // draft remembers a pick-shaped click as a pick in its own
+    // record, and editPick reads the record first. A clicked
+    // talking stands picked; an untouched project still shows no
+    // pick (ADR 0361's check above stands unchanged).
     global.__SMOKE_PARAMS = "?project=p1";
-    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", voice_mode: "silent" };
+    let saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "handheld", voice_mode: "talking" };
     try {
       await withApi({
         getStudioProject: async () => saved,
@@ -1741,28 +1747,28 @@ async function main() {
         if (silentBtn.getAttribute("aria-pressed") === "true" || talkingBtn.getAttribute("aria-pressed") === "true") {
           throw new Error("a voice button stands picked before any click (ADR 0361)");
         }
-        await clickEl(ctx, silentBtn);
-        if (silentBtn.getAttribute("aria-pressed") !== "true") {
-          throw new Error("clicking Character stays silent did not pick it — the button reads as dead (ADR 0373)");
-        }
-        if (talkingBtn.getAttribute("aria-pressed") === "true") {
-          throw new Error("Character talks stands picked beside the silent pick");
-        }
-        // The pick survives the autosave settling: no edit is owed
-        // (silent already stands saved), and the record — not a
-        // pending edit — is what keeps the face lit.
-        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
-        if (silentBtn.getAttribute("aria-pressed") !== "true") {
-          throw new Error("the silent pick did not survive the autosave settling (ADR 0373)");
-        }
-        // And the pair still swings both ways off the record.
         await clickEl(ctx, talkingBtn);
         if (talkingBtn.getAttribute("aria-pressed") !== "true") {
-          throw new Error("clicking Character talks did not pick it after the silent pick");
+          throw new Error("clicking Character talks did not pick it — the button reads as dead (ADR 0373)");
         }
+        if (silentBtn.getAttribute("aria-pressed") === "true") {
+          throw new Error("Character stays silent stands picked beside the talking pick");
+        }
+        // The pick survives the autosave settling: no edit is owed
+        // (talking already stands saved), and the record — not a
+        // pending edit — is what keeps the face lit.
+        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
+        if (talkingBtn.getAttribute("aria-pressed") !== "true") {
+          throw new Error("the talking pick did not survive the autosave settling (ADR 0373)");
+        }
+        // And the pair still swings both ways off the record.
         await clickEl(ctx, silentBtn);
         if (silentBtn.getAttribute("aria-pressed") !== "true") {
-          throw new Error("clicking back to Character stays silent did not pick it (ADR 0373)");
+          throw new Error("clicking Character stays silent did not pick it after the talking pick");
+        }
+        await clickEl(ctx, talkingBtn);
+        if (talkingBtn.getAttribute("aria-pressed") !== "true") {
+          throw new Error("clicking back to Character talks did not pick it (ADR 0373)");
         }
       });
     } finally {
@@ -15448,11 +15454,12 @@ async function runHookCtaChecks() {
   // A draft exactly as the create endpoint leaves it, in the
   // serialized shape _public_project returns (ADR 0262): no hook, no
   // script, no strategy, no photo, and every pick the page offers at
-  // its create-time value — the voice on silent (ADR 0248), the
-  // length at the create's 5 seconds, no place, wardrobe, focus or
-  // tone chosen. The fresh-start checks below are written against
-  // this shape because it is the shape the page treats as a blank
-  // canvas.
+  // its create-time value — the voice on talking (Kasra's order,
+  // Nov 27 2026: toggles rest on the left by default; ADR 0248's
+  // silent start superseded), the length at the create's 5
+  // seconds, no place, wardrobe, focus or tone chosen. The
+  // fresh-start checks below are written against this shape
+  // because it is the shape the page treats as a blank canvas.
   const blankRow = (overrides = {}) => hookRow({
     hook_line: "",
     script: "",
@@ -15461,7 +15468,7 @@ async function runHookCtaChecks() {
     location: "",
     visual_direction: "",
     tone: "",
-    voice_mode: "silent",
+    voice_mode: "talking",
     hook_focus: "",
     hook_shape: "auto",
     ...overrides,
@@ -16062,6 +16069,59 @@ async function runHookCtaChecks() {
     );
   });
 
+  await check("every slider explainer is brief and lands in the shared band (Nov 27 2026)", async () => {
+    // Kasra's order (Nov 27 2026): every PickSlider carries one
+    // explainer per stop, brief and uniform — the fixed texts land
+    // in one 55–65 character band, the label templates (Location,
+    // Wardrobe, environment, backdrop, animation) land in a wider
+    // 45–70 sanity band with the app's real labels, and every one
+    // is far under the old silent note's ~200 characters. A future
+    // explainer that drifts out of the band fails here.
+    const ex = load("lib/pickExplainers.js");
+    const fixedMaps = [
+      ex.VOICE_EXPLAINERS, ex.CAMERA_EXPLAINERS, ex.TONE_EXPLAINERS,
+      ex.SHAPE_EXPLAINERS, ex.OPENING_EXPLAINERS, ex.COPY_FILTER_EXPLAINERS,
+      ex.STATUS_FILTER_EXPLAINERS, ex.CLIP_STYLE_EXPLAINERS,
+      ex.TRANSITION_EXPLAINERS,
+    ];
+    for (const map of fixedMaps) {
+      for (const [key, text] of Object.entries(map)) {
+        if (typeof text !== "string" || text.length < 55 || text.length > 65) {
+          throw new Error(`an explainer sits outside the 55–65 band (${text && text.length} chars, stop ${JSON.stringify(key)}): ${JSON.stringify(text)}`);
+        }
+      }
+    }
+    for (const text of [ex.FOCUS_APP_EXPLAINER, ex.FOCUS_LINE_EXPLAINER]) {
+      if (text.length < 55 || text.length > 65) {
+        throw new Error(`a Focus explainer sits outside the 55–65 band (${text.length} chars): ${JSON.stringify(text)}`);
+      }
+    }
+    for (const text of [ex.resolutionExplainer("768p", true), ex.resolutionExplainer("1080p", false)]) {
+      if (text.length < 55 || text.length > 65) {
+        throw new Error(`a resolution explainer sits outside the 55–65 band (${text.length} chars): ${JSON.stringify(text)}`);
+      }
+    }
+    const { ENVIRONMENTS, BACKGROUNDS, ANIMATIONS } = load("demoCta/constants.js");
+    const templated = [
+      ...ENVIRONMENTS.map((env) => ex.environmentExplainer(env.label)),
+      ...BACKGROUNDS.map((b) => ex.backdropExplainer(b.label)),
+      ...ANIMATIONS.map((a) => ex.animationExplainer(a.label)),
+      ex.locationExplainer("A quiet kitchen"),
+      ex.locationExplainer("Plan default"),
+      ex.wardrobeExplainer("A plain dark hoodie"),
+      ex.wardrobeExplainer("Plan default"),
+    ];
+    for (const text of templated) {
+      if (text.length < 45 || text.length > 70) {
+        throw new Error(`a templated explainer sits outside the 45–70 band (${text.length} chars): ${JSON.stringify(text)}`);
+      }
+    }
+    const voiceSrc = fs.readFileSync(path.join(SRC, "components", "studio", "VoiceModeControl.jsx"), "utf8");
+    if (voiceSrc.includes("no voice, and the mouth never moves")) {
+      throw new Error("the long silent-voice sentence still stands in VoiceModeControl — the brief explainer replaces it");
+    }
+  });
+
   await check("HookSnap's hook picks are drag sliders — Tone, Shape and Opening on one line (Nov 27 2026)", async (ctx) => {
     // Kasra's order (Nov 27 2026, from his approved mockups): on
     // HookSnap the Tone and Shape pill rows become drag sliders and
@@ -16229,15 +16289,17 @@ async function runHookCtaChecks() {
         }
         // Voice: two stops, no pick lit on a fresh draft (ADR
         // 0361), the knob resting on the mode that will render —
-        // silent — with its name under the track. The note does
-        // NOT stand: it belongs to a change the user makes, never
-        // to the standing state (Kasra's order, Nov 27 2026).
+        // talking, the left stop (Kasra's order, Nov 27 2026:
+        // every toggle rests on the left by default) — with its
+        // name under the track. Neither the note nor the slider's
+        // explainer stands: both belong to a change the user
+        // makes, never to the standing state (Nov 27 2026).
         const voiceKnob = card.querySelector('[data-testid="voice-mode-knob"]');
         if (!voiceKnob || voiceKnob.getAttribute("role") !== "slider") {
           throw new Error("the voice pick carries no slider knob");
         }
-        if (voiceKnob.getAttribute("aria-valuenow") !== "1") {
-          throw new Error("the voice knob does not rest on Character stays silent, the standing mode");
+        if (voiceKnob.getAttribute("aria-valuenow") !== "0") {
+          throw new Error("the voice knob does not rest on Character talks, the left stop and standing mode");
         }
         for (const id of ["voice-mode-talking", "voice-mode-silent"]) {
           const stop = card.querySelector(`[data-testid="${id}"]`);
@@ -16247,11 +16309,14 @@ async function runHookCtaChecks() {
           }
         }
         const voiceValue = card.querySelector('[data-testid="voice-mode-value"]');
-        if (!voiceValue || voiceValue.textContent.trim() !== "Character stays silent") {
+        if (!voiceValue || voiceValue.textContent.trim() !== "Character talks") {
           throw new Error("the voice slider does not name the standing mode under its knob");
         }
         if (card.querySelector('[data-testid="voice-mode-silent-note"]')) {
           throw new Error("the silent note stands on a fresh draft — it belongs to the change, not the standing state (Nov 27 2026)");
+        }
+        if (card.querySelector('[data-testid="voice-mode-explain"]')) {
+          throw new Error("the voice explainer stands on a fresh draft — it belongs to the change, not the standing state (Nov 27 2026)");
         }
         // Location and Wardrobe: the two standing picks are the
         // stops, and New options stands beside the label.
@@ -16294,13 +16359,32 @@ async function runHookCtaChecks() {
         }
         // The note belongs to that change (Nov 27 2026): the user
         // just slid Voice onto silent, so the note stands now —
-        // and sliding back to talking takes it away again.
-        if (!card.querySelector('[data-testid="voice-mode-silent-note"]')) {
+        // and sliding back to talking takes it away again. The
+        // note is the text-to-speech handover only: the long
+        // sentence that used to open it is replaced by the
+        // slider's brief explainer, which stands beside it now
+        // naming what the silent stop means.
+        const silentNote = card.querySelector('[data-testid="voice-mode-silent-note"]');
+        if (!silentNote) {
           throw new Error("the silent note did not rise when the user changed Voice to silent");
+        }
+        if (silentNote.textContent.includes("The character stays silent in this video")) {
+          throw new Error("the long silent sentence still opens the note — the brief explainer replaces it (Nov 27 2026)");
+        }
+        if (!silentNote.textContent.includes("text-to-speech")) {
+          throw new Error("the silent note lost the text-to-speech handover");
+        }
+        const silentExplain = card.querySelector('[data-testid="voice-mode-explain"]');
+        if (!silentExplain || silentExplain.textContent.trim() !== "No voice is recorded; TikTok text-to-speech can carry the line.") {
+          throw new Error("the silent stop's explainer does not stand after the change onto silent");
         }
         await clickEl(ctx, card.querySelector('[data-testid="voice-mode-talking"]'));
         if (card.querySelector('[data-testid="voice-mode-silent-note"]')) {
           throw new Error("the silent note stayed after the user slid back to talking");
+        }
+        const talkingExplain = card.querySelector('[data-testid="voice-mode-explain"]');
+        if (!talkingExplain || talkingExplain.textContent.trim() !== "The character speaks the line aloud, lips moving with the words.") {
+          throw new Error("the talking stop's explainer does not stand after the change back to talking");
         }
         // New options reveals the full set as the pill row it has
         // always been, and a pick from it applies.
@@ -16898,9 +16982,10 @@ async function runHookCtaChecks() {
 
   await check("the silent pick saves, names the hook line for text-to-speech, and submits audio off", async (ctx) => {
     const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
-    // The row starts on talking explicitly: a fresh row now starts
-    // silent (ADR 0248), and this check's subject is the switch TO
-    // silent and what it saves and submits.
+    // The row states talking explicitly — a fresh row starts
+    // talking too (Kasra's left-stop order, Nov 27 2026) — and
+    // this check's subject is the switch TO silent and what it
+    // saves and submits.
     let row = hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face, voice_mode: "talking" });
     const patches = [];
     const submits = [];
@@ -16959,13 +17044,16 @@ async function runHookCtaChecks() {
     // page's now does the same, and this check is the pin: start
     // saved-silent, tap talking, and the pick must show and save.
     // ADR 0364 changes the READ face only: ADR 0361 lands on this
-    // page, so a saved-silent draft shows NO pill picked — silent
-    // is the standing default, and a stored "silent" reads exactly
-    // like never picked, as on Create. The note does NOT render
-    // for the standing pick (Nov 27 2026: it belongs to the
-    // change, never to the standing state) — it rises at this
-    // check's end, when the user changes back onto silent — and
-    // the switch-back path below is the regression pin, unchanged.
+    // page, so a stored pick off the standing default reads as a
+    // pick. Silent was the default when this check was written
+    // (ADR 0248); since Kasra's left-stop order (Nov 27 2026) the
+    // default is talking, so a stored "silent" now stands picked
+    // on return — the mirror of the old read, and the stored pick
+    // itself is untouched. The note does NOT render for the
+    // standing pick (Nov 27 2026: it belongs to the change, never
+    // to the standing state) — it rises at this check's end, when
+    // the user changes back onto silent — and the switch-back
+    // path below is the regression pin, unchanged.
     const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
     let row = hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face, voice_mode: "silent" });
     const patches = [];
@@ -16985,8 +17073,8 @@ async function runHookCtaChecks() {
         const talkingPill = ctx.container.querySelector('[data-testid="voice-mode-talking"]');
         const silentPill = ctx.container.querySelector('[data-testid="voice-mode-silent"]');
         if (!talkingPill || !silentPill) throw new Error("the voice pick did not render in the direction card");
-        if (silentPill.getAttribute("aria-pressed") === "true" || talkingPill.getAttribute("aria-pressed") === "true") {
-          throw new Error("a saved-silent draft reads as picked — ADR 0364 (ADR 0361 here) stands it unpicked until a click");
+        if (silentPill.getAttribute("aria-pressed") !== "true" || talkingPill.getAttribute("aria-pressed") === "true") {
+          throw new Error("a saved-silent draft does not read as the stored pick — silent stands off the talking default (Nov 27 2026)");
         }
         if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
           throw new Error("the silent note stands for the saved silent pick — it belongs to the change, not the standing state (Nov 27 2026)");
@@ -17012,20 +17100,23 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("clicking Character stays silent picks it on HookSnap (ADR 0373)", async (ctx) => {
+  await check("clicking Character talks picks it on HookSnap, and silent after it (ADR 0373)", async (ctx) => {
     // The same dead button as Create's, on the shared control's
     // other wiring (Kasra's report named Create's section; the
     // mechanism — a restating tap stores no edit, and the read
     // derives the face from the value — is shared, so the repair
-    // is pinned here too). A draft standing silent since its
-    // creation (ADR 0248) shows no pill picked (ADR 0364, the
-    // check above), and before this repair tapping Character
-    // stays silent changed nothing on screen. ADR 0373: the
-    // page's draft remembers the click as a pick, the pill stands
-    // picked, and it keeps standing picked after the autosave
-    // settles — no edit is owed, silent already stands saved.
+    // is pinned here too). A draft standing on its creation
+    // default shows no stop picked (ADR 0364, the check above),
+    // and before this repair tapping the default's own stop
+    // changed nothing on screen. The default was silent then
+    // (ADR 0248) and is talking since Kasra's left-stop order
+    // (Nov 27 2026), so the dead stop exercised here is now
+    // Character talks. ADR 0373: the page's draft remembers the
+    // click as a pick, the stop stands picked, and it keeps
+    // standing picked after the autosave settles — no edit is
+    // owed, talking already stands saved.
     const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
-    let row = hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face, voice_mode: "silent" });
+    let row = hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face, voice_mode: "talking" });
     const patches = [];
     await inHookCta(
       ctx,
@@ -17044,23 +17135,23 @@ async function runHookCtaChecks() {
         const talkingPill = ctx.container.querySelector('[data-testid="voice-mode-talking"]');
         if (!silentPill || !talkingPill) throw new Error("the voice pick did not render in the direction card");
         if (silentPill.getAttribute("aria-pressed") === "true" || talkingPill.getAttribute("aria-pressed") === "true") {
-          throw new Error("a voice pill stands picked before any click (ADR 0364)");
-        }
-        await clickEl(ctx, silentPill);
-        if (silentPill.getAttribute("aria-pressed") !== "true") {
-          throw new Error("clicking Character stays silent did not pick it — the pill reads as dead (ADR 0373)");
-        }
-        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
-        if (silentPill.getAttribute("aria-pressed") !== "true") {
-          throw new Error("the silent pick did not survive the autosave settling (ADR 0373)");
+          throw new Error("a voice stop stands picked before any click (ADR 0364)");
         }
         await clickEl(ctx, talkingPill);
         if (talkingPill.getAttribute("aria-pressed") !== "true") {
-          throw new Error("clicking Character talks did not pick it after the silent pick");
+          throw new Error("clicking Character talks did not pick it — the stop reads as dead (ADR 0373)");
+        }
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        if (talkingPill.getAttribute("aria-pressed") !== "true") {
+          throw new Error("the talking pick did not survive the autosave settling (ADR 0373)");
         }
         await clickEl(ctx, silentPill);
         if (silentPill.getAttribute("aria-pressed") !== "true") {
-          throw new Error("clicking back to Character stays silent did not pick it (ADR 0373)");
+          throw new Error("clicking Character stays silent did not pick it after the talking pick");
+        }
+        await clickEl(ctx, talkingPill);
+        if (talkingPill.getAttribute("aria-pressed") !== "true") {
+          throw new Error("clicking back to Character talks did not pick it (ADR 0373)");
         }
       }
     );

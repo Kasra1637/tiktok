@@ -2680,6 +2680,16 @@ h1,
     color: var(--foreground);
 }
 
+/* The pick explainer (Nov 27 2026): the brief meaning of the
+   stop the user just set, standing under the pick's name in the
+   muted voice — one line in the shared band, shown only after
+   the slider changes this session. */
+.pick-slider-explain {
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+}
+
 /* The saved check's pulse (Nov 27 2026): the one green check in
    the top chrome plays this each time it is keyed by a fresh
    autosave completion — a small settle-in pop, so every save

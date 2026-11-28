@@ -3,6 +3,7 @@ import { Mic } from "lucide-react";
 import { Button } from "../ui/button";
 import { GroupLabel } from "../SectionCard";
 import { PickSlider } from "./HookPicksControl";
+import { VOICE_EXPLAINERS } from "../../lib/pickExplainers";
 
 /**
  * The presenter voice pick (ADR 0246), shared by the Hook + CTA
@@ -28,17 +29,20 @@ import { PickSlider } from "./HookPicksControl";
  * (ADR 0361: Create passes "" while a project stands on its
  * defaults, so no button reads as chosen before a click).
  * When the user changes the pick onto silence the note below is
- * part of the feature, not decoration: it tells the founder the
- * character will be silent and names the exact text to paste into
- * TikTok's text-to-speech so TikTok voices the post — the line
- * itself, shown verbatim once it exists. The note belongs to the
- * change, never to a standing saved pick (Kasra's order, Nov 27
- * 2026). Talking mode carries no line of its own
- * (Nov 27 2026: the descriptive sentence that stood under the pills
- * in talking mode is removed whole). A caller may pass `hideNote`
- * to stand the pills without the silent note (ADR 0362: Create's
- * direction section carries no descriptive lines at all, so it
- * opts out; HookSnap passes nothing and keeps the note).
+ * part of the feature, not decoration: it names the exact text to
+ * paste into TikTok's text-to-speech so TikTok voices the post —
+ * the line itself, shown verbatim once it exists. The note belongs
+ * to the change, never to a standing saved pick (Kasra's order,
+ * Nov 27 2026). What silence MEANS is the slider's own brief
+ * explainer now (lib/pickExplainers, the shared band) — the long
+ * sentence that used to open this note is replaced by it, and
+ * only the text-to-speech handover stands here. Talking mode
+ * carries no line of its own (Nov 27 2026: the descriptive
+ * sentence that stood under the pills in talking mode is removed
+ * whole). A caller may pass `hideNote` to stand the pills without
+ * the silent note (ADR 0362: Create's direction section carries
+ * no descriptive lines at all, so it opts out; HookSnap passes
+ * nothing and keeps the note).
  */
 const OPTIONS = [
   { value: "talking", label: "Character talks" },
@@ -46,7 +50,7 @@ const OPTIONS = [
 ];
 
 export default function VoiceModeControl({
-  value = "silent",
+  value = "talking",
   pickedValue,
   onChange,
   silentText = "",
@@ -69,7 +73,11 @@ export default function VoiceModeControl({
     setChangedTo(next);
     onChange?.(next);
   };
-  const current = value === "talking" ? "talking" : "silent";
+  // The unset state resolves to the left stop (Kasra's order,
+  // Nov 27 2026: every toggle rests on the left by default):
+  // only an explicit silent pick reads as silent — an unset or
+  // unrecognized value is the talking default, never silence.
+  const current = value === "silent" ? "silent" : "talking";
   // Which choice the buttons may show as picked (ADR 0361): a
   // caller that tracks picks separately from the effective mode
   // passes pickedValue — "" stands for no pick made, so neither
@@ -104,6 +112,7 @@ export default function VoiceModeControl({
           disabled={disabled}
           testId={testId}
           ariaLabel="Presenter voice"
+          explainers={VOICE_EXPLAINERS}
         />
       ) : (
         <div className="thumb-pair flex flex-wrap gap-2" role="group" aria-label="Presenter voice">
@@ -138,7 +147,6 @@ export default function VoiceModeControl({
           sliding back takes it away. */}
       {!hideNote && current === "silent" && changedTo === "silent" && (
         <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-silent-note`}>
-          The character stays silent in this video — no voice, and the mouth never moves.
           For a voice on TikTok, paste this line into TikTok&rsquo;s text-to-speech:{" "}
           {text ? (
             <span className="font-semibold text-foreground">&ldquo;{text}&rdquo;</span>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { GroupLabel } from "../SectionCard";
 import { PickSlider } from "./HookPicksControl";
+import { locationExplainer, wardrobeExplainer } from "../../lib/pickExplainers";
 
 /**
  * One profile-aware set of option buttons for a direction field (the
@@ -167,6 +168,9 @@ export function DirectionSelect({
             disabled={disabled}
             testId={`${testId}-slider`}
             ariaLabel={label}
+            explainers={(option) => (label === "Wardrobe"
+              ? wardrobeExplainer(option.label)
+              : locationExplainer(option.label))}
           />
         </div>
       ) : (

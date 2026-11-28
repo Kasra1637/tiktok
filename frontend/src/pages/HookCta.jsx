@@ -163,7 +163,9 @@ function isHookCtaProject(project) {
 // A draft nothing has touched since the create endpoint wrote it
 // (ADR 0262): no hook and no script, no strategy, no photo attached,
 // and every pick the page offers still at its create-time value —
-// the voice on silent (ADR 0248), the length at the create's 5
+// the voice on talking (Kasra's order, Nov 27 2026: the left stop
+// is the default; ADR 0248's silent start superseded), the length
+// at the create's 5
 // seconds, no place, wardrobe, focus or tone chosen. A render cannot
 // hide behind these fields either: a render needs a hook, and a
 // hook writes the line, the strategy and the script version. Such a
@@ -188,7 +190,7 @@ function isUntouchedHookCtaDraft(project) {
     !String(project.hook_focus || "").trim() &&
     (project.hook_shape || "auto") === "auto" &&
     (project.hook_opening || "auto") === "auto" &&
-    (project.voice_mode || "") === "silent" &&
+    (project.voice_mode || "") === "talking" &&
     Number(project.duration_seconds || 5) === 5
   );
 }
@@ -800,9 +802,9 @@ export default function HookCta() {
                 <div className="section-trio">
                   <div className="space-y-2">
                     <VoiceModeControl
-                      value={editValue("voice_mode", "silent")}
-                      pickedValue={editPick("voice_mode", "silent")}
-                      onChange={(value) => editField("voice_mode", value, { omitDefault: true, fallback: "silent" })}
+                      value={editValue("voice_mode", "talking")}
+                      pickedValue={editPick("voice_mode", "talking")}
+                      onChange={(value) => editField("voice_mode", value, { omitDefault: true, fallback: "talking" })}
                       silentText={String(editValue("hook_line", "") || "").trim()}
                       silentTextName="the hook line"
                       asSlider
@@ -1015,7 +1017,7 @@ export default function HookCta() {
                   project={{
                     ...project,
                     duration_seconds: editValue("duration_seconds", project.duration_seconds),
-                    voice_mode: editValue("voice_mode", project.voice_mode || "silent"),
+                    voice_mode: editValue("voice_mode", project.voice_mode || "talking"),
                   }}
                   generation={generation}
                   onGenerationChange={setGeneration}
@@ -1057,7 +1059,7 @@ export default function HookCta() {
                       postKit={generation.post_kit}
                       generationId={generation.id}
                       ttsText={
-                        editValue("voice_mode", "silent") === "silent"
+                        editValue("voice_mode", "talking") === "silent"
                           ? String(editValue("hook_line", "") || "").trim()
                           : ""
                       }

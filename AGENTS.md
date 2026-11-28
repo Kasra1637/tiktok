@@ -256,6 +256,15 @@ One render path, single-pass video generation via OpenRouter.
   `signalSaved()` and the one green check in the top chrome
   (SaveSavedIndicator) remounts and pulses anew; a failed autosave still
   names itself in the old seats.
+- Left defaults + slider explainers (Nov 27 2026, Kasra's order): every toggle
+  rests on its left stop by default — a fresh project (both creates) is born
+  with the voice on talking, superseding ADR 0248's silent start; a stored
+  pick is never rewritten, only the unset state resolves left. Every
+  PickSlider carries one brief explainer per stop (`lib/pickExplainers.js`,
+  fixed texts 55–65 chars, smoke-pinned), shown only after the user changes
+  that slider this session; the silent stop's explainer replaces the long
+  silent-voice sentence, and the note that remains on HookSnap is the
+  text-to-speech handover alone.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no

@@ -95,7 +95,11 @@ describe("VoiceModeControl", () => {
     await act(async () => { view.q("voice-mode-silent").click(); });
     const note = view.q("voice-mode-silent-note");
     expect(note).not.toBeNull();
-    expect(note.textContent).toContain("The character stays silent in this video");
+    // The long sentence that used to open the note is gone (Nov 27
+    // 2026): the slider's brief explainer carries the meaning now
+    // (pinned in the slider case below), and the note itself is
+    // the text-to-speech handover alone.
+    expect(note.textContent).not.toContain("The character stays silent in this video");
     expect(note.textContent).toContain("text-to-speech");
     expect(note.textContent).toContain("I'm trying to clear my head before bed but my thoughts race.");
     await view.unmount();
@@ -138,6 +142,32 @@ describe("VoiceModeControl", () => {
     const view = await mount();
     expect(view.q("voice-mode-slider")).toBeNull();
     expect(view.q("voice-mode-knob")).toBeNull();
+    await view.unmount();
+  });
+
+  test("an unset value reads as talking, the left stop", async () => {
+    // Kasra's order (Nov 27 2026): every toggle rests on the left
+    // by default — an unset voice value is talking, never silent.
+    const view = await mount({ value: undefined });
+    expect(view.q("voice-mode-talking").getAttribute("aria-pressed")).toBe("true");
+    expect(view.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("false");
+    await view.unmount();
+  });
+
+  test("the slider's explainer names the stop just set, and only after a change", async () => {
+    // Kasra's order (Nov 27 2026): the explainer belongs to the
+    // change, never to the standing pick — it rises with the stop
+    // the user just set and follows the slider as it moves.
+    const view = await mount({ value: "talking", pickedValue: "", asSlider: true });
+    expect(view.q("voice-mode-explain")).toBeNull();
+    await act(async () => { view.q("voice-mode-silent").click(); });
+    expect(view.q("voice-mode-explain").textContent).toBe(
+      "No voice is recorded; TikTok text-to-speech can carry the line."
+    );
+    await act(async () => { view.q("voice-mode-talking").click(); });
+    expect(view.q("voice-mode-explain").textContent).toBe(
+      "The character speaks the line aloud, lips moving with the words."
+    );
     await view.unmount();
   });
 });

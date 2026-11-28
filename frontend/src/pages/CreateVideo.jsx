@@ -38,6 +38,7 @@ import GenerationPanel from "../components/GenerationPanel";
 import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { api, getErrorMessage } from "../lib/api";
 import { signalSaved } from "../lib/saveSignal";
+import { CAMERA_EXPLAINERS } from "../lib/pickExplainers";
 import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { recordSignal, recordBehavior, classifyScriptEdit } from "../lib/feedback";
 import { readyRefusalMessage } from "../lib/readyRefusal";
@@ -1705,9 +1706,10 @@ export default function CreateVideo() {
   // off the field's standing default. The write side already ruled
   // this — picking the default stores nothing (omitDefault in the
   // draft reducer) — so a fresh project, whose camera reads
-  // handheld and whose voice was written silent at its creation
-  // (ADR 0248), shows NO button picked, while a stored value off
-  // the default (fixed, talking) is a pick the founder made and
+  // handheld and whose voice was written talking at its creation
+  // (Kasra's order, Nov 27 2026; ADR 0248's silent start
+  // superseded), shows NO button picked, while a stored value off
+  // the default (fixed, silent) is a pick the founder made and
   // stands picked on return. editValue itself is untouched: the
   // plan, the direction lists and the render keep reading the
   // effective value exactly as before.
@@ -2527,6 +2529,7 @@ export default function CreateVideo() {
                       { value: "handheld", label: "Handheld selfie" },
                       { value: "fixed", label: "Fixed camera" },
                     ]}
+                    explainers={CAMERA_EXPLAINERS}
                     current={editPick("camera_setup", "handheld")}
                     restValue={editValue("camera_setup", "handheld")}
                     onChange={(value) => {
@@ -2551,12 +2554,12 @@ export default function CreateVideo() {
                   card passes nothing and keeps it. */}
               <div className="space-y-2">
                 <VoiceModeControl
-                  value={editValue("voice_mode", "silent")}
-                  pickedValue={editPick("voice_mode", "silent")}
+                  value={editValue("voice_mode", "talking")}
+                  pickedValue={editPick("voice_mode", "talking")}
                   hideNote
                   asSlider
                   onChange={(value) => {
-                    dispatchDraft({ type: "edit-field", field: "voice_mode", value, omitDefault: true, fallback: "silent" });
+                    dispatchDraft({ type: "edit-field", field: "voice_mode", value, omitDefault: true, fallback: "talking" });
                   }}
                   silentText={[editValue("hook_line", ""), editValue("script", "")]
                     .map((line) => String(line || "").trim())

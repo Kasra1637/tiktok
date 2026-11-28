@@ -4,6 +4,13 @@ import { Check, Focus, HelpCircle, Maximize2, MessagesSquare, RefreshCw, Rocket,
 import { Button } from "../ui/button";
 import { CONTROL_CLASS } from "../formControls";
 import { GroupLabel } from "../SectionCard";
+import {
+  FOCUS_APP_EXPLAINER,
+  FOCUS_LINE_EXPLAINER,
+  OPENING_EXPLAINERS,
+  SHAPE_EXPLAINERS,
+  TONE_EXPLAINERS,
+} from "../../lib/pickExplainers";
 
 /**
  * The founder's steering picks for the Hook + CTA hook (ADR 0247),
@@ -183,8 +190,16 @@ export function PickPills({ options, current, onChange, disabled, testId, ariaLa
 // repeating the pick — the other stops reveal themselves on the
 // change itself. Dragging is never the only way: every stop dot
 // is tappable, and the knob itself is a keyboard slider.
-export function PickSlider({ options, current, onChange, disabled, testId, ariaLabel, restValue, restLabel }) {
+export function PickSlider({ options, current, onChange, disabled, testId, ariaLabel, restValue, restLabel, explainers }) {
   const trackRef = useRef(null);
+  // The explainer (Kasra's order, Nov 27 2026): after the user
+  // changes this slider this session, the meaning of the stop
+  // they just set stands under the pick's name — one brief line
+  // from lib/pickExplainers, in the shared 55–65 character band.
+  // An untouched slider shows none: the record of the change is
+  // local interaction state, and the explainer stands only while
+  // the current value is the stop that change landed on.
+  const [touchedValue, setTouchedValue] = useState(null);
   const found = options.findIndex((option) => option.value === current);
   // The knob's seat: the pick itself when one stands. A caller
   // whose standing state is not a pick (the voice pick before a
@@ -205,8 +220,17 @@ export function PickSlider({ options, current, onChange, disabled, testId, ariaL
     : restLabel ?? (restFound >= 0 ? options[restFound].label : "");
   const jump = (next) => {
     const option = options[Math.min(options.length - 1, Math.max(0, next))];
-    if (option && option.value !== current) onChange?.(option.value);
+    if (option && option.value !== current) {
+      setTouchedValue(option.value);
+      onChange?.(option.value);
+    }
   };
+  const currentOption = found >= 0 ? options[found] : null;
+  const explainText = currentOption && touchedValue === currentOption.value
+    ? (typeof explainers === "function"
+      ? explainers(currentOption)
+      : explainers?.[currentOption.value])
+    : null;
   const indexFromClientX = (clientX) => {
     const el = trackRef.current;
     if (!el) return index;
@@ -288,6 +312,11 @@ export function PickSlider({ options, current, onChange, disabled, testId, ariaL
       <div className="pick-slider-value" data-testid={`${testId}-value`}>
         {valueLabel}
       </div>
+      {explainText && (
+        <p className="pick-slider-explain" data-testid={`${testId}-explain`}>
+          {explainText}
+        </p>
+      )}
     </div>
   );
 }
@@ -411,6 +440,7 @@ export default function HookPicksControl({
               disabled={disabled}
               testId={`${testId}-focus`}
               ariaLabel="Focus"
+              explainers={(option) => (option.value === "" ? FOCUS_APP_EXPLAINER : FOCUS_LINE_EXPLAINER)}
             />
           </div>
         ) : (
@@ -530,6 +560,7 @@ export default function HookPicksControl({
               disabled={disabled}
               testId={`${testId}-tone`}
               ariaLabel="Hook tone"
+              explainers={TONE_EXPLAINERS}
             />
           </div>
 
@@ -542,6 +573,7 @@ export default function HookPicksControl({
               disabled={disabled}
               testId={`${testId}-shape`}
               ariaLabel="Hook shape"
+              explainers={SHAPE_EXPLAINERS}
             />
           </div>
 
@@ -554,6 +586,7 @@ export default function HookPicksControl({
               disabled={disabled}
               testId={`${testId}-opening`}
               ariaLabel="Hook opening"
+              explainers={OPENING_EXPLAINERS}
             />
           </div>
         </div>

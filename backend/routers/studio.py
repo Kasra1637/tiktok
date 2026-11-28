@@ -1089,12 +1089,13 @@ async def create_studio_project(
     # existing rows carry a value) but is written as 1 and read by nothing: a
     # video is one render, so there is no "hook only" mode to record.
 
-    # A new project starts silent (ADR 0248): the voice pick is written
-    # explicitly at creation rather than left to the column default,
-    # because migration step 10's 'talking' default is the historical
-    # record of what rows that already existed were given — existing
-    # projects keep the pick they carry, and only a row born here
-    # starts on "Character stays silent".
+    # A new project starts talking (Kasra's order, Nov 27 2026,
+    # superseding ADR 0248's silent start): every toggle rests on
+    # its left stop by default, and the voice pick's left stop is
+    # "Character talks". The pick is written explicitly at creation
+    # rather than left to the column default; existing projects
+    # keep the pick they carry — only a row born here starts on
+    # "Character talks".
 
     await _execute(
         """INSERT INTO studio_projects
@@ -1109,7 +1110,7 @@ async def create_studio_project(
          (payload.audience or profile.get("target_audience") or "").strip() or None,
          duration, hook_seconds, 1, (payload.tone or "").strip() or None,
          json.dumps([]), 0, "draft", now, now, user_id, payload.camera_setup,
-         payload.kind, "silent"),
+         payload.kind, "talking"),
     )
     logger.info(f"Created studio project {project_id} for profile {profile['id']}")
     return _public_project(

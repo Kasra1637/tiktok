@@ -134,9 +134,11 @@ async def create_hook_cta_project(
     whole and are never re-sliced into a script on read — this page
     has no script.
 
-    The row is born with the voice pick on silent (ADR 0248), like
-    the wizard's create: silence is the starting point for a new
-    project, and talking is the founder's opt-in.
+    The row is born with the voice pick on talking, like the
+    wizard's create: Kasra's order (Nov 27 2026) stands every
+    toggle on its left stop by default, so a new project starts
+    with the character talking, and silent is the founder's
+    opt-in (superseding ADR 0248's silent start).
     """
     profile = await _require_profile_for_studio(payload.brand_profile_id, user_id)
 
@@ -162,7 +164,7 @@ async def create_hook_cta_project(
          (profile.get("target_audience") or "").strip() or None,
          seconds, 4, 1, None,
          json.dumps([]), 0, "draft", now, now, user_id, payload.camera_setup,
-         "video", "hook_cta", 1, "silent"),
+         "video", "hook_cta", 1, "talking"),
     )
     logger.info(f"Created hook-cta project {project_id} for profile {profile['id']}")
     return _public_project(

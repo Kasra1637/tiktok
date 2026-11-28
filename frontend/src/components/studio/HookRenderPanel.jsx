@@ -11,6 +11,7 @@ import { GenerateAnotherConfirmDialog } from "./GenerateAnotherConfirmDialog";
 import PlatformPreview from "./PlatformPreview";
 import { api, getErrorMessage, mediaUrl, downloadMediaUrl, durableMediaUrl } from "../../lib/api";
 import { exceedsSinglePass, readPieceSeconds } from "../../lib/videoLength";
+import { resolutionExplainer } from "../../lib/pickExplainers";
 
 /**
  * The hook render panel (ADR 0244): one hook, one render, modeled
@@ -495,6 +496,7 @@ export default function HookRenderPanel({
                 <PickSlider
                   options={[capability.resolution, ...(capability.supported_resolutions || []).filter((r) => r !== capability.resolution)]
                     .map((r) => ({ value: r, label: r }))}
+                  explainers={(option) => resolutionExplainer(option.value, option.value === capability.resolution)}
                   current={selectedResolution || capability.resolution}
                   onChange={(r) => {
                     const next = r === capability.resolution ? "" : r;

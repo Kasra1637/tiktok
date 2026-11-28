@@ -29,6 +29,7 @@ import { VideoVerdict } from "../components/VideoVerdict";
 import { recordSignal } from "../lib/feedback";
 import { isWinnerRow } from "../lib/nextTake";
 import { readHistoryView, rememberHistoryView } from "../lib/historyView";
+import { COPY_FILTER_EXPLAINERS, STATUS_FILTER_EXPLAINERS } from "../lib/pickExplainers";
 import { listPendingSaves } from "../demoCta/saveOutbox";
 import { PendingSaveCard } from "./PendingSaveCard";
 import {
@@ -1504,6 +1505,7 @@ export default function GenerationHistory() {
                 { value: "with", label: "With post copy & context" },
                 { value: "without", label: "Without post copy & context" },
               ]}
+              explainers={COPY_FILTER_EXPLAINERS}
               current={effectiveCopy}
               onChange={(value) => setFilter("copy", value)}
               testId="history-copy-filter"
@@ -1543,6 +1545,7 @@ export default function GenerationHistory() {
                     { value: s, label: humanize(s) }
                   )),
                 ]}
+                explainers={STATUS_FILTER_EXPLAINERS}
                 current={statusFilter}
                 onChange={(value) => setFilter("status", value)}
                 testId="history-status-filter"

@@ -741,30 +741,31 @@ class TestGenerateHook:
 # ------------------------------------------------------------- voice mode
 
 class TestVoiceMode:
-    """The presenter voice pick (ADR 0246, relabeled and re-defaulted
-    by ADR 0248): the character talks (voice with lip movement), or
-    the character stays silent (no voice, and no lip movement at
-    all). A fresh project starts silent (ADR 0248 — Kasra's ruling:
-    silence is the starting point, talking is the opt-in); a project
-    that already carries a pick keeps it. The pick lives on the
-    project row, saves through the same studio PATCH as every other
-    pick, and a silent project submits with audio off and a prompt
-    that says plainly the presenter does not speak and the lips do
-    not move."""
+    """The presenter voice pick (ADR 0246, relabeled by ADR 0248):
+    the character talks (voice with lip movement), or the character
+    stays silent (no voice, and no lip movement at all). A fresh
+    project starts talking (Kasra's order, Nov 27 2026 — every
+    toggle rests on its left stop by default, and talking is the
+    voice pick's left stop; this supersedes ADR 0248's silent
+    start); a project that already carries a pick keeps it. The
+    pick lives on the project row, saves through the same studio
+    PATCH as every other pick, and a silent project submits with
+    audio off and a prompt that says plainly the presenter does not
+    speak and the lips do not move."""
 
-    def test_a_fresh_project_reads_silent(self, api):
+    def test_a_fresh_project_reads_talking(self, api):
         project, _profile = _hook_cta(api, "Voice Default")
-        assert project["voice_mode"] == "silent"
+        assert project["voice_mode"] == "talking"
 
-    def test_an_existing_talking_project_keeps_its_pick(self, api):
+    def test_an_existing_silent_project_keeps_its_pick(self, api):
         from models import UpdateStudioProjectRequest
-        project, _profile = _hook_cta(api, "Voice Existing Talking")
+        project, _profile = _hook_cta(api, "Voice Existing Silent")
         _run(api.update_studio_project(
-            project["id"], UpdateStudioProjectRequest(voice_mode="talking"), ANON))
+            project["id"], UpdateStudioProjectRequest(voice_mode="silent"), ANON))
         fresh, _profile = _hook_cta(api, "Voice Fresh Neighbour")
-        assert fresh["voice_mode"] == "silent"
+        assert fresh["voice_mode"] == "talking"
         reread = _run(api.get_studio_project(project["id"], ANON))
-        assert reread["voice_mode"] == "talking"
+        assert reread["voice_mode"] == "silent"
 
     def test_the_pick_saves_and_reads_back(self, api):
         from models import UpdateStudioProjectRequest
@@ -783,7 +784,7 @@ class TestVoiceMode:
         profile = _profile(api, "Voice Wizard Pick")
         wizard = _run(api.create_studio_project(payload=CreateStudioProjectRequest(
             brand_profile_id=profile["id"]), user_id=ANON))
-        assert wizard["voice_mode"] == "silent"
+        assert wizard["voice_mode"] == "talking"
         out = _run(api.update_studio_project(
             wizard["id"], UpdateStudioProjectRequest(voice_mode="silent"), ANON))
         assert out["voice_mode"] == "silent"
@@ -813,8 +814,8 @@ class TestVoiceMode:
     def test_a_talking_hook_carries_no_silence_direction(self, api, monkeypatch):
         from models import GenerateHookRequest, UpdateStudioProjectRequest
         project = TestGenerateHook()._ready(api, monkeypatch, "Voice Talking Submit")
-        # A fresh project starts silent (ADR 0248); the talking pick
-        # is this test's subject, so it is set on purpose.
+        # The talking pick is this test's subject, so it is set on
+        # purpose rather than left to the creation default.
         _run(api.update_studio_project(
             project["id"], UpdateStudioProjectRequest(voice_mode="talking"), ANON))
         calls = _mock_submit(api, monkeypatch)
