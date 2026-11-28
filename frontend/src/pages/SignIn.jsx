@@ -52,7 +52,7 @@ export default function SignIn() {
               headerTitle: "font-display",
               headerSubtitle: "text-muted-foreground",
               socialButtonsBlockButton: "rounded-xl border-[color:var(--hairline)] bg-secondary/40 hover:bg-secondary transition-colors",
-              formButtonPrimary: "rounded-xl bg-[color:var(--brand-indigo)] hover:bg-[color:var(--brand-indigo-dark)] shadow-[var(--glow-indigo)]",
+              formButtonPrimary: "rounded-xl bg-[color:var(--brand-indigo-deep)] hover:bg-[color:var(--brand-indigo-deep-2)] shadow-[var(--glow-indigo)] text-muted-foreground",
               formFieldInput: "rounded-xl border-[color:var(--hairline)] bg-secondary/40 focus:border-[color:var(--indigo-35)]",
               footerActionLink: "text-[color:var(--brand-indigo)] hover:text-[color:var(--brand-indigo-dark)]",
               identityPreviewEditButton: "text-[color:var(--brand-indigo)]",

@@ -37,6 +37,8 @@ Defined in `:root` in `frontend/src/index.css`. Two accents only.
 |---|---|---|
 | `--brand-indigo` | `#818CF8` | Navigation, selection, active state, links |
 | `--brand-indigo-dark` | `#6366F1` | Hover state for indigo surfaces |
+| `--brand-indigo-deep` | `#1F1884` | The indigo fill that carries text (bevel gradient top stop, badges, selected faces) |
+| `--brand-indigo-deep-2` | `#19126E` | The bevel gradient's bottom stop |
 | `--brand-coral` | `#FE2C55` | Badges, landing accents, brand artwork — **never a button** |
 
 **The split is load-bearing:** indigo means *"this is selected / where you
@@ -53,14 +55,30 @@ because the loudest thing on the screen is no longer a colour.
 ### Shadcn semantic tokens (HSL, dark)
 
 ```
---background 228 14% 7%     --foreground        220 20% 93%
+--background 228 14% 7%     --foreground        220 10% 62%
 --card       228 14% 10%    --muted-foreground  220 10% 62%
 --secondary  228 12% 16%    --border            228 12% 17%
---primary    244 75% 63%    --ring              244 75% 63%
+--primary    244 75% 31%    --ring              244 75% 63%
 --radius     0.75rem
 ```
 
-**Error text has its own token.** `--destructive` (0 72% 51%) is fills and
+**One branded text color (Kasra's order, Nov 28 2026).** There is no
+white text in the app: every text token — `--foreground`,
+`--card-foreground`, `--popover-foreground`, `--accent-foreground`,
+`--secondary-foreground`, `--primary-foreground` and
+`--destructive-foreground` — stands at `--muted-foreground`'s
+220 10% 62% — the inactive sidebar link's color, the same color the
+group labels wear — headlines included. The seats on saturated fills
+took the color by deepening their fills (Kasra's change-the-fills
+ruling, later the same day): `--primary` deepened to 244 75% 31% and
+`--destructive` to 0 72% 21%, and the light indigo's text seats (the
+bevel-accent gradient, the selected chip, the count badge, the skip
+link, the landing mock's badges) ride `--brand-indigo-deep` /
+`--brand-indigo-deep-2`. Every pair is measured in
+`scripts/check-contrast.cjs`; there are no held seats. Icon glyphs
+are not font color and are untouched.
+
+**Error text has its own token.** `--destructive` (0 72% 21%) is fills and
 borders only — as text it measures 3.7:1 on card, below AA. Error text uses
 `text-destructive-text` (`--destructive-text` 0 85% 70%, 6.3:1 on card).
 `--muted-foreground` sits at 62% so its worst surface (`--secondary`) keeps
@@ -591,6 +609,14 @@ reduced motion swaps instantly. Pick switches settle with a soft glide
 and the pick's name fades in with them — only when the slider is not
 being dragged (a live drag follows the hand directly) and only under
 the no-preference gate; reduced motion keeps the instant snap.
+Sections that unlock reveal with the Expand (Nov 28 2026): the
+container grows open — a grid-rows 0fr-to-1fr expansion over
+520ms on the same ease (`.section-reveal` in `index.css`) — the
+body inside fading and rising on `rise-settle` itself (480ms,
+~90ms in), and the section wearing one soft indigo border glow
+for ~900ms. It fires only on the unlock/open transition, never
+on page load or re-renders, and under reduced motion the
+section simply appears.
 
 **Hard rules:**
 

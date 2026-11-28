@@ -924,16 +924,32 @@ class TestHookSteeringPicks:
             project["id"], UpdateStudioProjectRequest(hook_focus=FLAT_OUTCOME), ANON))
         assert out["hook_focus"] == FLAT_OUTCOME
 
-    def test_a_focus_the_app_does_not_have_is_refused(self, api):
+    def test_a_focus_the_app_no_longer_has_clears_and_the_patch_saves(self, api):
+        # Kasra's autosave failure, Nov 28 2026: this test used to
+        # assert the 400 — the PATCH hard-refused a focus line the
+        # profile does not carry. But the offered lists agree on
+        # both sides, so the live path was a STALE pick: an outcome
+        # refresh rewrote the profile's lines, the draft still
+        # carried the dropped one, the background draft sync resent
+        # it with every unrelated edit, and EVERY autosave failed
+        # with "Focus has to be one of this app's own outcomes".
+        # The read and generation paths already treat an
+        # unresolvable pick as steering nothing; the PATCH now
+        # lands in the same end state — an unresolvable incoming
+        # line is stored as cleared, never stored at all, and every
+        # other field in the patch saves normally.
         from models import UpdateStudioProjectRequest
-        project, _profile = self._draft(api, "Picks Focus Refused")
-        with pytest.raises(HTTPException) as exc:
-            _run(api.update_studio_project(
-                project["id"],
-                UpdateStudioProjectRequest(hook_focus="An outcome this app never promised"),
-                ANON))
-        assert exc.value.status_code == 400
-        assert "outcome" in exc.value.detail.lower()
+        project, _profile = self._draft(api, "Picks Focus Stale")
+        out = _run(api.update_studio_project(
+            project["id"],
+            UpdateStudioProjectRequest(
+                hook_focus="An outcome this app never promised", tone="warm"),
+            ANON))
+        assert out["hook_focus"] == ""
+        assert out["tone"] == "warm"
+        fresh = _run(api.get_studio_project(project["id"], ANON))
+        assert fresh["hook_focus"] == ""
+        assert fresh["tone"] == "warm"
 
     def test_clearing_the_focus_saves_as_no_pick(self, api):
         from models import UpdateStudioProjectRequest

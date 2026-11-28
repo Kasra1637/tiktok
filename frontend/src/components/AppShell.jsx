@@ -75,7 +75,7 @@ export function AppShell({ children }) {
       {/* Skip link: without it keyboard users tab through the whole sidebar on every page before reaching the content. Visible only on focus. */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-lg focus:bg-[color:var(--brand-indigo)] focus:px-4 focus:py-2 focus:text-sm focus:text-white"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-lg focus:bg-[color:var(--brand-indigo-deep)] focus:px-4 focus:py-2 focus:text-sm focus:text-muted-foreground"
       >
         Skip to content
       </a>

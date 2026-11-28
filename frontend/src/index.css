@@ -140,15 +140,29 @@ code, .font-mono {
 @layer base {
     :root {
         --background: 228 14% 7%;
-        --foreground: 220 20% 93%;
+        /* The one branded text color (Kasra's order, Nov 28 2026):
+           no white text anywhere in the app. Every text token —
+           the foreground family, headlines at the top of the main
+           pages included — stands at the inactive sidebar link's
+           color, --muted-foreground's 220 10% 62%, the same color
+           the group labels wear. The seats on saturated fills took
+           the color too, by his change-the-fills ruling later the
+           same day (reversing the hold this block used to record):
+           --primary deepened from 63% to 31% lightness and
+           --destructive from 51% to 21%, so the branded color
+           clears the contrast gate's AA floor on both, and the
+           light indigo's text seats ride the deep indigo tokens
+           below. scripts/check-contrast.cjs measures every pair
+           and pins the whole settlement. */
+        --foreground: 220 10% 62%;
         --card: 228 14% 10%;
-        --card-foreground: 220 20% 93%;
+        --card-foreground: 220 10% 62%;
         --popover: 228 14% 10%;
-        --popover-foreground: 220 20% 93%;
-        --primary: 244 75% 63%;
-        --primary-foreground: 0 0% 100%;
+        --popover-foreground: 220 10% 62%;
+        --primary: 244 75% 31%;
+        --primary-foreground: 220 10% 62%;
         --secondary: 228 12% 16%;
-        --secondary-foreground: 220 20% 85%;
+        --secondary-foreground: 220 10% 62%;
         --muted: 228 12% 14%;
         /* 62%, not 58%: at 58% this measured 4.73:1 on --secondary — an AA
            pass with no margin, and any surface tint under it failed. At 62%
@@ -156,14 +170,15 @@ code, .font-mono {
            The contrast gate (scripts/check-contrast.cjs) holds the floor. */
         --muted-foreground: 220 10% 62%;
         --accent: 228 12% 16%;
-        --accent-foreground: 220 20% 93%;
-        --destructive: 0 72% 51%;
-        --destructive-foreground: 0 0% 100%;
-        /* The TEXT grade of the destructive red. The solid above measures
-           3.7:1 as text on card — below AA for the error messages a founder
-           most needs to read — so it serves fills and borders only, and
-           `text-destructive-text` utilities resolve here instead (6.3:1 on card).
-           Audit 2026-11-14, finding 1. */
+        --accent-foreground: 220 10% 62%;
+        --destructive: 0 72% 21%;
+        --destructive-foreground: 220 10% 62%;
+        /* The TEXT grade of the destructive red. The solid above is a
+           deep fill-grade red — far below AA as text on card, for the
+           error messages a founder most needs to read — so it serves
+           fills and borders only, and `text-destructive-text` utilities
+           resolve here instead (6.3:1 on card). Audit 2026-11-14,
+           finding 1. */
         --destructive-text: 0 85% 70%;
         --border: 228 12% 17%;
         --input: 228 12% 17%;
@@ -184,6 +199,17 @@ code, .font-mono {
            translucent indigo use the --indigo-* tints defined below. */
         --brand-indigo: #818CF8;
         --brand-indigo-dark: #6366F1;
+        /* The deep indigo fills (Kasra's change-the-fills ruling,
+           Nov 28 2026): the fills that carry TEXT — the bevel-accent
+           gradient the buttons and the selected chip wear, the
+           transport accent, the count badge, the skip link, the
+           landing mock's badges — run on these two stops instead of
+           the light pair above, so the one branded text color
+           (220 10% 62%) clears AA on them (gate-measured in
+           scripts/check-contrast.cjs). The light pair still carries
+           glyphs, tints and text-free fills, never text. */
+        --brand-indigo-deep: #1F1884;
+        --brand-indigo-deep-2: #19126E;
         --brand-coral: #FE2C55;
         --shadow-soft: 0 10px 40px rgba(0, 0, 0, 0.35);
         --shadow-tight: 0 4px 20px rgba(0, 0, 0, 0.4);
@@ -1243,6 +1269,47 @@ h1,
     .wizard-section-enter { animation: rise-settle 300ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 }
 
+/* ---------- Section unlock reveal: the expand (Kasra's order, Nov 28 2026) ----------
+   A section that unlocks — HookSnap's sequence opening, a Create
+   wizard step's body mounting — does not pop in. The container
+   gently grows open: a grid-rows 0fr-to-1fr expansion over 520ms
+   on the app's signature ease, the body inside it fading and
+   rising on rise-settle itself (480ms, starting ~90ms in), and
+   the section's card wearing one soft indigo glow for ~900ms so
+   the eye lands on what just opened. Kasra picked this Expand
+   form from a live mockup over the plain rise. The reveal fires
+   only on the unlock/open transition (the hosts' JS carries
+   that: SectionCard's unlock hook, the wizard's step change) —
+   a section already open at first paint carries none of it, and
+   ordinary re-renders never re-run it. Like every motion here it
+   is gated on no-preference: under reduced motion the classes
+   carry no animation and the section simply appears. */
+.section-reveal {
+    display: grid;
+    grid-template-rows: 1fr;
+}
+.section-reveal-inner {
+    overflow: hidden;
+    min-height: 0;
+}
+@keyframes section-reveal-grow {
+    from { grid-template-rows: 0fr; }
+    to { grid-template-rows: 1fr; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .section-reveal-revealing { animation: section-reveal-grow 520ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .section-reveal-revealing > .section-reveal-inner { animation: rise-settle 480ms cubic-bezier(0.16, 1, 0.3, 1) 90ms both; }
+}
+@keyframes section-reveal-glow {
+    from { border-color: rgba(99, 102, 241, 0.75); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.16); }
+    to { border-color: var(--hairline); box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .section-reveal-glow { animation: section-reveal-glow 900ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+}
+
 /* ---------- Skeleton resolve: the placeholder fades (ADR 0166) ----------
    A skeleton and the content it gives way to share one grid cell
    (.skeleton-stack), so the handoff cannot shift layout: while both
@@ -1453,8 +1520,8 @@ h1,
     width: 24px;
     height: 24px;
     border-radius: 0.5rem;
-    background-image: linear-gradient(135deg, var(--brand-indigo), var(--brand-indigo-dark));
-    color: #fff;
+    background-image: linear-gradient(135deg, var(--brand-indigo-deep), var(--brand-indigo-deep-2));
+    color: hsl(var(--muted-foreground));
     font-size: 0.875rem;
     font-weight: 600;
 }
@@ -1718,8 +1785,8 @@ h1,
     padding: 10px 14px;
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
-    background: linear-gradient(180deg, var(--brand-indigo) 0%, var(--brand-indigo-dark) 100%);
-    color: #fff;
+    background: linear-gradient(180deg, var(--brand-indigo-deep) 0%, var(--brand-indigo-deep-2) 100%);
+    color: hsl(var(--muted-foreground));
     font-size: 13px;
     font-weight: 600;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
@@ -1774,9 +1841,11 @@ h1,
     color: hsl(var(--foreground) / 0.85);
 }
 /* A done step's marker mirrors the wizard progress rail's
-   (ADR 0173): a filled brand-indigo badge carrying a white
-   check, at the rail's own size — the step text is already
-   the rail's text-xs, so the badge is too. */
+   (ADR 0173): a filled indigo badge carrying its check, at
+   the rail's own size — the step text is already the rail's
+   text-xs, so the badge is too. The fill is the deep indigo
+   and the check the branded color since the change-the-fills
+   ruling (Nov 28 2026). */
 .hero-story-step-badge {
     flex: none;
     display: grid;
@@ -1784,8 +1853,8 @@ h1,
     width: 20px;
     height: 20px;
     border-radius: 999px;
-    background: var(--brand-indigo);
-    color: #fff;
+    background: var(--brand-indigo-deep);
+    color: hsl(var(--muted-foreground));
 }
 /* The generate control mirrors the render panel's real
    Generate (ADR 0173): the accent Button — Play icon, the
@@ -1802,8 +1871,8 @@ h1,
     padding: 10px 14px;
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
-    background: linear-gradient(180deg, var(--brand-indigo) 0%, var(--brand-indigo-dark) 100%);
-    color: #fff;
+    background: linear-gradient(180deg, var(--brand-indigo-deep) 0%, var(--brand-indigo-deep-2) 100%);
+    color: hsl(var(--muted-foreground));
     font-size: 13px;
     font-weight: 600;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
@@ -1872,8 +1941,8 @@ h1,
     width: 46px;
     height: 46px;
     border-radius: 999px;
-    background: linear-gradient(180deg, #818CF8 0%, var(--brand-indigo) 100%);
-    color: #fff;
+    background: linear-gradient(180deg, var(--brand-indigo-deep) 0%, var(--brand-indigo-deep-2) 100%);
+    color: hsl(var(--muted-foreground));
     display: grid;
     place-items: center;
     box-shadow:
@@ -2228,11 +2297,17 @@ h1,
 }
 
 .btn-bevel-accent {
-    background-image: linear-gradient(180deg, var(--brand-indigo) 0%, var(--brand-indigo-dark) 100%);
+    /* The gradient runs on the deep indigo stops (Kasra's
+       change-the-fills ruling, Nov 28 2026): this bevel is the
+       painted fill of the default and accent buttons and the
+       selected chip, and their text is the one branded color,
+       which the light stops could not carry. The bevel's rim and
+       glow keep the seat reading as the primary action. */
+    background-image: linear-gradient(180deg, var(--brand-indigo-deep) 0%, var(--brand-indigo-deep-2) 100%);
     box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.26), var(--glow-indigo);
 }
 .btn-bevel-accent:hover:not(:disabled) {
-    background-image: linear-gradient(180deg, #939dfa 0%, var(--brand-indigo-dark) 100%);
+    background-image: linear-gradient(180deg, var(--brand-indigo-deep) 0%, var(--brand-indigo-deep-2) 100%);
     box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.36), 0 0 0 1px rgba(129, 140, 248, 0.4), 0 12px 32px rgba(99, 102, 241, 0.36);
 }
 
@@ -2537,6 +2612,27 @@ h1,
         display: flex;
         flex-direction: column;
         align-items: flex-start;
+    }
+}
+
+/* HookSnap's two pick cards at one height (Kasra's order, Nov 28
+   2026): The hook's card matches the Place and wardrobe card
+   exactly. Both cards share every height driver — the surface
+   padding, the heading row, the SectionCard rhythm — except
+   their pick bodies: the hook's Focus pick names a whole outcome
+   sentence, which wraps inside its quarter-width cell and grows
+   its row, while the direction body can add its plan-default
+   line. So both bodies carry this one min-height, sized from
+   that shared rhythm: a pick group at its tallest standing
+   shape — label row 20px + gap 8px + track 18px + the pick
+   name's margin 6px + the name at three wrapped lines (3 ×
+   21px) = 115px — and neither card's content is shrunk to fit.
+   It applies only from 1024px, where the trio and the quad
+   stand on one line; below that width the groups stack and the
+   heights follow their content, as they always have. */
+@media (min-width: 1024px) {
+    .hook-snap-pick-body {
+        min-height: 7.1875rem;
     }
 }
 
@@ -2932,10 +3028,11 @@ h1,
     scrollbar-color: hsl(228, 12%, 24%) transparent;
 }
 
-/* Selection highlight */
+/* Selection highlight — the selected words themselves take the
+   one branded text color (Nov 28 2026), never white. */
 ::selection {
     background: rgba(254, 44, 85, 0.25);
-    color: white;
+    color: hsl(var(--muted-foreground));
 }
 
 @layer base {

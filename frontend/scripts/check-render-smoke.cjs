@@ -6137,6 +6137,37 @@ async function main() {
   // headings. Navigation lives in the rail segments and the sticky bar
   // alone (their walking is pinned by the arrows, segment and circuit
   // checks around this one).
+  await check("the wizard section body opens with the expand reveal, not the plain rise (Nov 28 2026)", async (ctx) => {
+    // Kasra's order (Nov 28 2026, approved from a live mockup —
+    // variant B, Expand): the same unlock reveal HookSnap's
+    // sections get stands in Create too. A wizard section's body
+    // mounts when its step opens, so the body itself carries the
+    // grow wrapper in its revealing state — the container grows
+    // open while the body fades and rises inside the inner cell —
+    // in place of the plain wizard-section-enter rise it wore
+    // before (one reveal per open, never both), and the section
+    // wears the unlock glow for the moment.
+    global.__SMOKE_PARAMS = "";
+    await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
+      mount(CreateVideo, {})(ctx)
+    );
+    const body = ctx.container.querySelector('[data-testid="wizard-section-body-profile"]');
+    if (!body) throw new Error("the active section renders no body");
+    if (!body.className.includes("section-reveal") || !body.className.includes("section-reveal-revealing")) {
+      throw new Error("the wizard section body does not carry the expand reveal treatment");
+    }
+    if (body.className.includes("wizard-section-enter")) {
+      throw new Error("the wizard section body still wears the plain rise — one reveal per open, not both");
+    }
+    if (!body.firstElementChild || !body.firstElementChild.className.includes("section-reveal-inner")) {
+      throw new Error("the wizard section body's content does not stand in the reveal's inner cell");
+    }
+    const section = ctx.container.querySelector('[data-testid="wizard-section-profile"]');
+    if (!section || !section.className.includes("section-reveal-glow")) {
+      throw new Error("the opened wizard section wears no unlock glow");
+    }
+  });
+
   await check("the step headers are standing headings, not navigation", async (ctx) => {
     global.__SMOKE_PARAMS = "";
     await withApi({ getAppProfiles: async () => ({ profiles: [] }) }, () =>
@@ -11846,7 +11877,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       if (!lead) throw new Error(`no lead on ${label}`);
       if (button) {
         if (lead.tagName !== "BUTTON") throw new Error(`the gate lead on ${label} is not its action`);
-        if (!lead.className.includes("bg-[color:var(--brand-indigo)]")) {
+        if (!lead.className.includes("bg-[color:var(--brand-indigo-deep)]")) {
           throw new Error(`the gate action on ${label} is not the indigo button`);
         }
         // ADR 0367: the angle gate's hint (its CTA copy) is removed —
@@ -13310,7 +13341,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       return css.slice(start, css.indexOf("}", start));
     };
     const generateRule = rule(".hero-story-generate");
-    if (!generateRule.includes("linear-gradient(180deg, var(--brand-indigo) 0%, var(--brand-indigo-dark) 100%)")) {
+    if (!generateRule.includes("linear-gradient(180deg, var(--brand-indigo-deep) 0%, var(--brand-indigo-deep-2) 100%)")) {
       throw new Error("the mockup's generate control does not wear the bevel-accent vertical gradient");
     }
     if (!generateRule.includes("border-radius: 12px") || generateRule.includes("999px") || generateRule.includes("90deg")) {
@@ -13321,15 +13352,19 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
     }
     // Research wears Generate's accent treatment (ADR 0178): the
     // same bevel-accent vertical gradient, white/15 border, top
-    // rim over the indigo glow, rounded-xl and white text — the
-    // two animation buttons unified. The secondary surface it
-    // mirrored under ADR 0173 is retired for this one control.
+    // rim over the indigo glow, rounded-xl and the one branded
+    // text color — the two animation buttons unified. The
+    // gradient's stops are the deep indigo pair since Kasra's
+    // change-the-fills ruling (Nov 28 2026): the mock follows the
+    // real button's treatment whenever it changes (ADR 0173).
+    // The secondary surface it mirrored under ADR 0173 is
+    // retired for this one control.
     const researchRule = rule(".hero-story-research");
-    if (!researchRule.includes("linear-gradient(180deg, var(--brand-indigo) 0%, var(--brand-indigo-dark) 100%)")) {
+    if (!researchRule.includes("linear-gradient(180deg, var(--brand-indigo-deep) 0%, var(--brand-indigo-deep-2) 100%)")) {
       throw new Error("the mockup's research control does not wear the accent bevel's vertical gradient (ADR 0178)");
     }
-    if (!researchRule.includes("rgba(255, 255, 255, 0.15)") || !researchRule.includes("color: #fff")) {
-      throw new Error("the mockup's research control is not the accent button's white text on its white/15 border");
+    if (!researchRule.includes("rgba(255, 255, 255, 0.15)") || !researchRule.includes("color: hsl(var(--muted-foreground))")) {
+      throw new Error("the mockup's research control is not the accent button's branded text on its white/15 border");
     }
     if (!researchRule.includes("inset 0 1px 0 rgba(255, 255, 255, 0.26)")) {
       throw new Error("the mockup's research control lacks the bevel's top rim over the indigo glow");
@@ -13344,8 +13379,8 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
       throw new Error("the mockup's research control does not carry its 'Research my app' label");
     }
     const badgeRule = rule(".hero-story-step-badge");
-    if (!badgeRule.includes("background: var(--brand-indigo)") || !badgeRule.includes("color: #fff")) {
-      throw new Error("the step badge is not the rail's filled indigo badge with a white check");
+    if (!badgeRule.includes("background: var(--brand-indigo-deep)") || !badgeRule.includes("color: hsl(var(--muted-foreground))")) {
+      throw new Error("the step badge is not the rail's filled deep indigo badge with its branded check");
     }
     // The closing beat's Get the app is gone with the closing
     // beat itself (ADR 0178): its absence — element, rule and
@@ -15633,6 +15668,12 @@ async function runHookCtaChecks() {
           creates.push(payload);
           return hookRow({ id: "hook-cta-1" });
         },
+        // A just-created draft has no generations: the harness
+        // default segment belongs to a finished project and would
+        // falsely finish this draft, standing the two sections
+        // Kasra's Nov 28 2026 order keeps hidden until the video
+        // shows.
+        getGenerations: async () => ({ generations: [] }),
       },
       "",
       async () => {
@@ -15661,17 +15702,22 @@ async function runHookCtaChecks() {
           throw new Error("creating the draft never signalled the chrome's saved check");
         }
         // The page's later cards stand from the moment the draft
-        // exists: direction, the hook, the render, the finish and
-        // the post kit — the six stages, one canvas.
+        // exists: direction, the hook and the render. The finish
+        // and the post kit do NOT stand yet (Kasra's order,
+        // Nov 28 2026): no container, no heading, no placeholder
+        // — they render only once the generated video shows.
         for (const testid of [
           "hook-cta-direction-card",
           "hook-cta-hook-card",
           "hook-cta-render-card",
-          "hook-cta-finish-card",
-          "hook-cta-post-kit",
         ]) {
           if (!ctx.container.querySelector(`[data-testid="${testid}"]`)) {
             throw new Error(`the ${testid} card did not render once the draft existed`);
+          }
+        }
+        for (const testid of ["hook-cta-finish-card", "hook-cta-post-kit"]) {
+          if (ctx.container.querySelector(`[data-testid="${testid}"]`)) {
+            throw new Error(`the ${testid} section stands before any video exists (Nov 28 2026)`);
           }
         }
         // ADR 0122: a pick creates a draft row and nothing else — no
@@ -15876,13 +15922,16 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("HookSnap shows the hook's Craft score beside the hook line (Nov 27 2026)", async (ctx) => {
-    // Kasra's order: the exact Craft indicator from Create stands
-    // in The hook section, scored on the hook only — HookSnap has
-    // no script. The score rides the hook generation response:
-    // before a hook exists there is no card; after Generate, the
-    // card stands inside the hook section beside the line, and
-    // never in the Post kit area.
+  await check("HookSnap shows no Craft card beside the hook line (Nov 28 2026)", async (ctx) => {
+    // Kasra's removal order, Nov 28 2026: the Craft check UI
+    // leaves HookSnap whole. This pin used to assert the card
+    // stood beside the hook line (his Nov 27 2026 order adding
+    // it); it now asserts the card is ABSENT everywhere on the
+    // page while the hook line editor and the Generate the hook
+    // row stand unchanged. The quality report still rides the
+    // hook generation response below — the data and the backend
+    // evaluation are untouched; Create keeps its Craft check and
+    // History is untouched. Only this page's rendering goes.
     const REPORT = { total: 71, score10: 7.5, grade: "B", band: "strong", dimensions: {} };
     let row = blankRow({ id: "hook-cta-1" });
     await inHookCta(
@@ -15907,15 +15956,17 @@ async function runHookCtaChecks() {
           throw new Error("a Craft card stands before any hook exists");
         }
         await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-generate"]'));
-        const card = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
-        const craft = card?.querySelector('[data-testid="quality-report"]');
-        if (!craft) throw new Error("the hook section carries no Craft card after generation");
-        if (!craft.textContent.includes("Craft check") || !craft.textContent.includes("7.5/10")) {
-          throw new Error("the Craft card does not show the hook's score out of 10");
+        const area = ctx.container.querySelector('[data-testid="hook-editors"]');
+        if (!area) throw new Error("the hook editors block is gone with the Craft card");
+        const field = area.querySelector("#review-hook_line");
+        if (!field || field.value !== HOOK) {
+          throw new Error("the hook line editor no longer stands with the generated line");
         }
-        const postKit = ctx.container.querySelector('[data-testid="hook-cta-post-kit"]');
-        if (postKit?.querySelector('[data-testid="quality-report"]')) {
-          throw new Error("the Craft card leaked into the post kit area");
+        if (!ctx.container.querySelector('[data-testid="hook-generate-new"]')) {
+          throw new Error("the Generate the hook row no longer stands in its post-generation face");
+        }
+        if (ctx.container.querySelector('[data-testid="quality-report"]')) {
+          throw new Error("a Craft card still stands on HookSnap after generation (Nov 28 2026)");
         }
       }
     );
@@ -16101,8 +16152,16 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("the HookSnap post kit card previews the caption from the hook, with its count (ADR 0353)", async (ctx) => {
-    const PREVIEW = "I quit replaying the whole day in my head and said it out loud instead — you?";
+  await check("the HookSnap post kit stands only once the video shows — no caption preview before it (Nov 28 2026)", async (ctx) => {
+    // ADR 0353's caption preview lived in the Post kit card
+    // before the finish, written from the hook line on the card's
+    // own click; this pin used to walk that whole flow. Kasra's
+    // order (Nov 28 2026) hides the Post kit section entirely
+    // until the generated video shows — no container, no
+    // heading, no text — so no preview control stands before the
+    // finish and no preview call can be spent from this page
+    // state. The kit itself, once the video shows, is pinned by
+    // the sequence and returning-project checks below.
     const previewCalls = [];
     await inHookCta(
       ctx,
@@ -16112,40 +16171,26 @@ async function runHookCtaChecks() {
         getGenerations: async () => ({ generations: [] }),
         previewHookCtaCaption: async (id) => {
           previewCalls.push(id);
-          return { caption: PREVIEW, char_count: PREVIEW.length };
+          return { caption: "unused", char_count: 6 };
         },
       },
       "",
       async () => {
-        const card = () => ctx.container.querySelector('[data-testid="hook-cta-post-kit"]');
-        // No hook yet: the preview is written from the hook line,
-        // so no preview control stands in the card.
-        if (card().querySelector('[data-testid="hook-cta-caption-preview-button"]')) {
-          throw new Error("the caption preview button stands before a hook exists");
+        if (ctx.container.querySelector('[data-testid="hook-cta-post-kit"]')) {
+          throw new Error("the post kit section stands before a hook exists (Nov 28 2026)");
         }
         await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-generate"]'));
         await act(async () => {});
-        // Writing the hook does NOT spend a preview call: the
-        // preview is the Post kit card's own click (ADR 0122).
+        if (ctx.container.querySelector('[data-testid="hook-cta-post-kit"]')) {
+          throw new Error("the post kit section stands once a hook exists but before the video shows (Nov 28 2026)");
+        }
+        if (ctx.container.querySelector('[data-testid="hook-cta-caption-preview-button"]')) {
+          throw new Error("the caption preview button stands before the video shows (Nov 28 2026)");
+        }
+        // Writing the hook does NOT spend a preview call (ADR
+        // 0122) — and with the section hidden, nothing here can.
         if (previewCalls.length !== 0) {
           throw new Error("writing the hook spent a caption preview call on its own");
-        }
-        const button = card().querySelector('[data-testid="hook-cta-caption-preview-button"]');
-        if (!button || !button.textContent.includes("Preview the caption")) {
-          throw new Error("the Preview the caption button did not render once a hook existed");
-        }
-        await clickEl(ctx, button);
-        await act(async () => {});
-        if (previewCalls.length !== 1 || previewCalls[0] !== "hook-cta-1") {
-          throw new Error(`the preview call went out ${JSON.stringify(previewCalls)}, expected once for the draft`);
-        }
-        const preview = card().querySelector('[data-testid="hook-cta-caption-preview"]');
-        if (!preview || !preview.textContent.includes(PREVIEW)) {
-          throw new Error("the previewed caption did not render in the post kit card");
-        }
-        const count = card().querySelector('[data-testid="hook-cta-caption-preview-count"]');
-        if (!count || count.textContent.trim() !== `${PREVIEW.length} / 50–80`) {
-          throw new Error(`the preview count reads "${count && count.textContent}", expected ${PREVIEW.length} / 50–80`);
         }
       }
     );
@@ -16222,15 +16267,13 @@ async function runHookCtaChecks() {
         if (ctx.container.ownerDocument.querySelector('[data-testid="hook-picks-focus-popup"]')) {
           throw new Error("a Focus pop-up stands on the slider page (Nov 27 2026)");
         }
-        // The caption preview's label carries its icon.
-        const kitCard = ctx.container.querySelector('[data-testid="hook-cta-post-kit"]');
-        await clickEl(ctx, kitCard.querySelector('[data-testid="hook-cta-caption-preview-button"]'));
-        await act(async () => {});
-        const preview = kitCard.querySelector('[data-testid="hook-cta-caption-preview"]');
-        if (!preview) throw new Error("the caption preview did not render");
-        const previewLabel = [...preview.querySelectorAll(".eyebrow")].find((el) => el.textContent.trim() === "Caption preview");
-        if (!previewLabel || !previewLabel.querySelector("svg")) {
-          throw new Error("the Caption preview label carries no icon (ADR 0366)");
+        // This tail used to read the caption preview's label in
+        // the post kit card; the whole Post kit section now
+        // stands only once the video shows (Kasra's order,
+        // Nov 28 2026), so in this state — a hook, no video —
+        // the card is absent entirely.
+        if (ctx.container.querySelector('[data-testid="hook-cta-post-kit"]')) {
+          throw new Error("the post kit section stands before the video shows (Nov 28 2026)");
         }
       }
     );
@@ -16456,6 +16499,76 @@ async function runHookCtaChecks() {
     }
   });
 
+  await check("the hook picks wear their new icons and an eye each (Nov 28 2026)", async (ctx) => {
+    // Kasra's orders (Nov 28 2026, live call): the hook picks'
+    // icons speak plainer — Tone a sound wave, Shape an outline
+    // shapes glyph, Opening a spark (he rejected an open-door
+    // glyph himself: it reads as opening the video, not the
+    // hook's first beat). The words stay exactly as they are.
+    // Beside each pick's title stands a small round hint button.
+    // It first wore the lucide Info glyph; later the same day
+    // (text chat) Kasra switched it to the EYE — his direct
+    // ruling, superseding the info circle — so the button wears
+    // lucide Eye and the Info glyph stands nowhere in this
+    // control. Hovering, focusing or tapping it shows ONE
+    // short overview line in the shared tooltip. Nothing stands
+    // under the toggle: the explainer lines Kasra ordered
+    // removed stay removed — the overview lives only in the tip.
+    const PICKS = [
+      { key: "focus", name: "Focus", icon: "lucide-focus", line: "What the hook aims at — the outcome it works toward." },
+      { key: "tone", name: "Tone", icon: "lucide-audio-waveform", line: "How the hook sounds — plain, warm or bold." },
+      { key: "shape", name: "Shape", icon: "lucide-shapes", line: "The hook's form — a question, a statement or a command." },
+      { key: "opening", name: "Opening", icon: "lucide-sparkles", line: "How the hook starts — mid-action, on a feeling or on a reaction." },
+    ];
+    const row = hookRow({ id: "hook-cta-1", hook_line: HOOK });
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => row,
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const card = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
+        if (!card) throw new Error("the hook card did not render");
+        const labels = [...card.querySelectorAll(".eyebrow")];
+        for (const pick of PICKS) {
+          const label = labels.find((el) => el.textContent.trim() === pick.name);
+          if (!label) throw new Error(`the ${pick.name} group label did not render`);
+          const svg = label.querySelector("svg");
+          if (!svg || !(svg.getAttribute("class") || "").includes(pick.icon)) {
+            throw new Error(`the ${pick.name} label wears ${JSON.stringify(svg?.getAttribute("class"))}, not ${pick.icon}`);
+          }
+          const hint = card.querySelector(`[data-testid="hook-picks-${pick.key}-info"]`);
+          if (!hint) throw new Error(`the ${pick.name} title carries no hint button`);
+          if (hint.tagName !== "BUTTON") throw new Error(`the ${pick.name} hint is not a button — tap and keyboard need a real control`);
+          if (!(hint.getAttribute("aria-label") || "").includes(pick.line)) {
+            throw new Error(`the ${pick.name} hint's aria-label does not carry its overview line`);
+          }
+          const hintSvg = hint.querySelector("svg");
+          if (!hintSvg || !(hintSvg.getAttribute("class") || "").includes("lucide-eye")) {
+            throw new Error(`the ${pick.name} hint does not wear the Eye glyph`);
+          }
+          if ((hintSvg.getAttribute("class") || "").includes("lucide-info")) {
+            throw new Error(`the ${pick.name} hint still wears the Info glyph Kasra replaced`);
+          }
+        }
+        // The overview is reachable, not just labelled: focus
+        // the Tone eye (the keyboard path — a tap focuses the
+        // button the same way) and read the shared tooltip where
+        // Radix portals it.
+        const toneHint = card.querySelector('[data-testid="hook-picks-tone-info"]');
+        await act(async () => { toneHint.focus(); });
+        await act(async () => { await new Promise((r) => setTimeout(r, 900)); });
+        const tips = [...ctx.container.ownerDocument.querySelectorAll('[role="tooltip"]')]
+          .map((n) => n.textContent).join(" ");
+        if (!tips.includes("How the hook sounds — plain, warm or bold.")) {
+          throw new Error(`the Tone overview never showed in a tooltip: ${JSON.stringify(tips)}`);
+        }
+      }
+    );
+  });
+
   await check("pick sliders glide on a switch and never lag a drag (Nov 27 2026)", async (ctx) => {
     // Kasra's order: a toggle switch settles with a very soft,
     // short ease instead of snapping. The glide is CSS on the
@@ -16493,10 +16606,13 @@ async function runHookCtaChecks() {
     // and Wardrobe sliders whose stops are the four standing picks
     // (later Nov 27 2026, superseding ADR 0365's two-standing
     // rule, the last-seat rule included), the New options
-    // link beside each label exactly as it stands today, revealing
-    // the full set as the pill row it has always been. Create's
-    // direction controls wear the same sliders since the unified
-    // spread (later Nov 27 2026), asserted at this check's end.
+    // link beside each label exactly as it stands today. New
+    // options once revealed the full set as a pill row; Kasra's
+    // Nov 28 2026 order supersedes that on slider surfaces —
+    // the slider stands through the refresh and the fresh set
+    // becomes its stops, asserted at this check's end beside
+    // Create's wearing of the same sliders (the unified spread,
+    // later Nov 27 2026).
     const LOCATIONS = ["Location one", "Location two", "Location three", "Location four"];
     const WARDROBES = ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"];
     const FRESH_LOCATIONS = ["Fresh place one", "Fresh place two", "Fresh place three", "Fresh place four"];
@@ -16624,20 +16740,31 @@ async function runHookCtaChecks() {
         if (card.querySelector('[data-testid="voice-mode-explain"]')) {
           throw new Error("an explainer line stands under Voice after the change back to talking — removed whole (Nov 27 2026)");
         }
-        // New options reveals the full set as the pill row it has
-        // always been, and a pick from it applies.
+        // New options never switches the face (Kasra's order,
+        // Nov 28 2026, superseding the reveal-to-pills design
+        // this block asserted before): a generation click must
+        // not turn the toggle back into the old buttons — the
+        // control stays the slider through the refresh, the
+        // fresh set becomes its stops under the standing
+        // four-stop rule, and a pick from it applies.
         await clickEl(ctx, card.querySelector('[data-testid="hook-cta-location-refresh"]'));
         await act(async () => {});
         const locGroup = card.querySelector('[data-testid="hook-cta-location-direction"]');
+        if (!locGroup.querySelector(".pick-slider")) {
+          throw new Error("after New options the Location control is no longer the slider");
+        }
+        if (locGroup.querySelector(".thumb-pair") || locGroup.querySelector("button.direction-btn")) {
+          throw new Error("after New options Location fell back to the old pill buttons");
+        }
         const freshValues = [...locGroup.querySelectorAll("button[data-value]")].map((b) => b.dataset.value);
         if (JSON.stringify(freshValues) !== JSON.stringify(FRESH_LOCATIONS)) {
-          throw new Error(`after New options Location shows ${JSON.stringify(freshValues)}, not the full refreshed set`);
+          throw new Error(`after New options Location's stops are ${JSON.stringify(freshValues)}, not the refreshed set standing as stops`);
         }
         await pickPairButton(ctx, "hook-cta-location-direction", "Fresh place four");
         await act(async () => {});
         const locAfter = card.querySelector('[data-testid="hook-cta-location-direction"]');
         if (locAfter.getAttribute("data-value") !== "Fresh place four") {
-          throw new Error("picking from the revealed set did not apply on the slider group");
+          throw new Error("picking from the refreshed stops did not apply on the slider group");
         }
       }
     );
@@ -16809,9 +16936,15 @@ async function runHookCtaChecks() {
         if (ctx.container.querySelector('[data-testid="platform-preview-video"]')) {
           throw new Error("the last draft's finished render is standing in the frame on a fresh visit");
         }
-        const finish = ctx.container.querySelector('[data-testid="hook-cta-finish-card"]');
-        if (!finish || !finish.textContent.includes("Render the hook above first")) {
-          throw new Error("the finish card does not treat the fresh visit as unrendered");
+        // The fresh visit is unrendered, so Demo + CTA does not
+        // stand at all (Kasra's order, Nov 28 2026 — this pin
+        // used to read its "Render the hook above first"
+        // placeholder here; the section, placeholder and all, is
+        // gone until the video shows). Post kit likewise.
+        for (const testid of ["hook-cta-finish-card", "hook-cta-post-kit"]) {
+          if (ctx.container.querySelector(`[data-testid="${testid}"]`)) {
+            throw new Error(`the ${testid} section stands on a fresh, unrendered visit (Nov 28 2026)`);
+          }
         }
         // No drafts list stands on the page (ADR 0287): the worked
         // draft is not offered here at all.
@@ -17410,9 +17543,19 @@ async function runHookCtaChecks() {
       "",
       async () => {
         const headings = [...ctx.container.querySelectorAll(".section-heading")].map((el) => el.textContent.trim());
-        for (const title of ["Choose an app", "Place and wardrobe", "The hook", "Render the hook", "Demo + CTA", "Post kit"]) {
+        for (const title of ["Choose an app", "Place and wardrobe", "The hook"]) {
           if (!headings.includes(title)) {
             throw new Error(`the card header "${title}" is missing: ${JSON.stringify(headings)}`);
+          }
+        }
+        // Two Nov 28 2026 orders shrink this list: the render
+        // section's header is removed whole (title and icon), and
+        // Demo + CTA and Post kit render only once the video
+        // shows — this state has a hook and no video, so none of
+        // the three headers stands.
+        for (const title of ["Render the hook", "Demo + CTA", "Post kit"]) {
+          if (headings.includes(title)) {
+            throw new Error(`the header "${title}" stands in a state where it should not (Nov 28 2026)`);
           }
         }
         const eyebrows = [...ctx.container.querySelectorAll(".eyebrow")].map((el) => el.textContent.trim());
@@ -17422,10 +17565,13 @@ async function runHookCtaChecks() {
           }
         }
         const all = [...headings, ...eyebrows];
-        for (const title of ["Choose an app", "Place and wardrobe", "Render the hook"]) {
+        for (const title of ["Choose an app", "Place and wardrobe"]) {
           if (all.filter((t) => t === title).length !== 1) {
             throw new Error(`"${title}" does not stand exactly once as a label: ${JSON.stringify(all)}`);
           }
+        }
+        if (all.filter((t) => t === "Render the hook").length !== 0) {
+          throw new Error(`"Render the hook" still stands as a label after its removal (Nov 28 2026): ${JSON.stringify(all)}`);
         }
       }
     );
@@ -17751,6 +17897,74 @@ async function runHookCtaChecks() {
     );
   });
 
+  await check("the Focus slider's left stop takes: App's choice clears a saved line and the clear saves (Nov 28 2026)", async (ctx) => {
+    // Kasra's live report (Nov 28 2026, with screenshot): on the
+    // Focus slider the very LEFT stop — "Let the app choose",
+    // value "" — could not be activated. Tapping it recorded
+    // nothing: the draft reducers treated a falsy pick value as
+    // no pick at all (the pick record skipped it) and deleted
+    // the edit that would have cleared the saved line, so
+    // editValue fell back to the saved line and the knob snapped
+    // back to it — the mirror of the ADR 0248/0373 dead tap.
+    // The fix: a pick-shaped edit restates only when its value
+    // equals the SAVED value; a "" pick over a saved line is a
+    // real edit, the pick record remembers it, and the autosave
+    // carries the clear to the server copy.
+    const LINES = [
+      "Naming the feeling before it grows",
+      "Saying the thought out loud once",
+      "Letting the tight chest soften",
+      "Catching the spiral early today",
+      "Keeping my own words on record",
+      "Ending the day a little clearer",
+    ];
+    const fullProfile = {
+      ...PROFILE,
+      outcome_statements: LINES.map((outcome) => ({ outcome, from_feature: "Voice entries" })),
+      desired_outcomes: [],
+    };
+    const row = hookRow({ id: "hook-cta-1", hook_focus: LINES[5] });
+    const patches = [];
+    await inHookCta(
+      ctx,
+      {
+        getAppProfiles: async () => ({ profiles: [fullProfile] }),
+        getAppProfile: async () => fullProfile,
+        createHookCtaProject: async () => row,
+        updateStudioProject: async (_id, patch) => {
+          patches.push(patch);
+          return { ...row, ...patch };
+        },
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const knob = () => ctx.container.querySelector('[data-testid="hook-picks-focus-knob"]');
+        if (!knob() || knob().getAttribute("aria-valuenow") !== "3") {
+          throw new Error("the Focus knob does not stand on the saved line's fourth seat before the tap");
+        }
+        const leftStop = ctx.container.querySelector('[data-testid="hook-picks-focus-auto"]');
+        if (!leftStop) throw new Error("the Focus slider carries no left (app's choice) stop");
+        await clickEl(ctx, leftStop);
+        await act(async () => {});
+        if (!knob() || knob().getAttribute("aria-valuenow") !== "0") {
+          throw new Error(`the Focus knob did not take the left stop — it rests at ${knob()?.getAttribute("aria-valuenow")}, not 0`);
+        }
+        const value = ctx.container.querySelector('[data-testid="hook-picks-focus-value"]');
+        if (!value || value.textContent.trim() !== "Let the app choose") {
+          throw new Error(`the Focus slider names ${JSON.stringify(value?.textContent?.trim())} under the knob, not "Let the app choose"`);
+        }
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        if (!patches.some((p) => p.hook_focus === "")) {
+          throw new Error(`the clear never saved — no patch carried hook_focus "": ${JSON.stringify(patches)}`);
+        }
+        if (!knob() || knob().getAttribute("aria-valuenow") !== "0") {
+          throw new Error("the Focus knob snapped back to the saved line after the clear saved");
+        }
+      }
+    );
+  });
+
   await check("every pop-up wears the tour's dim, and one secondary button serves the app (ADRs 0335/0336)", async () => {
     // Source pins, in the suite's css-reading precedent: the shared
     // dialog overlay (every confirm dialog) dims with .pop-scrim;
@@ -17901,7 +18115,12 @@ async function runHookCtaChecks() {
     // the hook, and Demo + CTA and the Post kit close the page.
     // The first three sections keep their seats, and ADR 0326's
     // other half stands untouched: the photo section lives outside
-    // the direction card, faces only.
+    // the direction card, faces only. (Nov 28 2026: Demo + CTA and
+    // Post kit render only once the video shows — this project
+    // carries the harness's completed segment, so both stand in
+    // their closing seats here; their absence before the video
+    // shows is pinned by the draft, sequence and fresh-visit
+    // checks.)
     await inHookCta(
       ctx,
       {
@@ -17978,13 +18197,14 @@ async function runHookCtaChecks() {
             throw new Error(`the ${testid} body is collapsed on a fresh draft whose setup is done`);
           }
         }
-        // The later five show only their headlines.
+        // The later three show only their headlines. (The render
+        // section's own headline is gone entirely — Kasra's
+        // order, Nov 28 2026: only the all-caps title and its
+        // icon came off; the section and everything in it stand
+        // as before, so it is read by its testid alone here.)
         const headlines = {
           "hook-cta-hook-card": "The hook",
           "template-photo": "Presenter photo",
-          "hook-cta-render-card": "Render the hook",
-          "hook-cta-finish-card": "Demo + CTA",
-          "hook-cta-post-kit": "Post kit",
         };
         for (const [testid, headline] of Object.entries(headlines)) {
           const card = ctx.container.querySelector(`[data-testid="${testid}"]`);
@@ -17995,30 +18215,44 @@ async function runHookCtaChecks() {
             throw new Error(`the ${testid} body stands open on a fresh draft, before its work exists`);
           }
         }
-        // Nothing is removed by the collapse: the hidden finish
-        // body still carries the words it shows once it opens.
-        const finishBody = ctx.container.querySelector('[data-testid="hook-cta-finish-card"] [data-collapsed-body]');
-        if (!finishBody || !finishBody.textContent.includes("Render the hook above first")) {
-          throw new Error("the collapsed Demo + CTA body lost the content it shows when open");
+        const renderCard = ctx.container.querySelector('[data-testid="hook-cta-render-card"]');
+        if (!renderCard) throw new Error("the render section did not render on a fresh draft");
+        if (renderCard.querySelector("h2")) {
+          throw new Error("the render section still carries a headline (Nov 28 2026)");
         }
-        // ADR 0358: the presenter photo stands as a section card —
-        // the same surface the render card wears, and a heading
-        // glyph the same size as the render card's, not the inset
-        // aside's smaller group label.
+        if (!bodyCollapsed(ctx, "hook-cta-render-card")) {
+          throw new Error("the render section body stands open on a fresh draft, before its work exists");
+        }
+        // Demo + CTA and Post kit do not stand at all on a fresh
+        // draft (Kasra's order, Nov 28 2026): no headline, no
+        // collapsed shell, no placeholder — this block used to
+        // read the finish body's "Render the hook above first"
+        // placeholder through the collapse.
+        for (const testid of ["hook-cta-finish-card", "hook-cta-post-kit"]) {
+          if (ctx.container.querySelector(`[data-testid="${testid}"]`)) {
+            throw new Error(`the ${testid} section stands on a fresh draft before any video exists (Nov 28 2026)`);
+          }
+        }
+        // ADR 0358: the presenter photo stands as a section card,
+        // and its heading glyph wears the section size, not the
+        // inset aside's smaller group size. The glyph used to be
+        // compared against the render card's own heading glyph;
+        // that heading is removed whole (Kasra's order, Nov 28
+        // 2026), so the photo glyph's section size now stands on
+        // its own face.
         const photoPanel = ctx.container.querySelector('[data-testid="template-photo"]');
         if (!photoPanel.className.includes("surface") || photoPanel.className.includes("inset-panel")) {
           throw new Error("the presenter photo panel does not wear the section card's surface");
         }
         const photoGlyph = photoPanel.querySelector("h2 svg");
-        const renderGlyph = ctx.container.querySelector('[data-testid="hook-cta-render-card"] h2 svg');
         const glyphSize = (svg) => {
           const cls = (svg && svg.getAttribute("class")) || "";
           if (cls.includes("h-4") && cls.includes("w-4")) return "section";
           if (cls.includes("h-3") && cls.includes("w-3")) return "group";
           return "other";
         };
-        if (!photoGlyph || !renderGlyph || glyphSize(photoGlyph) !== "section" || glyphSize(renderGlyph) !== "section") {
-          throw new Error("the presenter photo heading glyph does not match the render card's in size");
+        if (!photoGlyph || glyphSize(photoGlyph) !== "section") {
+          throw new Error("the presenter photo heading glyph does not wear the section size");
         }
       }
     );
@@ -18073,12 +18307,21 @@ async function runHookCtaChecks() {
       "",
       async () => {
         // Fresh: the app and direction sections stand open; The
-        // hook and the later four show only their headlines — the
+        // hook and the later two show only their headlines — the
         // hook waits for the place and wardrobe picks (ADR 0357),
         // not for the direction read settling behind the scenes.
-        for (const testid of ["hook-cta-hook-card", "template-photo", "hook-cta-render-card", "hook-cta-finish-card", "hook-cta-post-kit"]) {
+        // Demo + CTA and Post kit do not stand at all (Kasra's
+        // order, Nov 28 2026): they render only once the video
+        // shows, so "collapsed" is not their pre-video state —
+        // absence is.
+        for (const testid of ["hook-cta-hook-card", "template-photo", "hook-cta-render-card"]) {
           if (!bodyCollapsed(ctx, testid)) {
             throw new Error(`the ${testid} section stands open before any work is done`);
+          }
+        }
+        for (const testid of ["hook-cta-finish-card", "hook-cta-post-kit"]) {
+          if (ctx.container.querySelector(`[data-testid="${testid}"]`)) {
+            throw new Error(`the ${testid} section stands before any work is done (Nov 28 2026)`);
           }
         }
         // Step one: select place and wardrobe. One pick alone is
@@ -18093,23 +18336,24 @@ async function runHookCtaChecks() {
         if (bodyCollapsed(ctx, "hook-cta-hook-card")) {
           throw new Error("the hook section did not open once place and wardrobe were both selected");
         }
-        // Step two: write the hook. The presenter photo opens,
-        // and the post kit with it — its first work, the caption
-        // preview, is written from the hook line alone (ADR
-        // 0353). The render and the finish still wait.
+        // Step two: write the hook. The presenter photo opens.
+        // The post kit used to open here too — its first work,
+        // the caption preview, was written from the hook line
+        // alone (ADR 0353) — but the whole section now waits for
+        // the video (Kasra's order, Nov 28 2026), as does Demo +
+        // CTA: neither stands yet. The render still waits.
         await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-generate"]'));
         await act(async () => {});
         if (bodyCollapsed(ctx, "template-photo")) {
           throw new Error("the presenter photo section did not open once the hook was written");
         }
-        if (bodyCollapsed(ctx, "hook-cta-post-kit")) {
-          throw new Error("the post kit section did not open once the hook was written");
+        for (const testid of ["hook-cta-finish-card", "hook-cta-post-kit"]) {
+          if (ctx.container.querySelector(`[data-testid="${testid}"]`)) {
+            throw new Error(`the ${testid} section stands once the hook is written, before the video shows (Nov 28 2026)`);
+          }
         }
         if (!bodyCollapsed(ctx, "hook-cta-render-card")) {
           throw new Error("the render section opened before a photo was attached");
-        }
-        if (!bodyCollapsed(ctx, "hook-cta-finish-card")) {
-          throw new Error("the Demo + CTA section opened before the render finished");
         }
         // Step three: attach the photo. The render opens; the
         // finish still waits.
@@ -18121,17 +18365,27 @@ async function runHookCtaChecks() {
         if (bodyCollapsed(ctx, "hook-cta-render-card")) {
           throw new Error("the render section did not open once the photo was attached");
         }
-        if (!bodyCollapsed(ctx, "hook-cta-finish-card")) {
-          throw new Error("the Demo + CTA section opened before the render finished");
+        if (ctx.container.querySelector('[data-testid="hook-cta-finish-card"]')) {
+          throw new Error("the Demo + CTA section stands before the render finished (Nov 28 2026)");
         }
         // Step four: render the hook to completion. The finish
-        // opens, and the post kit shows the frozen kit.
+        // appears open, and the post kit appears with the frozen
+        // kit.
         const renderButton = ctx.container.querySelector('[data-testid="hook-render-generate"]');
         if (!renderButton) throw new Error("the render button did not render");
         await clickEl(ctx, renderButton);
         await act(async () => {});
         if (bodyCollapsed(ctx, "hook-cta-finish-card")) {
           throw new Error("the Demo + CTA section did not open once the render finished");
+        }
+        // The appearance is an in-flow unlock, so it plays the
+        // Expand reveal (Kasra, Nov 28 2026: the two sections
+        // appear "with the new animation we made"): the finish
+        // body rides the reveal's grow wrapper rather than
+        // standing bare as a first-paint section does.
+        const finishCard = ctx.container.querySelector('[data-testid="hook-cta-finish-card"]');
+        if (!finishCard.querySelector(".section-reveal")) {
+          throw new Error("the Demo + CTA section appeared without the unlock reveal (Nov 28 2026)");
         }
         const kit = ctx.container.querySelector('[data-testid="hook-cta-post-kit"] [data-testid="post-kit"]');
         if (!kit || !kit.textContent.includes(KIT.caption)) {
@@ -18194,6 +18448,241 @@ async function runHookCtaChecks() {
         const kit = ctx.container.querySelector('[data-testid="hook-cta-post-kit"] [data-testid="post-kit"]');
         if (!kit || !kit.textContent.includes(KIT.caption)) {
           throw new Error("the finished kit's caption does not stand in the post kit section");
+        }
+      }
+    );
+  });
+
+  await check("a HookSnap section that unlocks reveals with the expand, and one open at first paint does not (Nov 28 2026)", async (ctx) => {
+    // Kasra's order (Nov 28 2026, approved from a live mockup —
+    // variant B, Expand): a section that unlocks grows open on
+    // the app's own easing — the container expands (grid rows
+    // 0fr to 1fr, ~520ms), the body fades and rises inside it
+    // (rise-settle, ~480ms from ~90ms in), and the card wears a
+    // soft indigo glow for the moment (~900ms) so the eye lands
+    // on the newly opened section. The motion fires ONLY on the
+    // collapsed-to-open transition: a section already open at
+    // first paint carries no reveal at all, and under reduced
+    // motion every reveal animation is gated off — the section
+    // simply appears, as before.
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!/\.section-reveal\s*\{\s*display:\s*grid;\s*grid-template-rows:\s*1fr/.test(css)) {
+      throw new Error("index.css carries no .section-reveal grow wrapper (grid at 1fr at rest)");
+    }
+    if (!/@keyframes section-reveal-grow\s*\{\s*from\s*\{\s*grid-template-rows:\s*0fr/.test(css)) {
+      throw new Error("the section-reveal-grow keyframe (0fr to 1fr) is not defined");
+    }
+    if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.section-reveal-revealing\s*\{\s*animation:\s*section-reveal-grow 520ms cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\) both/.test(css)) {
+      throw new Error(".section-reveal-revealing does not resolve to the grow (520ms, one easing, motion-allowed only)");
+    }
+    if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.section-reveal-revealing > \.section-reveal-inner\s*\{\s*animation:\s*rise-settle 480ms cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\) 90ms both/.test(css)) {
+      throw new Error("the reveal's inner body does not ride rise-settle (480ms from 90ms in, motion-allowed only)");
+    }
+    if (!/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*\.section-reveal-glow\s*\{\s*animation:\s*section-reveal-glow 900ms cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\) both/.test(css)) {
+      throw new Error(".section-reveal-glow does not resolve to the unlock glow (900ms, one easing, motion-allowed only)");
+    }
+    if (!/@keyframes section-reveal-glow\s*\{\s*from\s*\{\s*border-color:\s*rgba\(99,\s*102,\s*241,\s*0\.75\)/.test(css)) {
+      throw new Error("the section-reveal-glow keyframe does not start on the indigo border");
+    }
+    // Reduced motion stills the reveal: the two animations are
+    // declared exactly once each, inside the gates above — no
+    // ungated copy may exist for a reduced-motion user to hit.
+    if ((css.match(/animation:\s*section-reveal-grow/g) || []).length !== 1) {
+      throw new Error("the grow animation is declared somewhere besides its reduced-motion gate");
+    }
+    if ((css.match(/animation:\s*section-reveal-glow/g) || []).length !== 1) {
+      throw new Error("the glow animation is declared somewhere besides its reduced-motion gate");
+    }
+    // Scenario one: the unlock itself. A fresh draft stands with
+    // The hook collapsed — its body in the plain hidden wrapper,
+    // no reveal treatment anywhere — and picking place and
+    // wardrobe opens it WITH the reveal standing on it.
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => blankRow({ id: "hook-cta-1" }),
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: ["A quiet bedroom in the evening", "A riverside path at dawn"],
+          wardrobe: ["Wardrobe one", "Wardrobe two"],
+          setting: [], lighting: [], voice: [], tone: [],
+        }),
+        getGenerations: async () => ({ generations: [] }),
+        getAssets: async () => ({ assets: [] }),
+      },
+      "",
+      async () => {
+        const card = () => ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
+        if (!card()) throw new Error("the hook card did not render");
+        if (!bodyCollapsed(ctx, "hook-cta-hook-card")) {
+          throw new Error("the hook section stands open on a fresh draft, before its work exists");
+        }
+        if (card().querySelector(".section-reveal")) {
+          throw new Error("a collapsed section already carries the reveal wrapper — the reveal belongs to the unlock");
+        }
+        await pickPairButton(ctx, "hook-cta-location-direction", "A quiet bedroom in the evening");
+        await pickPairButton(ctx, "hook-cta-wardrobe", "Wardrobe one");
+        await act(async () => {});
+        if (bodyCollapsed(ctx, "hook-cta-hook-card")) {
+          throw new Error("the hook section did not open once place and wardrobe were both selected");
+        }
+        const grow = card().querySelector(".section-reveal.section-reveal-revealing");
+        if (!grow) {
+          throw new Error("the just-unlocked hook section carries no revealing grow wrapper");
+        }
+        if (!grow.firstElementChild || !grow.firstElementChild.className.includes("section-reveal-inner")) {
+          throw new Error("the just-unlocked hook section's body does not stand in the reveal's inner cell");
+        }
+        if (!card().className.includes("section-reveal-glow")) {
+          throw new Error("the just-unlocked hook card wears no unlock glow");
+        }
+        // The hook container covers ONLY the four pick groups
+        // (Kasra's order, Nov 28 2026, approved from the
+        // Now/Proposed mockup): the card used to wrap the picks
+        // AND the spoken-line area AND the generate row, which
+        // left it tall with dead space beside the button. The
+        // area now stands bare BELOW the card — this pin moved
+        // its queries out of the card for exactly that reason —
+        // opening under the same gate, with the same Expand
+        // reveal on its own block.
+        if (!card().querySelector('[data-testid="hook-picks-focus-slider"]')) {
+          throw new Error("the hook card no longer contains the pick row it now exists to hold");
+        }
+        const editors = ctx.container.querySelector('[data-testid="hook-editors"]');
+        if (!editors) throw new Error("the spoken-line area did not render once the hook section opened");
+        if (card().contains(editors)) {
+          throw new Error("the spoken-line area still stands inside the hook card — the container covers the picks only now");
+        }
+        if (!(card().compareDocumentPosition(editors) & 4)) {
+          throw new Error("the spoken-line area does not stand below the hook card");
+        }
+        const editorsGrow = editors.closest(".section-reveal");
+        if (!editorsGrow || !editorsGrow.className.includes("section-reveal-revealing")) {
+          throw new Error("the bare spoken-line block carries no revealing grow wrapper of its own on unlock");
+        }
+        // The spoken-line area stands bare of its label and
+        // subtitle (Kasra's order, Nov 28 2026): the "The spoken
+        // line" GroupLabel and the "checked as you edit" line
+        // under it are deleted whole — the editor, the Craft
+        // card and the generate row are the area now.
+        if (editors.textContent.includes("The spoken line")) {
+          throw new Error("the spoken-line area still carries its deleted label");
+        }
+        if (editors.textContent.includes("sharpen it if you like")) {
+          throw new Error("the spoken-line area still carries its deleted subtitle");
+        }
+      }
+    );
+    // Unmount between scenarios, as in the Focus-cap check: a
+    // bare re-render would keep the first mount's draft state.
+    await act(async () => ctx.root.render(null));
+    // Scenario two: first paint with the work done. Every
+    // section stands open and NONE carries the reveal — the
+    // animation belongs to the unlock transition, never to a
+    // page load.
+    const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
+    const KIT = {
+      caption: "A caption for the finished hook, written to sell the watch.",
+      hashtags: ["#focus"],
+      cover_text: "Cover",
+    };
+    const doneGen = {
+      ...SEGMENT, id: "gen-hook-done", studio_project_id: "hook-cta-7",
+      status: "completed", post_kit: KIT,
+    };
+    const hooked = hookRow({
+      id: "hook-cta-7", hook_line: HOOK, assets: face, script_version: 1,
+      strategy: { hook_concept: HOOK },
+      location: "A quiet bedroom in the evening",
+      visual_direction: "Wardrobe one",
+      updated_at: "2026-11-20T12:00:00Z",
+    });
+    await inHookCta(
+      ctx,
+      {
+        getHookCtaProjects: async () => ({ projects: [hooked] }),
+        getStudioProject: async () => hooked,
+        getGenerations: async () => ({ generations: [doneGen] }),
+        getAssets: async () => ({ assets: [] }),
+      },
+      "?project=hook-cta-7",
+      async () => {
+        for (const testid of [
+          "hook-cta-setup-card",
+          "hook-cta-direction-card",
+          "hook-cta-hook-card",
+          "template-photo",
+          "hook-cta-render-card",
+          "hook-cta-finish-card",
+          "hook-cta-post-kit",
+        ]) {
+          const card = ctx.container.querySelector(`[data-testid="${testid}"]`);
+          if (!card) throw new Error(`the ${testid} section did not render`);
+          if (card.querySelector(".section-reveal") || card.className.includes("section-reveal-glow")) {
+            throw new Error(`the ${testid} section carries the unlock reveal at first paint — it was never unlocked in this session`);
+          }
+        }
+      }
+    );
+  });
+
+  await check("the hook card and the place and wardrobe card stand at one height (Nov 28 2026)", async (ctx) => {
+    // Kasra's order (Nov 28 2026): The hook's container matches
+    // the Place and wardrobe container's height exactly, now that
+    // the generate row stands bare below the hook card. The two
+    // cards share every height driver but their pick bodies: the
+    // hook's Focus pick names a whole outcome sentence, which
+    // wraps inside its quarter-width cell and grows the row,
+    // while the direction card can add its plan-default line —
+    // so both bodies carry ONE shared min-height,
+    // .hook-snap-pick-body, sized from the shared rhythm (label
+    // row + gap + track + the pick's name at three wrapped
+    // lines = 7.1875rem) and applied only from 1024px, where the
+    // trio and the quad stand on one line; below that width the
+    // groups stack and the heights follow their content. Neither
+    // card's content is shrunk to fit the other.
+    // jsdom reports zero-size boxes, so the rect comparison is
+    // the form the equality takes in this harness; the shared
+    // class and its token, pinned here by name, are what carry
+    // the guarantee in a real browser.
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (!/@media \(min-width: 1024px\) \{\s*\.hook-snap-pick-body \{\s*min-height: 7\.1875rem;/.test(css)) {
+      throw new Error("index.css carries no shared .hook-snap-pick-body min-height at the one-line width");
+    }
+    await inHookCta(
+      ctx,
+      {
+        createHookCtaProject: async () => blankRow({ id: "hook-cta-1" }),
+        getDirectionOptions: async () => ({
+          group: "default",
+          location: ["A quiet bedroom in the evening", "A riverside path at dawn"],
+          wardrobe: ["Wardrobe one", "Wardrobe two"],
+          setting: [], lighting: [], voice: [], tone: [],
+        }),
+        getGenerations: async () => ({ generations: [] }),
+        getAssets: async () => ({ assets: [] }),
+      },
+      "",
+      async () => {
+        await pickPairButton(ctx, "hook-cta-location-direction", "A quiet bedroom in the evening");
+        await pickPairButton(ctx, "hook-cta-wardrobe", "Wardrobe one");
+        await act(async () => {});
+        const direction = ctx.container.querySelector('[data-testid="hook-cta-direction-card"]');
+        const hook = ctx.container.querySelector('[data-testid="hook-cta-hook-card"]');
+        if (!direction || !hook) throw new Error("both pick cards did not render");
+        if (bodyCollapsed(ctx, "hook-cta-hook-card")) {
+          throw new Error("the hook section did not open once place and wardrobe were both selected");
+        }
+        if (!direction.querySelector(".hook-snap-pick-body")) {
+          throw new Error("the place and wardrobe body carries no shared pick-body height");
+        }
+        if (!hook.querySelector(".hook-snap-pick-body")) {
+          throw new Error("the hook body carries no shared pick-body height");
+        }
+        const dh = direction.getBoundingClientRect().height;
+        const hh = hook.getBoundingClientRect().height;
+        if (Math.abs(dh - hh) > 1) {
+          throw new Error(`the two cards stand at different heights (${dh} vs ${hh})`);
         }
       }
     );
@@ -18298,8 +18787,18 @@ async function runHookCtaChecks() {
         }
         await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-cta-location-refresh"]'));
         await act(async () => {});
+        // The face never switches (Kasra's order, Nov 28 2026):
+        // after New options the group is still the slider — no
+        // pill row stands in it — and the refreshed set stands
+        // as its stops.
+        if (!locGroup.querySelector(".pick-slider")) {
+          throw new Error("after New options the Location control is no longer the slider (Nov 28 2026)");
+        }
+        if (locGroup.querySelector(".thumb-pair") || locGroup.querySelector("button.direction-btn")) {
+          throw new Error("after New options Location fell back to the old pill buttons (Nov 28 2026)");
+        }
         if (JSON.stringify(shownValues(locGroup)) !== JSON.stringify(FRESH_LOCATIONS)) {
-          throw new Error(`after New options Location shows ${JSON.stringify(shownValues(locGroup))}, not the full refreshed set (Nov 27 2026)`);
+          throw new Error(`after New options Location shows ${JSON.stringify(shownValues(locGroup))}, not the refreshed set standing as stops (Nov 27 2026, face held Nov 28 2026)`);
         }
         await pickPairButton(ctx, "hook-cta-location-direction", "Fresh place four");
         if (!bodyCollapsed(ctx, "hook-cta-hook-card")) {
@@ -18325,6 +18824,10 @@ async function runHookCtaChecks() {
     // face, the section's data-testid and the collapse-in-sequence
     // behavior (ADR 0356) all stand exactly as they did inside
     // the card; every other HookSnap section keeps its card.
+    // (Nov 28 2026: the render section's heading itself is since
+    // removed whole — title and icon, Kasra's order — so below,
+    // Choose an app keeps its heading and the render section
+    // stands with none.)
     await inHookCta(
       ctx,
       {
@@ -18362,9 +18865,8 @@ async function runHookCtaChecks() {
             throw new Error(`the Render the hook section still wears its card (${cls}) — it stands bare (Nov 27 2026)`);
           }
         }
-        const renderHeading = render.querySelector("h2");
-        if (!renderHeading || !renderHeading.textContent.includes("Render the hook")) {
-          throw new Error("the bare Render the hook section lost its heading");
+        if (render.querySelector("h2")) {
+          throw new Error("the bare render section still carries its removed heading (Nov 28 2026)");
         }
         if (!bodyCollapsed(ctx, "hook-cta-render-card")) {
           throw new Error("the bare render section lost its collapse — it still opens in sequence (Nov 27 2026)");
@@ -21930,6 +22432,55 @@ async function runDemoCtaChecks() {
       const exportSource = fs.readFileSync(path.join(SRC, "demoCta", "exportFlow.js"), "utf8");
       if (!exportSource.includes('appendMode === "propped"') || !exportSource.includes("prepareProppedViewImages")) {
         throw new Error("the export never prepares the propped room plate");
+      }
+    } finally {
+      clip.restore();
+    }
+  });
+
+  await check("Base clip & look stands bare while Second clip keeps its card, and the base row hugs its clip (Nov 28 2026)", async (ctx) => {
+    // Kasra's order (Nov 28 2026): Base clip & look loses its
+    // container — there is only ever one base clip, and the box
+    // displayed a blank empty space to the right of it; with no
+    // box there is no empty width to notice, the bare-section
+    // doctrine HookSnap's bare sections already follow. ONLY
+    // this section: Second clip and every other editor section
+    // keep their card faces, and the section's toggle mechanics
+    // and testid stand unchanged — only the card face goes.
+    // Inside it, the uploaded clip's row hugs its content: the
+    // clip's name stood on a flex-1 span, which stretched a
+    // blank area across the row to the Remove button at the far
+    // edge; the name now stands at its natural width with its
+    // Remove beside it and no filler element in the row.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    try {
+      await clip.loadClip(ctx);
+      const source = ctx.container.querySelector('[data-testid="demo-cta-source"]');
+      if (!source) throw new Error("Base clip & look did not render");
+      if (source.classList.contains("surface") || source.classList.contains("surface-flush")) {
+        throw new Error("Base clip & look still wears its container face");
+      }
+      const second = ctx.container.querySelector('[data-testid="demo-cta-second"]');
+      if (!second) throw new Error("Second clip did not render");
+      if (!second.classList.contains("surface")) {
+        throw new Error("Second clip lost its container — only Base clip & look stands bare");
+      }
+      const toggle = ctx.container.querySelector('[data-testid="demo-cta-source"] > button');
+      if (!toggle) throw new Error("the bare section lost its toggle");
+      if (toggle.getAttribute("aria-expanded") !== "true") {
+        await clickEl(ctx, toggle, "open Base clip & look");
+      }
+      if (toggle.getAttribute("aria-expanded") !== "true") {
+        throw new Error("the bare section's toggle no longer opens it");
+      }
+      const remove = ctx.container.querySelector('[data-testid="demo-cta-remove-source"]');
+      if (!remove) throw new Error("the loaded base clip shows no Remove control");
+      const row = remove.parentElement;
+      if (!row || !row.textContent.includes("clip.mp4")) {
+        throw new Error("the Remove control does not stand in the uploaded clip's row");
+      }
+      if ([...row.querySelectorAll("*")].some((el) => el.classList.contains("flex-1"))) {
+        throw new Error("the base clip row still carries a filler element beside the clip's name");
       }
     } finally {
       clip.restore();

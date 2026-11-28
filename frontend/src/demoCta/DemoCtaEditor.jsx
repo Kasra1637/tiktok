@@ -168,11 +168,21 @@ function fontStack(id) {
  * 20px stacks, the shared card rhythm.
  *
  * `open`/`onToggle` are lifted so the parent can persist which groups are open.
+ *
+ * `bare` (Kasra's order, Nov 28 2026, Base clip & look only): the
+ * section loses its container whole — no border, no card
+ * background — and its heading row and body stand on the page
+ * itself, the bare-section doctrine HookSnap's bare sections
+ * follow (with no box there is no empty width to notice). The
+ * toggle, the testid and the content's own insets (the header's
+ * row-pad, the body's px-5) are unchanged; only the card face
+ * goes, and the flush card's zero stack gap is kept so the
+ * section's rhythm does not move.
  */
-function EditorSection({ title, icon, open, onToggle, testId, children }) {
+function EditorSection({ title, icon, open, onToggle, testId, bare = false, children }) {
   const panelId = useId();
   return (
-    <SectionCard flush data-testid={testId}>
+    <SectionCard flush={!bare} bare={bare} className={bare ? "space-y-0" : undefined} data-testid={testId}>
       <button
         type="button"
         onClick={onToggle}
@@ -472,7 +482,7 @@ function TransportButton({ label, onClick, disabled, children, testId, variant =
       aria-label={label}
       className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-indigo)]/40 disabled:pointer-events-none disabled:opacity-40 ${
         variant === "accent"
-          ? "border-transparent bg-[color:var(--brand-indigo)] text-white shadow-md hover:brightness-110"
+          ? "border-transparent bg-[color:var(--brand-indigo-deep)] text-muted-foreground shadow-md hover:brightness-110"
           : "border-[color:var(--hairline)] bg-secondary/40 text-foreground hover:border-[color:var(--hairline-strong)] hover:bg-secondary/60"
       }`}
     >
@@ -2293,7 +2303,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             standing instruction for finished work reads as an unanswered
             debt. Removing the clip brings it back. */}
         {recordBrief && appendItems.length === 0 && <RecordBriefNote brief={recordBrief} />}
-        <EditorSection title="Base clip & look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
+        {/* Base clip & look stands bare (Kasra's order, Nov 28
+            2026): only ever one base clip, and its container
+            displayed a blank empty space to the clip's right —
+            with no box there is no empty width to notice. Every
+            other section keeps its container. */}
+        <EditorSection title="Base clip & look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source" bare>
           {generation ? (
             <>
               <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -2327,7 +2342,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             </Button>
             {sourceFileName && (
               <>
-                <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground" title={sourceFileName}>
+                {/* The row hugs its clip (Kasra's order, Nov 28
+                    2026): the name stands at its natural width —
+                    no flex-1 filler stretching a blank area
+                    across the row to a far-edge Remove. */}
+                <span className="min-w-0 truncate text-sm text-muted-foreground" title={sourceFileName}>
                   {sourceFileName}
                 </span>
                 <Button

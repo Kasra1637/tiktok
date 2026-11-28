@@ -34,7 +34,7 @@ export function wizardDraftReducer(state, action) {
       return { ...state, tone: action.value, edits: { ...state.edits, tone: action.value } };
     case "edit-field": {
       const edits = { ...state.edits, [action.field]: action.value };
-      if (action.omitDefault && (!action.value || action.value === (state.project?.[action.field] || action.fallback || ""))) {
+      if (action.omitDefault && action.value === (state.project?.[action.field] || action.fallback || "")) {
         delete edits[action.field];
       }
       // The pick record (ADR 0373): a pick-shaped edit (omitDefault)
@@ -48,7 +48,17 @@ export function wizardDraftReducer(state, action) {
       // a fresh draft (resume, profile switch) clears it, which is
       // what keeps an untouched project showing no pick (ADR 0361)
       // while a clicked default stands picked.
-      const picks = action.omitDefault && action.value
+      //
+      // The record — and the restatement test above — key on the
+      // pick's presence, never its truthiness (Nov 28 2026, the
+      // same repair as the HookSnap draft): a pick whose value is
+      // "" is a choice the founder made, distinct from no pick at
+      // all; the old shape recorded nothing for a falsy value and
+      // deleted its edit outright, so a "" pick over a saved
+      // value could never take or save its clear. Create's own
+      // picks today carry no "" stop, so here the repair keeps
+      // the two reducers one rule, ahead of the same dead tap.
+      const picks = action.omitDefault
         ? { ...state.picks, [action.field]: action.value }
         : state.picks;
       return { ...state, edits, picks };

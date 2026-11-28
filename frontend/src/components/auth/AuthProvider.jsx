@@ -11,11 +11,11 @@ import { AuthTokenBridge } from "./AuthTokenBridge";
 const clerkAppearance = {
   variables: {
     // Brand colors
-    colorPrimary: "#818CF8",           // --brand-indigo (indigo-400)
+    colorPrimary: "#1F1884",           // --brand-indigo-deep
     colorDanger: "#FE2C55",            // --brand-coral
     colorSuccess: "#10B981",           // emerald-500
     colorWarning: "#F59E0B",           // amber-500
-    colorTextOnPrimaryBackground: "#FFFFFF",
+    colorTextOnPrimaryBackground: "#949BA8",  // the branded text color (--muted-foreground)
 
     // Surfaces — match the app's dark card layer
     colorBackground: "hsl(228, 14%, 10%)",          // --card
@@ -52,7 +52,7 @@ const clerkAppearance = {
 
     // Primary action button
     formButtonPrimary:
-      "!rounded-xl !bg-[#818CF8] hover:!bg-[#6366F1] !shadow-[0_0_0_1px_rgba(129,140,248,0.25),0_8px_28px_rgba(99,102,241,0.28)] font-semibold transition-colors",
+      "!rounded-xl !bg-[color:var(--brand-indigo-deep)] hover:!bg-[color:var(--brand-indigo-deep-2)] !shadow-[0_0_0_1px_rgba(129,140,248,0.25),0_8px_28px_rgba(99,102,241,0.28)] font-semibold text-muted-foreground transition-colors",
 
     // Input fields
     formFieldInput:

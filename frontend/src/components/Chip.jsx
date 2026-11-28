@@ -31,7 +31,7 @@ export function Chip({
   const sizing =
     size === "md" ? "px-3.5 py-1.5 text-sm gap-1.5" : "px-2.5 py-1 text-xs gap-1";
 
-  const activeTone = "btn-bevel-accent border-white/15 bg-[color:var(--brand-indigo)] text-white";
+  const activeTone = "btn-bevel-accent border-white/15 bg-[color:var(--brand-indigo-deep)] text-muted-foreground";
 
   return (
     <button

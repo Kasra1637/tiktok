@@ -92,7 +92,7 @@ export default function PlatformPreview({
       <div className="relative aspect-[9/16] w-full overflow-hidden rounded-[1.6rem] border border-[color:var(--hairline-strong)] bg-neutral-900 shadow-lg">
         {videoBroken ? (
           <div className="absolute inset-0 flex items-center justify-center px-6">
-            <p className="text-center text-sm text-white/60">
+            <p className="text-center text-sm text-muted-foreground">
               Preview unavailable — download it to view.
             </p>
           </div>
@@ -118,7 +118,7 @@ export default function PlatformPreview({
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center px-6">
-            <p className="text-center text-sm text-white/50">
+            <p className="text-center text-sm text-muted-foreground">
               The frame previews here once it renders.
             </p>
           </div>

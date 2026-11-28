@@ -83,10 +83,13 @@ export function DirectionSelect({
   // The slider form (Kasra's order, Nov 27 2026): the standing
   // picks stand as the unified slider's stops instead of buttons
   // — first on HookSnap's surface, then on Create's too, when
-  // the unified toggle spread app-wide. The reveal is untouched
-  // — New options still opens the full set as the pill row
-  // below, and a pick from it seats into the slider's stops by
-  // the same last-seat rule when the row stands collapsed again.
+  // the unified toggle spread app-wide. On a slider surface the
+  // slider is the control through the whole New options flow
+  // (Kasra's order, Nov 28 2026, superseding the reveal-to-pills
+  // design this comment used to state): the press never swaps
+  // the face to the pill row — the fresh set that lands becomes
+  // the slider's stops under the standing rule below. The pill
+  // reveal survives only on hosts that render without asSlider.
   asSlider = false,
 }) {
   // The options stand side by side wearing the resolution
@@ -99,8 +102,10 @@ export function DirectionSelect({
   // superseding ADR 0365's two-standing rule for these fields —
   // his 3–4 range rule now reaches Location and Wardrobe). The
   // rest of the set stands only once the founder presses "New
-  // options": the press reveals the set in place, and the
-  // refreshed set that lands in answer stays revealed. A set
+  // options": on a pill host the press reveals the set in place,
+  // and the refreshed set that lands in answer stays revealed;
+  // on a slider host the press changes no face — the refreshed
+  // set simply becomes the slider's stops (Nov 28 2026). A set
   // that arrives any other way — a profile or camera change
   // re-reads the lists — starts collapsed at four again. The
   // last-seat rule survives at the wider width: a saved pick
@@ -129,8 +134,12 @@ export function DirectionSelect({
     }
     wasRefreshingRef.current = Boolean(refresh?.refreshing);
   }, [refresh?.refreshing]);
-  let shown = revealed ? all : all.slice(0, 4);
-  if (!revealed && value && all.includes(value) && !shown.includes(value)) {
+  // The reveal exists only on pill hosts: on a slider surface
+  // `revealed` is never read, so the standing set is always the
+  // four stops and the face can never flip mid-flow (Nov 28 2026).
+  const reveal = revealed && !asSlider;
+  let shown = reveal ? all : all.slice(0, 4);
+  if (!reveal && value && all.includes(value) && !shown.includes(value)) {
     shown = [...all.slice(0, 3), value];
   }
   return (
@@ -157,7 +166,7 @@ export function DirectionSelect({
           </button>
         )}
       </div>
-      {asSlider && options && !revealed ? (
+      {asSlider && options ? (
         <div data-testid={testId} data-value={value || ""}>
           <PickSlider
             options={shown.map((option) => ({ value: option, label: directionButtonLabel(option) }))}

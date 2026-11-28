@@ -1196,6 +1196,19 @@ async def update_studio_project(
         # and needs no proof. Generation resolves the pick against
         # the profile again when the hook is written, so a line the
         # profile has since dropped steers nothing.
+        #
+        # A line that does not resolve is NOT refused (Kasra's
+        # autosave failure, Nov 28 2026, superseding the 400 this
+        # block used to raise): the offered lists agree on both
+        # sides, so an unresolvable incoming line is a stale pick —
+        # an outcome refresh rewrote the profile's lines, or the
+        # pick predates a profile change — and the background draft
+        # sync resends it with every unrelated edit, so refusing
+        # failed EVERY autosave, not just the focus save. The pick
+        # is stored as cleared instead: the same end state the read
+        # path already assumes for a dropped line, and the
+        # grounding intent stands — an ungrounded line never
+        # steers, because it is never stored.
         focus = " ".join(str(updates["hook_focus"] or "").split()).strip()
         if focus:
             profile = await _fetch_one(
@@ -1203,13 +1216,7 @@ async def update_studio_project(
                 (row.get("brand_profile_id"), user_id),
             )
             if focus not in ai_service.profile_focus_lines(profile or {}):
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "Focus has to be one of this app's own outcomes — "
-                        "pick from the app's outcomes, or let the app choose."
-                    ),
-                )
+                focus = ""
         updates["hook_focus"] = focus or None
 
     set_clauses, values = [], []

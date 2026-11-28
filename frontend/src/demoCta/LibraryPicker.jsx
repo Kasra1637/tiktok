@@ -334,7 +334,7 @@ export function LibraryPicker({
                             <span className="relative block aspect-[3/4] bg-secondary/40">
                               <PickerThumb asset={asset} />
                               {selected && (
-                                <span className="absolute right-1.5 top-1.5 flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-full bg-[color:var(--brand-indigo)] px-1 text-xs font-semibold text-white">
+                                <span className="absolute right-1.5 top-1.5 flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-full bg-[color:var(--brand-indigo-deep)] px-1 text-xs font-semibold text-muted-foreground">
                                   <Check className="h-3.5 w-3.5" aria-hidden="true" />
                                   {slot === "second" && order ? order : null}
                                 </span>

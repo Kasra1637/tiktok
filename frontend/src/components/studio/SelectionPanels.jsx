@@ -6,7 +6,7 @@ import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Alert, AlertDescription } from "../ui/alert";
 
-import { GroupLabel, SectionHeading } from "../SectionCard";
+import { GroupLabel, SectionHeading, SectionRevealBody, useUnlockReveal } from "../SectionCard";
 
 import { FitBadge } from "../FitBadge";
 
@@ -1098,6 +1098,10 @@ export function PresenterPhotoControl({
   // Create wizard's step card read thinner and smaller beside
   // them. The wizard never passes it: inside a step card the
   // inset panel is the matching level, and it renders as before.
+  // The unlock reveal (Kasra's order, Nov 28 2026) rides the same
+  // hook SectionCard uses: an unlock grows this panel's body open
+  // and the panel wears the glow for the moment.
+  const { revealing, inFlow } = useUnlockReveal(collapsed);
   const body = (
     <>
       <p className="text-sm text-muted-foreground" data-subtitle="">
@@ -1133,7 +1137,7 @@ export function PresenterPhotoControl({
     <div
       id={TEMPLATE_PHOTO_ID}
       data-testid="template-photo"
-      className={card ? "surface rounded-2xl scroll-mt-4 space-y-5" : "inset-panel scroll-mt-4 space-y-4"}
+      className={`${card ? "surface rounded-2xl scroll-mt-4 space-y-5" : "inset-panel scroll-mt-4 space-y-4"}${revealing ? " section-reveal-glow" : ""}`}
     >
       {card ? (
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1144,7 +1148,14 @@ export function PresenterPhotoControl({
       ) : (
         <GroupLabel icon={ImageIcon}>Presenter photo</GroupLabel>
       )}
-      {collapsed ? <div hidden data-collapsed-body="">{body}</div> : body}
+      <SectionRevealBody
+        collapsed={collapsed}
+        revealing={revealing}
+        inFlow={inFlow}
+        innerClassName={card ? "space-y-5" : "space-y-4"}
+      >
+        {body}
+      </SectionRevealBody>
     </div>
   );
 }

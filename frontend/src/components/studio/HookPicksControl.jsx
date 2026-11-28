@@ -1,9 +1,57 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Focus, HelpCircle, Maximize2, MessagesSquare, RefreshCw, Rocket, X } from "lucide-react";
+import { AudioWaveform, Check, Eye, Focus, Maximize2, RefreshCw, Shapes, Sparkles, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { CONTROL_CLASS } from "../formControls";
 import { GroupLabel } from "../SectionCard";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+
+/**
+ * The hint beside a pick's title (Kasra's order, Nov 28 2026):
+ * a small, quiet round button wearing the lucide Eye glyph.
+ * It began the same day as the info "i" in a circle; Kasra
+ * switched it to the eye by direct ruling later that day, and
+ * the Info glyph stands nowhere in this control now. Hovering,
+ * focusing or tapping the eye opens one short line about this
+ * exact pick in the shared tooltip — a tap focuses the
+ * button, and focus opens the tip, so touch gets the same line
+ * hover does. Nothing stands under the toggle: the standing
+ * explainer lines removed the night before stay removed, and
+ * this overview exists only on demand. The pick names stand on
+ * their own; the line is supplemental, never the only place a
+ * meaning lives.
+ */
+export function PickInfoHint({ label, text, testId }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip open={open} onOpenChange={setOpen}>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            data-testid={testId}
+            aria-label={`${label}: ${text}`}
+            onClick={() => setOpen(true)}
+            className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground"
+          >
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{text}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+// The picks' one-line overviews, in the app's voice: what each
+// steering pick means, short enough to read at a glance inside
+// a tooltip.
+const PICK_INFO = {
+  focus: "What the hook aims at — the outcome it works toward.",
+  tone: "How the hook sounds — plain, warm or bold.",
+  shape: "The hook's form — a question, a statement or a command.",
+  opening: "How the hook starts — mid-action, on a feeling or on a reaction.",
+};
 
 /**
  * The founder's steering picks for the Hook + CTA hook (ADR 0247),
@@ -370,6 +418,7 @@ export default function HookPicksControl({
   const focusHeader = (
         <div className="flex items-center gap-2">
           <GroupLabel icon={Focus}>Focus</GroupLabel>
+          <PickInfoHint label="Focus" text={PICK_INFO.focus} testId={`${testId}-focus-info`} />
           {/* The outcome refresh (ADR 0288, Kasra's order): one click
               writes a fresh outcome layer onto the profile from its
               stored facts — the fresh ideas land in this list, and a
@@ -541,7 +590,10 @@ export default function HookPicksControl({
           </div>
 
           <div className="space-y-2">
-            <GroupLabel icon={MessagesSquare}>Tone</GroupLabel>
+            <div className="flex items-center gap-1.5">
+              <GroupLabel icon={AudioWaveform}>Tone</GroupLabel>
+              <PickInfoHint label="Tone" text={PICK_INFO.tone} testId={`${testId}-tone-info`} />
+            </div>
             <PickSlider
               options={TONE_OPTIONS}
               current={toneValue}
@@ -553,7 +605,10 @@ export default function HookPicksControl({
           </div>
 
           <div className="space-y-2">
-            <GroupLabel icon={HelpCircle}>Shape</GroupLabel>
+            <div className="flex items-center gap-1.5">
+              <GroupLabel icon={Shapes}>Shape</GroupLabel>
+              <PickInfoHint label="Shape" text={PICK_INFO.shape} testId={`${testId}-shape-info`} />
+            </div>
             <PickSlider
               options={SHAPE_OPTIONS}
               current={shapeValue}
@@ -565,7 +620,10 @@ export default function HookPicksControl({
           </div>
 
           <div className="space-y-2">
-            <GroupLabel icon={Rocket}>Opening</GroupLabel>
+            <div className="flex items-center gap-1.5">
+              <GroupLabel icon={Sparkles}>Opening</GroupLabel>
+              <PickInfoHint label="Opening" text={PICK_INFO.opening} testId={`${testId}-opening-info`} />
+            </div>
             <PickSlider
               options={OPENING_OPTIONS}
               current={openingValue}
@@ -579,7 +637,10 @@ export default function HookPicksControl({
       ) : (
         <div className="section-pair">
           <div className="space-y-2">
-            <GroupLabel icon={MessagesSquare}>Tone</GroupLabel>
+            <div className="flex items-center gap-1.5">
+              <GroupLabel icon={AudioWaveform}>Tone</GroupLabel>
+              <PickInfoHint label="Tone" text={PICK_INFO.tone} testId={`${testId}-tone-info`} />
+            </div>
             <PickPills
               options={TONE_OPTIONS}
               current={toneValue}
@@ -591,7 +652,10 @@ export default function HookPicksControl({
           </div>
 
           <div className="space-y-2">
-            <GroupLabel icon={HelpCircle}>Shape</GroupLabel>
+            <div className="flex items-center gap-1.5">
+              <GroupLabel icon={Shapes}>Shape</GroupLabel>
+              <PickInfoHint label="Shape" text={PICK_INFO.shape} testId={`${testId}-shape-info`} />
+            </div>
             <PickPills
               options={SHAPE_OPTIONS}
               current={shapeValue}

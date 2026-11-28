@@ -120,7 +120,7 @@ function RenderMockup() {
           data-testid="render-mock-safe-tiktok"
           className="pointer-events-none absolute bottom-[20%] left-[6%] right-[16%] top-[10%] rounded-md border border-dashed border-white/40"
         >
-          <span className="absolute right-1 top-0.5 text-xs font-semibold text-white/70">TikTok</span>
+          <span className="absolute right-1 top-0.5 text-xs font-semibold text-muted-foreground">TikTok</span>
         </div>
         <div
           data-testid="render-mock-safe-instagram"

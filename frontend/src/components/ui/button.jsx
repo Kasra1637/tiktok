@@ -43,7 +43,7 @@ const buttonVariants = cva(
         brand:
           "btn-bevel-brand border border-[color:var(--indigo-35)] bg-secondary font-semibold text-foreground hover:border-[color:var(--indigo-45)] hover:bg-secondary",
         accent:
-          "btn-bevel-accent border border-white/15 bg-[color:var(--brand-indigo)] font-semibold text-white hover:border-white/25",
+          "btn-bevel-accent border border-white/15 bg-[color:var(--brand-indigo-deep)] font-semibold text-muted-foreground hover:border-white/25",
       },
       size: {
         default: "h-11 px-5 py-2.5",

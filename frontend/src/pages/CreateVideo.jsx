@@ -323,6 +323,19 @@ export default function CreateVideo() {
   // can never disagree about where the founder is — only about how much of
   // the workflow stands around the step in view.
   const desktopPages = useDesktopWidth();
+  // The unlock glow (Kasra's order, Nov 28 2026): when a step's
+  // body opens — the step changes — its section wears the reveal
+  // glow for the animation's length, the same ~900ms indigo pulse
+  // HookSnap's cards wear at an unlock. The body's own grow is
+  // pure CSS on its mount; this state is only the section's glow,
+  // keyed on the step so autosaves and pick changes never re-fire
+  // it.
+  const [glowingStep, setGlowingStep] = useState("");
+  useEffect(() => {
+    setGlowingStep(STEPS[step]?.key || "");
+    const timer = setTimeout(() => setGlowingStep(""), 950);
+    return () => clearTimeout(timer);
+  }, [step]);
   const [profiles, setProfiles] = useState([]);
   // Inline approval on the profile step: which draft is mid-approval, and
   // the refusal each draft last earned, keyed by profile id so one app's
@@ -3476,7 +3489,7 @@ export default function CreateVideo() {
               data-locked={isLocked ? "true" : "false"}
               className={`surface surface-step scroll-mt-24 rounded-2xl ${
                 active ? "ring-1 ring-[color:var(--indigo-35)]" : ""
-              } ${isLocked ? "opacity-60" : ""} ${
+              } ${glowingStep === s.key ? "section-reveal-glow" : ""} ${isLocked ? "opacity-60" : ""} ${
                 // One tightened step (ADR 0328): Audience & template's
                 // inside padding is trimmed so its cards sit flush.
                 s.key === "angle" ? "surface-step-tight" : ""
@@ -3528,21 +3541,32 @@ export default function CreateVideo() {
                 <div
                   id={`wizard-section-body-${s.key}`}
                   data-testid={`wizard-section-body-${s.key}`}
-                  className="wizard-section-enter border-t border-[color:var(--hairline)] pt-4"
+                  className="section-reveal section-reveal-revealing"
                 >
-                  {isLocked && (
-                    <div
-                      data-testid={`wizard-section-locked-${s.key}`}
-                      className="inset-panel mb-4 flex items-center gap-2 text-sm text-muted-foreground"
-                    >
-                      <Lock className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span>
-                        Locked — finish <strong className="font-semibold">{lockedBy}</strong> to unlock{" "}
-                        <strong className="font-semibold">{s.label}</strong>.
-                      </span>
-                    </div>
-                  )}
-                  {stepContent}
+                  {/* The unlock reveal (Kasra's order, Nov 28
+                      2026) replaces the plain wizard-section-enter
+                      rise here: the body mounts when its step
+                      opens, so the mount itself is the open — the
+                      wrapper grows the container open while this
+                      inner cell fades and rises, one reveal per
+                      open, never both motions. The divider and
+                      the step's inset ride the inner cell, so at
+                      rest the body stands exactly as before. */}
+                  <div className="section-reveal-inner border-t border-[color:var(--hairline)] pt-4">
+                    {isLocked && (
+                      <div
+                        data-testid={`wizard-section-locked-${s.key}`}
+                        className="inset-panel mb-4 flex items-center gap-2 text-sm text-muted-foreground"
+                      >
+                        <Lock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span>
+                          Locked — finish <strong className="font-semibold">{lockedBy}</strong> to unlock{" "}
+                          <strong className="font-semibold">{s.label}</strong>.
+                        </span>
+                      </div>
+                    )}
+                    {stepContent}
+                  </div>
                 </div>
               )}
             </section>

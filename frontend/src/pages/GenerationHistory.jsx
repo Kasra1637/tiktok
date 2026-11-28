@@ -657,7 +657,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, d
                     className="pointer-events-none absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap gap-1.5"
                     data-testid="history-preview-meta"
                   >
-                    <FactChip className="border-white/25 bg-black/65 text-white backdrop-blur-sm">{humanize(row.objective)}</FactChip>
+                    <FactChip className="border-white/25 bg-black/65 text-muted-foreground backdrop-blur-sm">{humanize(row.objective)}</FactChip>
                   </span>
                 )}
                 {!hasPlayed && row.duration ? (
@@ -665,7 +665,7 @@ const GenerationRow = memo(function GenerationRow({ row, onChanged, onUpdated, d
                     className="pointer-events-none absolute right-2 top-2 z-10 flex max-w-[calc(100%-1rem)] items-center gap-1.5"
                     data-testid="history-preview-duration"
                   >
-                    <FactChip className="border-white/25 bg-black/65 text-white backdrop-blur-sm">{row.duration}s</FactChip>
+                    <FactChip className="border-white/25 bg-black/65 text-muted-foreground backdrop-blur-sm">{row.duration}s</FactChip>
                   </span>
                 ) : null}
               </span>

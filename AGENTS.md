@@ -392,6 +392,122 @@ One render path, single-pass video generation via OpenRouter.
   is the whole information. `lib/pickExplainers.js` is deleted
   and the PickSlider renders no explainer; this supersedes the
   explainer lines in the rounds above.
+- Unlock reveal (Nov 28 2026, Kasra's order, his pick from a
+  live mockup): a section that unlocks grows open — the
+  `.section-reveal` grid expansion (520ms, rise-settle's ease),
+  the body rising inside it, one indigo glow — on HookSnap's
+  collapsed sections and Create's wizard bodies, replacing the
+  wizard's plain rise. It fires only on the unlock, armed by
+  the founder's first interaction so a page load never
+  animates, and reduced motion stills it.
+- Focus left stop fixed (Nov 28 2026, Kasra's report): the
+  Focus slider's "Let the app choose" ("") could never take
+  over a saved line — both draft reducers keyed the pick
+  record and the restatement test on truthiness. They key on
+  presence now: a "" pick is a real pick, overrides the saved
+  line, and its clear saves.
+- Spoken-line heading deleted (Nov 28 2026, Kasra's order):
+  The hook's spoken-line area loses its "The spoken line"
+  heading and the subtitle under it, whole, no replacement.
+- Pick icons + info circles (Nov 28 2026, Kasra's order): Tone
+  wears a sound wave, Shape an outline shapes glyph, Opening a
+  spark; beside each hook pick's title an Info circle shows
+  one overview line on hover, focus or tap — on demand only,
+  never a standing line under the toggle.
+- The hook container shortened (Nov 28 2026, Kasra's order):
+  The hook's card covers the four pick groups only; the
+  spoken-line area and the generate row stand bare below it
+  under the same gate, with the same unlock reveal.
+- No white text (Nov 28 2026, Kasra's order): the app's one
+  branded text color is the inactive sidebar link's —
+  `--muted-foreground` (220 10% 62%) — and `--foreground`,
+  `--card-foreground`, `--popover-foreground`,
+  `--accent-foreground` and `--secondary-foreground` all stand
+  at it, headlines included; no `text-white` stands outside the
+  seats `scripts/check-contrast.cjs` names. Held by name there:
+  `--primary-foreground` and `--destructive-foreground` keep
+  white on their saturated fills, and white text on the light
+  indigo fill (`--brand-indigo`) is held seat by seat — the
+  branded color measures ~1.8:1 / ~1.7:1 / 1.07:1 on those
+  fills and cannot clear the gate's AA floor. Icon glyphs are
+  not font color and are untouched.
+- No held seats — the fills changed (Nov 28 2026, Kasra's
+  order, superseding the hold in the entry above):
+  `--primary-foreground` and `--destructive-foreground`
+  stand at the branded color too, on deepened fills —
+  `--primary` 244 75% 31%, `--destructive` 0 72% 21% (a
+  deep red, still in family). The light indigo's text seats
+  ride the new deep indigo tokens (`--brand-indigo-deep` /
+  `--brand-indigo-deep-2`): the bevel-accent gradient (the
+  default and accent buttons, the selected chip), the
+  Demo + CTA transport accent, the library picker's count
+  badge, the skip link, the error page's reload button and
+  the landing mock's indigo badges all carry the branded
+  color on the deep stops, gate-measured in
+  check-contrast.cjs. White remains only on icon glyphs
+  (logo tiles, done-badge checks, the knob's grip lines)
+  and in canvas/video paint — never on text. The Clerk
+  sign-in/sign-up primary button folds in too: its variables
+  and formButtonPrimary classes ride the deep indigo with the
+  branded text hex, pinned in the same gate.
+- Hook card height (Nov 28 2026, Kasra's order): The hook's
+  card matches Place and wardrobe's exactly — both pick bodies
+  carry `.hook-snap-pick-body` (index.css), one shared
+  min-height (7.1875rem) from the pick rhythm, from 1024px
+  where the trio and quad stand on one line; neither card's
+  content is shrunk.
+- Base clip & look stands bare (Nov 28 2026, Kasra's order):
+  the Demo + CTA editor's Base clip & look section loses its
+  container whole (`bare` on its EditorSection) — heading,
+  toggle, testid and content insets unchanged, only the card
+  face goes; Second clip and every other editor section keep
+  their containers. The uploaded clip's row hugs its content:
+  the clip's name no longer stands on a flex-1 filler, so no
+  blank area stretches to the right of it.
+- Pick hint wears the eye (Nov 28 2026, Kasra's ruling):
+  the PickInfoHint beside each hook pick's title wears the
+  lucide Eye, superseding the info circle in the pick-icons
+  entry above — same button, same seat, same one-line
+  overviews on hover, focus or tap; the Info glyph stands
+  nowhere in the control.
+- New options never switches the face (Nov 28 2026, Kasra's
+  order): on asSlider surfaces DirectionSelect stays the
+  PickSlider through the whole New options flow — the fresh
+  set becomes its stops under the standing four-stop rule
+  (a current pick outside the four takes the fourth seat),
+  and the reveal-to-pills path is gone there; hosts without
+  asSlider keep the reveal exactly as before. This
+  supersedes the reveal half of the direction-sliders entry
+  above.
+- Craft check leaves HookSnap (Nov 28 2026, Kasra's order):
+  the CraftCheckCard beside the HookSnap hook line is
+  removed whole, superseding the Nov 27 2026 entry that
+  placed it there. Create's Craft check, the backend
+  evaluation and the quality_report payload are untouched.
+- Stale focus pick clears instead of failing the save
+  (Nov 28 2026, Kasra's live autosave failure): the studio
+  PATCH no longer 400s when the incoming hook_focus is a
+  line the profile no longer carries — the pick stores as
+  cleared and every other field in the patch saves. A pick
+  in the current list still saves; an empty pick still
+  clears; an ungrounded line is never stored, so it never
+  steers.
+- Demo + CTA and Post kit hidden until the video (Nov 28
+  2026, Kasra's order): on HookSnap both sections render
+  only on hookFinished — no card, no heading, no
+  placeholder, no blank space before that (the Demo + CTA
+  "Render the hook above first" paragraph is removed). In
+  the flow of work they appear with the Expand unlock
+  reveal (SectionCard's revealOnAppear, armed by the
+  page's first interaction); a project that loads finished
+  shows them standing, unanimated. The post kit's
+  open-on-the-hook rule waits behind the same gate; the
+  sections' insides are otherwise unchanged.
+- Render the hook loses its title (Nov 28 2026, Kasra's
+  order): HookSnap's render section drops its all-caps
+  title and icon whole — no replacement; the bare section,
+  its collapse and everything inside it stand as before,
+  and the region keeps an aria-label.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no

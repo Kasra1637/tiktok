@@ -2,10 +2,8 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
-  AudioLines,
   Briefcase,
   Captions,
-  Clapperboard,
   Compass,
   Film,
   MapPin,
@@ -16,7 +14,7 @@ import {
 } from "lucide-react";
 import PageFrame from "../components/PageFrame";
 import PageHeader from "../components/PageHeader";
-import SectionCard, { GroupLabel } from "../components/SectionCard";
+import SectionCard, { GroupLabel, SectionRevealBody, useUnlockReveal } from "../components/SectionCard";
 import EmptyState from "../components/EmptyState";
 import { AppPicker } from "../components/AppPicker";
 import { Button } from "../components/ui/button";
@@ -28,7 +26,6 @@ import HookRenderPanel from "../components/studio/HookRenderPanel";
 import VoiceModeControl from "../components/studio/VoiceModeControl";
 import HookPicksControl, { profileOutcomeLines, profileOutcomeMenuStale } from "../components/studio/HookPicksControl";
 import PostKitSection from "../components/PostKitSection";
-import { CraftCheckCard } from "../components/CraftCheckCard";
 import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { useWizardDirections } from "./useWizardDirections";
 import { useTourEligibility } from "../components/onboarding/OnboardingProvider";
@@ -111,8 +108,7 @@ function hookCtaDraftReducer(state, action) {
       const edits = { ...state.edits, [action.field]: action.value };
       if (
         action.omitDefault &&
-        (!action.value ||
-          action.value === (state.project?.[action.field] || action.fallback || ""))
+        action.value === (state.project?.[action.field] || action.fallback || "")
       ) {
         delete edits[action.field];
       }
@@ -126,7 +122,20 @@ function hookCtaDraftReducer(state, action) {
       // on Create. Save adoptions keep the record; opening a
       // draft or switching apps clears it, so an untouched draft
       // still shows no pick (ADR 0364).
-      const picks = action.omitDefault && action.value
+      //
+      // The record — and the restatement test above — key on the
+      // pick's presence, never its truthiness (Kasra's live
+      // report, Nov 28 2026): a pick whose value is "" (the
+      // Focus slider's left stop, "Let the app choose") is a
+      // choice the founder made, distinct from no pick at all.
+      // The old shape recorded nothing for a falsy value and
+      // deleted its edit outright, so over a saved focus line
+      // the left stop could never take — no edit stood, the
+      // clear never saved, and the read fell back to the saved
+      // line and snapped the knob back to it. Now a "" pick
+      // restates only when the saved value is itself "", stands
+      // as a real edit over a saved line, and is remembered.
+      const picks = action.omitDefault
         ? { ...state.picks, [action.field]: action.value }
         : state.picks;
       return { ...state, edits, picks };
@@ -633,6 +642,20 @@ export default function HookCta() {
   // requires. A section whose own content already exists (a
   // photo attached, a finished render) stands open on that alone,
   // so a returning project resolves open in sequence from state.
+  //
+  // Nov 28 2026 (Kasra's order, superseding the two rules above
+  // for these sections): Demo + CTA and the Post kit do not
+  // stand at all until the render has finished — no card, no
+  // heading, no placeholder, no blank space; both render only
+  // on hookFinished. The post kit's open-on-the-hook rule and
+  // its caption preview (ADR 0353) wait behind the same gate
+  // now: the section's insides are unchanged, they simply have
+  // no standing place before the video shows. When the finish
+  // lands in the flow of work the two sections appear with the
+  // unlock reveal (revealOnAppear below, armed by this page's
+  // first interaction); a project that loads already finished
+  // shows them standing from the start, unanimated, as every
+  // section does at first paint.
   const photoAttached = (project?.assets || []).some(
     (asset) => Boolean(asset) && asset.kind === "character_reference"
   );
@@ -644,6 +667,29 @@ export default function HookCta() {
   const renderSectionOpen = photoAttached || hookFinished;
   const finishSectionOpen = hookFinished;
   const postKitSectionOpen = hasHook || hookFinished;
+  // The appear arm for the two finish-gated sections: the
+  // page's first interaction (a pick, a tap on Generate or
+  // Render) is what makes their later appearance an in-flow
+  // unlock worth animating. A page that loads with the video
+  // already on file never arms before they mount, so they stand
+  // at first paint exactly as they do today.
+  const [pageArmed, setPageArmed] = useState(false);
+  useEffect(() => {
+    const arm = () => setPageArmed(true);
+    window.addEventListener("pointerdown", arm);
+    window.addEventListener("keydown", arm);
+    window.addEventListener("click", arm);
+    return () => {
+      window.removeEventListener("pointerdown", arm);
+      window.removeEventListener("keydown", arm);
+      window.removeEventListener("click", arm);
+    };
+  }, []);
+  // The spoken-line area stands bare below The hook's card
+  // (Kasra's order, Nov 28 2026 — the card covers the picks
+  // only), and it opens under this same gate with the same
+  // unlock reveal, so the step still reads as one opening.
+  const hookEditorsReveal = useUnlockReveal(!hookSectionOpen);
   // The preview stands only while the line on screen is the line
   // it was written from (ADR 0353).
   const currentHookLine = String(editValue("hook_line", "") || "").trim();
@@ -779,7 +825,11 @@ export default function HookCta() {
                   card's inset on the one line; the trio keeps the
                   body's full width, so its dividers stand exactly
                   between their groups (ADR 0364's rule). */}
-              <div className="space-y-4">
+              {/* The shared pick-body height (Kasra's order,
+                  Nov 28 2026): this body and The hook's body
+                  carry .hook-snap-pick-body, so the two cards
+                  stand at one height — see index.css. */}
+              <div className="hook-snap-pick-body space-y-4">
                 {/* Nov 27 2026 (Kasra's order, from his mockup):
                     Voice, Location and Wardrobe stand on ONE line
                     in .section-trio — the pair mechanism carried to
@@ -795,9 +845,12 @@ export default function HookCta() {
                     inside the Voice area. Each DirectionSelect
                     heading wears the one GroupLabel eyebrow face
                     with its own icon (ADR 0364), the four standing
-                    picks stand as slider stops until New options
-                    (Nov 27 2026, superseding ADR 0365's two; the
-                    slider form, Nov 27 2026), and the
+                    picks stand as slider stops, and stay slider
+                    stops through New options — the fresh set
+                    becomes the stops, the face never swaps to
+                    pills (Nov 27 2026, superseding ADR 0365's
+                    two; the slider form, Nov 27 2026; the face
+                    held, Nov 28 2026), and the
                     plan-default line stands under the row. Below
                     1024px the trio stacks and the stylesheet's
                     rhythm puts a hairline between each two groups. */}
@@ -854,8 +907,15 @@ export default function HookCta() {
           )}
 
           {project && (
+            <>
             <SectionCard title="The hook" icon={Zap} data-testid="hook-cta-hook-card" collapsed={!hookSectionOpen}>
-              <div className="space-y-4">
+              {/* The shared pick-body height (Kasra's order,
+                  Nov 28 2026): this body and Place and
+                  wardrobe's body carry .hook-snap-pick-body, so
+                  the two cards stand at one height — see
+                  index.css. While the card stands collapsed the
+                  body is hidden and the height rests with it. */}
+              <div className="hook-snap-pick-body space-y-4">
                 {/* ADR 0351: no hook length pick — a HookSnap video is
                     always five seconds, so there is nothing to choose
                     and no 4/5 buttons to show. The server pins the
@@ -886,9 +946,24 @@ export default function HookCta() {
                   stale={picksStale && hasHook}
                 />
               </div>
+            </SectionCard>
 
-              {/* The spoken line area (ADR 0254): the label, the line
-                  itself and the card's one hook button at the area's
+            {/* The container covers the four pick groups only
+                (Kasra's order, Nov 28 2026, approved from the
+                Now/Proposed mockup): the spoken-line area below
+                stands bare, with no card around it — the tall
+                container's dead space beside the button is gone,
+                the same dead-space doctrine as the page's other
+                bare sections. It opens under the card's own gate
+                and grows open with the same Expand reveal, so
+                the step still reads as one opening. */}
+            <SectionRevealBody
+              collapsed={!hookSectionOpen}
+              revealing={hookEditorsReveal.revealing}
+              inFlow={hookEditorsReveal.inFlow}
+            >
+              {/* The spoken line area (ADR 0254): the line
+                  itself and the page's one hook button at the area's
                   foot, in that order in BOTH states — Generate the
                   hook before a line exists, Generate a new hook once
                   one does (ADR 0313: the one button is a generate in
@@ -907,15 +982,12 @@ export default function HookCta() {
                   on this page: the editor now renders only once a
                   hook line exists, so no blank field stands in the
                   area before the first generate. */}
-              {/* Layout reset: the spoken-line area's label, its
-                  subtitle, the editor and its button row all start
-                  at the card's inset, on the one line — nothing
-                  centered. */}
+              {/* Layout reset: the spoken-line area's editor and
+                  its button row start at the one inset line —
+                  nothing centered. The area's label and subtitle
+                  are deleted whole (Kasra's order, Nov 28 2026):
+                  no heading stands over the editor now. */}
               <div className="space-y-4" data-testid="hook-editors">
-                <GroupLabel icon={AudioLines}>The spoken line</GroupLabel>
-                <p className="text-sm text-muted-foreground" data-subtitle="">
-                  The hook line, checked as you edit — sharpen it if you like.
-                </p>
 
                 {lineRevealed && (
                   <HookLineEditor
@@ -927,18 +999,14 @@ export default function HookCta() {
                   />
                 )}
 
-                {/* The hook's Craft score (Kasra's order, Nov 27
-                    2026): the exact indicator Create's Review shows,
-                    from the shared component, standing beside the
-                    hook line here in The hook section — never in the
-                    cover area. The report is the hook endpoint's own
-                    payload: the model evaluation of the hook alone
-                    (this page has no script), scored when the hook
-                    was generated, so the card reads the line on file,
-                    not an unsaved edit. */}
-                {lineRevealed && project.quality_report && (
-                  <CraftCheckCard report={project.quality_report} />
-                )}
+                {/* No Craft check UI stands on this page (Kasra's
+                    removal order, Nov 28 2026, superseding his
+                    Nov 27 2026 order that placed the card here):
+                    the hook's quality_report still rides the
+                    generation payload and Create keeps its Craft
+                    check — only HookSnap's rendering of the card
+                    is gone, so the editors block holds the line
+                    editor and the generate row alone. */}
 
                 {/* The card's ONE hook button (ADR 0313,
                     superseding the Hook + CTA half of ADR 0249's
@@ -955,7 +1023,7 @@ export default function HookCta() {
                     this page: Kasra ruled the two hook buttons were
                     too much — "Just keep generate a new hook" — and
                     the editor above mounts without its own rewrite,
-                    so no suggestion stands anywhere in the card.
+                    so no suggestion stands anywhere in the area.
                     Create Video's Review keeps its own clearer-hook
                     button (ADR 0205 untouched). The generate busy
                     state is plain: no countdown rides this wait
@@ -1000,7 +1068,8 @@ export default function HookCta() {
                   )}
                 </div>
               </div>
-            </SectionCard>
+            </SectionRevealBody>
+            </>
           )}
 
           {/* ADR 0355: the presenter photo section stands above the
@@ -1023,8 +1092,12 @@ export default function HookCta() {
             />
           )}
 
+          {/* No headline stands over the render (Kasra's order,
+              Nov 28 2026): only the all-caps title and its icon
+              came off — the section, its collapse and everything
+              inside it stand exactly as before. */}
           {project && (
-            <SectionCard bare title="Render the hook" icon={Clapperboard} data-testid="hook-cta-render-card" collapsed={!renderSectionOpen}>
+            <SectionCard bare data-testid="hook-cta-render-card" aria-label="Render the hook" collapsed={!renderSectionOpen}>
               <div className="space-y-4">
                 <HookRenderPanel
                   project={{
@@ -1041,29 +1114,20 @@ export default function HookCta() {
             </SectionCard>
           )}
 
-          {project && (
-            <SectionCard title="Demo + CTA" icon={Film} data-testid="hook-cta-finish-card" collapsed={!finishSectionOpen}>
+          {project && hookFinished && (
+            <SectionCard title="Demo + CTA" icon={Film} data-testid="hook-cta-finish-card" collapsed={!finishSectionOpen} revealOnAppear={pageArmed}>
               <div className="space-y-4">
-                {hookFinished ? (
-                  <>
-                    <DemoCtaGenerationEditor key={generation.id} generationId={generation.id} />
-                    <p className="text-sm text-muted-foreground">
-                      The export is saved beside the hook in History, ready to post as one
-                      video — hook first, then your demo and call to action.
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Render the hook above first — the demo and call to action are joined
-                    onto the finished hook here, and the combined video is what you post.
-                  </p>
-                )}
+                <DemoCtaGenerationEditor key={generation.id} generationId={generation.id} />
+                <p className="text-sm text-muted-foreground">
+                  The export is saved beside the hook in History, ready to post as one
+                  video — hook first, then your demo and call to action.
+                </p>
               </div>
             </SectionCard>
           )}
 
-          {project && (
-            <SectionCard title="Post kit" icon={Share2} data-testid="hook-cta-post-kit" collapsed={!postKitSectionOpen}>
+          {project && hookFinished && (
+            <SectionCard title="Post kit" icon={Share2} data-testid="hook-cta-post-kit" collapsed={!postKitSectionOpen} revealOnAppear={pageArmed}>
               <div className="space-y-4">
                 {hookFinished ? (
                   generation.post_kit ? (
