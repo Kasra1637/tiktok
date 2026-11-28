@@ -420,6 +420,15 @@ body {
     padding: 12px;
 }
 
+/* The Demo + CTA trim timeline's tracks tighten the same way (Kasra's
+   order, Nov 27 2026): two tracks stand in the preview column's height
+   budget, so their gutter is 12px vertical / 14px horizontal instead of
+   the global 20px. The face is unchanged — same border, radius and
+   fill as every `.inset-panel` — only the gutter moves. */
+.trim-timeline .inset-panel {
+    padding: 12px 14px;
+}
+
 /* A small bordered aside inside a card (ratings, warnings, pre-render notes).
    Never a full card nested inside a card. 20px gutter, same step as cards. */
 .inset-panel {
@@ -666,23 +675,28 @@ body {
  * distorted and the frame never leaves dead space beside it. The column is a
  * fixed 740px at xl, so this width is normally bounded by height, not by the
  * track. The 15rem below budgets the same page chrome as the column caps
- * with room to spare, so the frame spends roughly the column's real height;
- * any remainder is absorbed by the column's own slim scroll.
+ * with room to spare, so the frame spends the column's real height.
  *
- * `--demo-cta-chrome` is the height the frame does NOT get. Only the player bar
- * is real content now: the caption row went away when "Live preview" moved
- * inside the frame, and the export button moved into the player row, so the
- * empty column is just the frame plus slack. The bar's height is deliberately
- * constant — the zoom-keyframe strip keeps its 8px box when empty — so locking a
- * zoom cannot silently resize the video.
+ * `--demo-cta-chrome` is the height the frame does NOT get, and it must
+ * budget the player's REAL height or the column scrolls beside a video
+ * that should fit — the failure Kasra screenshotted on Nov 27 2026, when
+ * the budget still described the 144px bar the player was before the trim
+ * timeline joined it. The loaded budget is the tightened player end to
+ * end: the trim timeline at 275px (two tracks at the `.trim-timeline`
+ * density, their gap and the timeline's own top rule), the scrubber at
+ * 52px, the transport row at 44px, the locked-segments disclosure at 34px
+ * standing closed, the player's own three 12px gaps, the column's three
+ * 12px gaps around the frame, history row and status block, and 7px of
+ * slack for sub-pixel rounding. The bar's height is deliberately
+ * constant — the zoom-keyframe strip keeps its 8px box when empty — so
+ * locking a zoom cannot silently resize the video.
  *
- * 253px wide is 450px tall at 9:16: the floor below which the column scrolls
- * instead of the frame shrinking further. Below lg the panel stacks, so the
- * frame spends a 52vh budget with no headroom factor — beside the settings
- * panel (lg+) the `* 0.75` factor keeps the preview compact instead of
- * dominating it, but stacked on a phone the frame IS the preview and a
- * 45vh-with-headroom box shrank it past usability. The player row wraps
- * below xl because it cannot fit beside a 9:16 frame on a phone.
+ * 176px wide is 313px tall at 9:16: the floor below which the column
+ * scrolls instead of the frame shrinking further. Below lg the panel
+ * stacks, so the frame spends a 52vh budget with no headroom factor —
+ * stacked on a phone the frame IS the preview and a 45vh-with-headroom
+ * box shrank it past usability. The player row wraps below xl because it
+ * cannot fit beside a 9:16 frame on a phone.
  * Small windows scroll instead of shrinking the frame further. */
 .demo-cta-column {
     /* 16px is slack, not content. Sub-pixel rounding of a 9:16 ratio, or a
@@ -692,10 +706,10 @@ body {
     --demo-cta-frame-w: min(100%, calc(52vh * 9 / 16));
 }
 .demo-cta-column[data-player="on"] {
-    /* With a clip loaded the column is frame + player bar (144px: trim cards,
-       scrubber 24, transport row 44, the shortcut line 16, plus gaps) + one
-       12px gap + the 16px of slack. */
-    --demo-cta-chrome: 164px;
+    /* The itemised budget in the block comment above: 275 trim timeline +
+       52 scrubber + 44 transport + 34 locked-segments disclosure + 36
+       player gaps + 36 column gaps + 7 slack. */
+    --demo-cta-chrome: 484px;
 }
 .demo-cta-frame {
     width: var(--demo-cta-frame-w);
@@ -703,7 +717,7 @@ body {
 }
 @media (min-width: 1024px) {
     .demo-cta-column {
-        --demo-cta-frame-w: min(100%, max(253px, calc((100vh - 15rem - var(--demo-cta-chrome)) * 9 / 16 * 0.75)));
+        --demo-cta-frame-w: min(100%, max(176px, calc((100vh - 15rem - var(--demo-cta-chrome)) * 9 / 16)));
     }
     /* Width comes from the column height budget, so the 9:16 ratio is exact and
        the frame is centred by its own margin rather than by a grid track. */

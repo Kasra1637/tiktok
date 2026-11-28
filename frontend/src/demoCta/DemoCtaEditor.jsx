@@ -193,7 +193,7 @@ function EditorSection({ title, icon, open, onToggle, testId, children }) {
           className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
         />
       </button>
-      {open && <div id={panelId} className="space-y-5 px-5 pb-5">{children}</div>}
+      {open && <div id={panelId} className="space-y-4 px-5 pb-4">{children}</div>}
     </SectionCard>
   );
 }
@@ -2489,10 +2489,16 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               ) : (
                 <SubLabel icon={Images}>Second clip sequence · {appendHeaderTotal.toFixed(1)}s</SubLabel>
               )}
+              {/* The sequence stands as a row of tiles in the founder's
+                  order (Kasra's order, Nov 27 2026): one tile per item,
+                  wrapping as the column narrows, with the add tile
+                  standing last in the same row. The tiles are the same
+                  rows with the same controls — only their seats changed. */}
+              <div className="flex flex-wrap items-stretch gap-2">
               {appendItems.map((entry, index) => entry.kind === "image" ? (
                 <div
                   key={entry.id}
-                  className={`space-y-2 rounded-xl border bg-secondary/20 px-3 py-2 ${appendDropIndex === index ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)]"}`}
+                  className={`min-w-[16rem] flex-1 space-y-2 rounded-xl border bg-secondary/20 px-3 py-2 ${appendDropIndex === index ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)]"}`}
                   data-testid={`append-image-row-${entry.id}`}
                   onDragOver={(event) => { if (dragCarriesFiles(event)) setAppendDropIndex(index); }}
                 >
@@ -2520,7 +2526,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               ) : (
                 <div
                   key={entry.id}
-                  className={`rounded-xl border bg-secondary/20 px-3 py-2 ${appendDropIndex === index ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)]"}`}
+                  className={`min-w-[13rem] flex-1 rounded-xl border bg-secondary/20 px-3 py-2 ${appendDropIndex === index ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)]"}`}
                   data-testid={`append-item-row-${entry.id}`}
                   onDragOver={(event) => { if (dragCarriesFiles(event)) setAppendDropIndex(index); }}
                 >
@@ -2546,13 +2552,14 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               <Button
                 variant="secondary"
                 size="sm"
-                className="h-10"
+                className="min-h-[3.25rem] min-w-[10rem] flex-1 border-dashed"
                 onClick={() => appendImagesInputRef.current?.click()}
                 data-testid="append-images-add-more"
               >
                 <ImagePlus className="h-3.5 w-3.5" />
                 <span>Add more images</span>
               </Button>
+              </div>
             </div>
           )}
           {appendItems.length > 0 && (
@@ -3100,7 +3107,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           the stylesheet whether the player bar is in the column, because its
           104px comes out of the frame's height budget when it is. */}
       <div
-        className="demo-cta-column demo-cta-panel-scroll min-w-0 space-y-3 lg:sticky lg:top-6 lg:max-h-[calc(100vh-15rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1"
+        className="demo-cta-column demo-cta-panel-scroll min-w-0 space-y-3 px-2 lg:sticky lg:top-6 lg:max-h-[calc(100vh-15rem)] lg:overflow-y-auto lg:overscroll-contain"
         data-player={videoUrl && videoMeta ? "on" : "off"}
       >
         {/* Text-placement warnings live here and only here: right above the
@@ -3345,11 +3352,16 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           /* A plain bar, not a card: the preview is chromeless, so a boxed
              player under a boxed preview was one box too many. It stays
              full-column — deliberately wider than the frame and the export
-             button, which share a width with each other. overflow-x-clip trims
-             the 8px the scrubber ticks and the seek knob bleed past 0%/100%:
-             without it the column grows a horizontal bar under a player that
-             otherwise fits. Tooltips are portalled, so clipping here cuts
-             nothing interactive. */
+             button, which share a width with each other. The scrubber's
+             ticks and seek knob are centred on their percentage, so at
+             0%/100% half of each (8px) reaches past the strip's own edge:
+             the strip carries an 8px inset of its own (px-2 below), so
+             that reach lands inside the player instead of being sliced
+             off at its edge — the half-cut knob Kasra screenshotted on
+             Nov 27 2026. overflow-x-clip stays as the guard behind it:
+             without it any future bleed grows a horizontal bar under a
+             player that otherwise fits. Tooltips are portalled, so
+             clipping here cuts nothing interactive. */
           <div className="space-y-3 overflow-x-clip" data-testid="demo-cta-player" inert={recording ? true : undefined}>
               <TrimTimeline disabled={recording} onTrim={applyClipTrim} clips={[
                 { id: "base", label: "Base clip", duration: videoMeta.d, start: baseStart, end: baseEnd, active: !isAppendTime(currentTime), playhead: baseStart + currentTime },
@@ -3359,7 +3371,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                   their text labels — the readout lives once, beside the play
                   button — so the whole block is a compact strip above the one
                   control row instead of a tall timeline. */}
-              <div className="space-y-1" data-testid="demo-cta-scrubber">
+              <div className="space-y-1 px-2" data-testid="demo-cta-scrubber">
                 <div className="relative h-3 select-none" role="group" aria-label="Seek to a time">
                   {ticks.map((t) => (
                     <button

@@ -282,6 +282,17 @@ One render path, single-pass video generation via OpenRouter.
   area insert at the hovered tile's seat and file to the library like
   any device add; sequence rows are named Item 1, Item 2, … with the
   kind carried by the row's icon, never by the slot's name.
+- Demo + CTA editor fit (Nov 27 2026, Kasra's order): the preview column
+  fits at working heights with no scrollbar of its own — the frame
+  spends the column's full leftover height (no 0.75 factor) from a
+  176px floor, and `--demo-cta-chrome` budgets the player's real height
+  (trim timeline included) instead of the 144px bar it grew from. The
+  column and the scrubber strip share one 8px inset, so the seek knob
+  and ticks — centred on their percentage — land whole at 0%/100%
+  instead of being halved by the player's `overflow-x-clip`. Trim
+  tracks wear the `.trim-timeline` density of `.inset-panel`, and the
+  second clip's sequence stands as a wrapping row of item tiles with
+  the add tile last.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no

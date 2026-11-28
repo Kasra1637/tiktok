@@ -22247,6 +22247,20 @@ async function runDemoCtaChecks() {
           if (!labels[1].startsWith("Item 2") || !labels[1].includes("first.png")) throw new Error(`the first migrated still's row is wrong: ${JSON.stringify(labels[1])}`);
           if (!labels[2].startsWith("Item 3") || !labels[2].includes("second.png")) throw new Error(`the second migrated still's row is wrong: ${JSON.stringify(labels[2])}`);
           if (labels.some((label) => /Video \d/.test(label))) throw new Error("a sequence row is named for a video");
+          // The sequence stands as a row of tiles in the founder's
+          // order (Kasra's order, Nov 27 2026): every item row shares
+          // one wrapping flex row, and the add tile stands last in it.
+          const tileRow = sequenceRows()[0]?.parentElement;
+          if (!tileRow || !tileRow.classList.contains("flex") || !tileRow.classList.contains("flex-wrap")) {
+            throw new Error("the sequence items do not stand in a wrapping tile row");
+          }
+          const tileSeats = [...tileRow.children].map((el) => el.getAttribute("data-testid") || "");
+          if (tileSeats.length !== 4 || tileSeats[3] !== "append-images-add-more") {
+            throw new Error(`the tile row's seats are wrong (add tile last): ${JSON.stringify(tileSeats)}`);
+          }
+          if (!tileSeats.slice(0, 3).every((id) => /append-(item|image)-row-/.test(id))) {
+            throw new Error(`the tile row does not hold the three item tiles in order: ${JSON.stringify(tileSeats)}`);
+          }
           // Drop a clip on the second tile: it inserts at that seat and
           // files its library copy on the way in.
           const dropFile = new dom.window.File([new Uint8Array(8)], "dropped.mp4", { type: "video/mp4" });
@@ -23382,17 +23396,21 @@ async function runDemoCtaChecks() {
                 "box when empty or the frame resizes the first time someone locks."
             );
           }
-          // Frame floor: 253px wide is 450px tall at 9:16.
-          if (!/max\(253px/.test(css)) {
+          // Frame floor: 176px wide is 313px tall at 9:16. The floor was
+          // 253px/450px until Nov 27 2026, when Kasra ordered the preview
+          // smaller so the loaded column fits without scrolling — at the
+          // old floor the floor itself forced the overflow. Below the
+          // new floor the column must still scroll rather than the frame
+          // shrinking further.
+          if (!/max\(176px/.test(css)) {
             throw new Error(
-              "the preview frame has no ~450px floor (253px wide at 9:16). Below " +
+              "the preview frame has no ~313px floor (176px wide at 9:16). Below " +
                 "it the column must scroll rather than the frame shrinking further."
             );
           }
           // Stacked (below lg) the frame spends a 52vh budget with no headroom
-          // factor: beside the panel the 0.75 factor keeps the preview compact,
-          // but stacked the frame IS the preview and headroom shrank it past
-          // usability on phones.
+          // factor: stacked the frame IS the preview and headroom shrank it
+          // past usability on phones.
           if (!/\.demo-cta-column\s*\{[^}]*--demo-cta-frame-w:\s*min\(100%,\s*calc\(52vh/.test(css)) {
             throw new Error(
               "the stacked preview frame lost its 52vh no-headroom budget, so " +
@@ -23454,6 +23472,78 @@ async function runDemoCtaChecks() {
           "the preview frame is not spending the 15rem page-chrome budget. A " +
             "frame taller than its capped column overflows it from the inside."
         );
+      }
+    }
+  );
+
+  // The editor column fit (Kasra's order, Nov 27 2026): the preview
+  // stands smaller, the stack below it is tightened onto one shared
+  // inset, and nothing is clipped at the left. Asserted in source like
+  // the budget checks above — jsdom has no layout engine, so the
+  // geometry lives in the stylesheet's numbers, and those are what
+  // must not drift back.
+  await check(
+    "the preview column fits without a scrollbar, on one inset, with the seek knob whole",
+    async () => {
+      const src = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"),
+        "utf8"
+      );
+      const trimSrc = fs.readFileSync(
+        path.join(__dirname, "..", "src", "demoCta", "TrimTimeline.jsx"),
+        "utf8"
+      );
+      const css = fs.readFileSync(path.join(__dirname, "..", "src", "index.css"), "utf8");
+
+      // The frame stays a true 9:16 — smaller, never squashed.
+      if (!/\.demo-cta-frame\s*\{[^}]*aspect-ratio:\s*9\s*\/\s*16/.test(css)) {
+        throw new Error("the preview frame lost its 9:16 aspect ratio");
+      }
+      // The loaded budget must cover the player's real height — two
+      // trim tracks, the scrubber, the transport row, the
+      // locked-segments disclosure, and the gaps around them. The old
+      // 164px described a player that no longer exists and the column
+      // scrolled beside a video that should have fitted.
+      const loadedChrome = Number(
+        (/data-player="on"\]\s*\{[^}]*?--demo-cta-chrome:\s*(\d+)px/.exec(css) || [])[1]
+      );
+      if (!Number.isFinite(loadedChrome) || loadedChrome < 460) {
+        throw new Error(
+          `the loaded column's height budget is ${loadedChrome}px. It must cover ` +
+            "the trim timeline, scrubber, transport row and disclosure the player " +
+            "actually carries, or the column grows a scrollbar beside the preview."
+        );
+      }
+      // No headroom factor shrinks the frame out of its own budget, and
+      // the floor is the new 176px: at 253px the floor itself forced
+      // the overflow the budget was meant to prevent.
+      if (/\* 9 \/ 16 \* 0\.75/.test(css)) {
+        throw new Error("the frame's 0.75 headroom factor is back, shrinking the preview out of its budget");
+      }
+      if (!/max\(176px, calc\(\(100vh - 15rem - var\(--demo-cta-chrome\)\) \* 9 \/ 16\)\)/.test(css)) {
+        throw new Error("the frame is not spending its full height budget from the 176px floor");
+      }
+      // The trim tracks wear the tightened density — the same
+      // `.inset-panel` face at a 12px/14px gutter — so two tracks fit
+      // the budget the chrome number promises.
+      if (!/\.trim-timeline \.inset-panel\s*\{\s*padding:\s*12px 14px;/.test(css)) {
+        throw new Error("index.css carries no .trim-timeline density for the trim tracks");
+      }
+      if (!/className="trim-timeline /.test(trimSrc)) {
+        throw new Error("the trim timeline does not carry its density class");
+      }
+      // One shared inset for the whole column: the stack below the
+      // preview starts on the same left edge as the frame's seat.
+      if (!/demo-cta-column demo-cta-panel-scroll min-w-0 space-y-3 px-2 /.test(src)) {
+        throw new Error("the preview column lost its shared 8px inset");
+      }
+      // The seek knob and the scrubber ticks are centred on their
+      // percentage, so at 0%/100% half of each reaches 8px past the
+      // strip. The strip's own 8px inset is what that reach lands on —
+      // without it the player's overflow-x-clip slices the knob in
+      // half at the column's edge.
+      if (!/<div className="space-y-1 px-2" data-testid="demo-cta-scrubber">/.test(src)) {
+        throw new Error("the scrubber strip lost the 8px inset that keeps its knob and ticks whole");
       }
     }
   );
@@ -23646,22 +23736,25 @@ async function runDemoCtaChecks() {
     "short viewports scroll the column instead of shrinking the frame",
     async () => {
       // jsdom has no viewport to shrink, so this asserts the contract in the
-      // stylesheet: a ~400px frame floor and a static export below 700px tall.
+      // stylesheet: a ~313px frame floor and a static export below 700px tall.
       // Without both, a short laptop window either crushes the video or pins
-      // the button over a column it no longer fits beside.
+      // the button over a column it no longer fits beside. The floor was
+      // 450px until Nov 27 2026, when Kasra ordered the preview smaller so
+      // the loaded column fits at working heights; the floor's job — scroll
+      // rather than crush — is unchanged.
       const css = fs.readFileSync(
         path.join(__dirname, "..", "src", "index.css"),
         "utf8"
       );
-      if (!/\.demo-cta-frame[\s\S]*?max\(253px/.test(css)) {
+      if (!/\.demo-cta-frame[\s\S]*?max\(176px/.test(css)) {
         throw new Error(
-          "the preview frame has no ~450px floor (253px wide at 9:16). Below it " +
+          "the preview frame has no ~313px floor (176px wide at 9:16). Below it " +
             "the column must scroll rather than the frame shrinking further."
         );
       }
-      if (!/max\(253px/.test(css)) {
+      if (!/max\(176px/.test(css)) {
         throw new Error(
-          "the preview frame has no ~450px floor (253px wide at 9:16). Below it " +
+          "the preview frame has no ~313px floor (176px wide at 9:16). Below it " +
             "the column must scroll rather than the frame shrinking further."
         );
       }

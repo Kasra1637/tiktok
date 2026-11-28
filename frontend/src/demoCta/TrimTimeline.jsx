@@ -46,7 +46,7 @@ function Ruler({ duration }) {
 export function TrimTimeline({ clips, onTrim, disabled }) {
   const visible = clips.filter((clip) => clip.duration > 0);
   if (visible.length === 0) return null;
-  return <div className="space-y-2 border-t border-[color:var(--hairline)] pt-3" data-testid="trim-timeline" aria-label="Clip timeline">
+  return <div className="trim-timeline space-y-2 border-t border-[color:var(--hairline)] pt-2.5" data-testid="trim-timeline" aria-label="Clip timeline">
     {visible.map((clip) => {
       const run = clipWindow(clip.duration, clip.start, undefined, clip.end);
       const minimum = Math.min(MIN_CLIP_SECONDS, clip.duration);
@@ -56,7 +56,7 @@ export function TrimTimeline({ clips, onTrim, disabled }) {
       const atStart = run.start <= 0.001;
       const atEnd = run.end >= clip.duration - 0.001;
       const trimmed = !atStart || !atEnd;
-      return <div key={clip.id} className="inset-panel space-y-2.5" data-testid={`${clip.id}-trim-track`}>
+      return <div key={clip.id} className="inset-panel space-y-2" data-testid={`${clip.id}-trim-track`}>
         <div className="flex items-baseline justify-between gap-2">
           <span className="text-sm font-semibold">{clip.label}</span>
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${trimmed ? "bg-[color:var(--indigo-15)] text-[color:var(--brand-indigo)]" : "bg-secondary/60 text-muted-foreground"}`}>
