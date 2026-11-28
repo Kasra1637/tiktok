@@ -4,6 +4,7 @@ import { recordSignal } from "../lib/feedback";
 import { buildExportFilename, sniffRecordingContainer } from "./constants";
 import { exportTikTok, TIKTOK_EXPORT } from "./exportTikTok";
 import { clampImageSeconds, normalizeImageMotion } from "./imageSequence";
+import { appendShapeOf } from "./appendSequence";
 import { prepareHandViewImages } from "./handView";
 import { useExportErrors } from "./useExportErrors";
 import { clearPendingSavesFor, recordFailedSave } from "./saveOutbox";
@@ -110,7 +111,7 @@ export function useExportFlow(settings) {
     generation, onSaved,
     videoUrl, videoMeta, device, preset, viewMode, appendMode, envBg, appendEnv,
     appendUrl, appendMeta, appendVideoRef, baseMuted, appendMuted,
-    appendImages = null, reduceMotion = false,
+    appendItems = [], reduceMotion = false,
     baseStart = 0, appendStart = 0, baseEnd = null, appendEnd = null,
     captionFont, ctaFont, fontStack,
     videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
@@ -190,7 +191,7 @@ export function useExportFlow(settings) {
       if (viewMode === "hand") {
         await prepareHandViewImages(envBg);
       }
-      if ((appendUrl || appendImages?.length) && appendMode === "hand") {
+      if ((appendUrl || appendItems.length) && appendMode === "hand") {
         await prepareHandViewImages(appendEnv ?? envBg);
       }
       const response = await fetch(videoUrl, { signal: controller.signal });
@@ -204,17 +205,33 @@ export function useExportFlow(settings) {
       // An image sequence in the added slot decodes still by still instead
       // of fetching a clip; the holds ride along so the assembler composes
       // the same sequence the preview played.
+      const appendShape = appendShapeOf(appendItems);
       let appendImageSet = null;
-      if (!appendBlob && appendImages?.length) {
+      if (!appendBlob && appendShape === "images") {
         appendImageSet = [];
-        for (const entry of appendImages) {
+        for (const entry of appendItems) {
           controller.signal.throwIfAborted();
           appendImageSet.push({ source: await decodeExportImage(entry), seconds: clampImageSeconds(entry.seconds), motion: normalizeImageMotion(entry.motion) });
         }
       }
+      // A mixed sequence hands the assembler its entries in order: clips
+      // as blobs to decode, stills already decoded with their holds — the
+      // same entries, in the same order, the preview played.
+      let appendSequenceSet = null;
+      if (!appendBlob && appendShape === "mixed") {
+        appendSequenceSet = [];
+        for (const entry of appendItems) {
+          controller.signal.throwIfAborted();
+          if (entry.kind === "video") {
+            appendSequenceSet.push({ kind: "video", blob: entry.blob });
+          } else {
+            appendSequenceSet.push({ kind: "image", source: await decodeExportImage(entry), seconds: clampImageSeconds(entry.seconds), motion: normalizeImageMotion(entry.motion) });
+          }
+        }
+      }
       const canvas = document.createElement("canvas");
       const { blob, duration, audioSegments } = await exportTikTok({
-        source: await response.blob(), appendSource: appendBlob, appendImages: appendImageSet, reduceMotion: !!reduceMotion, canvas, signal: controller.signal,
+        source: await response.blob(), appendSource: appendBlob, appendImages: appendImageSet, appendSequence: appendSequenceSet, reduceMotion: !!reduceMotion, canvas, signal: controller.signal,
         baseMuted: !!baseMuted, appendMuted: !!appendMuted,
         baseStart, appendStart, baseEnd, appendEnd,
         drawFrame: (time, frame, segment) => paintFrame(canvas, time, frame, segment),
@@ -227,7 +244,7 @@ export function useExportFlow(settings) {
       // (videoMeta/appendMeta), which can disagree with the export-time decode
       // by more than the gate allows and fail a perfectly good file.
       const expectedDuration = duration;
-      await probeRecordingPlays(blob, expectedDuration, appendBlob || appendImageSet ? audioSegments : []);
+      await probeRecordingPlays(blob, expectedDuration, appendBlob || appendImageSet || appendSequenceSet ? audioSegments : []);
       controller.signal.throwIfAborted();
       const url = URL.createObjectURL(blob);
       if (resultObjectUrlRef.current) URL.revokeObjectURL(resultObjectUrlRef.current);

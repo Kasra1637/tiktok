@@ -102,6 +102,18 @@ import { readDraft } from "./draftStorage";
 import { uploadEntryToLibrary } from "./libraryUpload";
 import { IMAGE_MOTIONS, IMAGE_SECONDS, DEFAULT_IMAGE_MOTION, clampImageSeconds, composeImageFrame, imageSequenceDuration, normalizeImageMotion } from "./imageSequence";
 import { createImageSequencePlayer } from "./imagePlayer";
+import {
+  appendItemAt,
+  appendSequenceDuration,
+  appendShapeOf,
+  composeAppendFrame,
+  makeImageEntry,
+  makeVideoEntry,
+  migrateAppendEdit,
+} from "./appendSequence";
+import { createSequencePlayer } from "./sequencePlayer";
+import { LibraryPicker, isVideoAsset as isLibraryVideoAsset } from "./LibraryPicker";
+import { mediaUrl } from "../lib/api";
 import { TrimTimeline } from "./TrimTimeline";
 
 const SECTIONS_KEY = "hookforge.demoCta.openSections.v4";
@@ -676,7 +688,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
 
   const [videoUrl, setVideoUrl] = useState(null);
   const [baseMedia, setBaseMedia] = useState(null);
-  const [appendMedia, setAppendMedia] = useState(null);
   const [draftReady, setDraftReady] = useState(false);
   const [draftLoadError, setDraftLoadError] = useState(null);
   const restoredDraftRef = useRef(false);
@@ -869,22 +880,37 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   const appendVideoRef = useRef(null);
   const appendObjectUrlRef = useRef(null);
   const appendInputRef = useRef(null);
-  // The second slot's other media kind (ADR 0237): a sequence of still
-  // images — the founder's app screens — instead of a clip. The draft
-  // stores the entries (their blobs ride the same IndexedDB draft as the
-  // clips' bytes); the decoded elements, their object URLs and the
-  // sequence's virtual player are derived state, rebuilt from the entries
-  // and never stored. One slot, one kind: attaching either clears the
-  // other, the way Replace second clip swaps one clip for another.
-  const [appendImages, setAppendImages] = useState(null);
-  const appendImagesRef = useRef(null);
-  appendImagesRef.current = appendImages;
+  // The second slot's media: one ordered sequence of entries, clips and
+  // stills mixed (see appendSequence.js). The draft stores the entries
+  // (their blobs ride the same IndexedDB draft as the base clip's
+  // bytes); everything playback-shaped is derived from them and never
+  // stored — a lone clip's object URL and mounted element, a stills
+  // run's decoded images and its virtual player (ADR 0237), a mixed
+  // sequence's probed clips and its sequence player. The order of the
+  // entries is the order the preview plays and the export encodes.
+  const [appendItems, setAppendItems] = useState([]);
+  const appendItemsRef = useRef([]);
+  appendItemsRef.current = appendItems;
+  const appendShape = appendShapeOf(appendItems);
+  const singleAppendVideo = appendShape === "single" ? appendItems[0] : null;
+  const appendImageEntries = appendShape === "images" ? appendItems : null;
+  const appendMixedEntries = appendShape === "mixed" ? appendItems : null;
   const appendDrawablesRef = useRef([]);
   const appendDrawableCacheRef = useRef(new Map());
+  const appendMixedDrawablesRef = useRef([]);
+  const appendMixedCacheRef = useRef(new Map());
+  const appendProbedRef = useRef(new Map());
   const appendPlayerRef = useRef(null);
+  const appendPlayerKindRef = useRef(null);
   const appendScratchRef = useRef(null);
   const appendImagesInputRef = useRef(null);
-  const appendImagesModeRef = useRef("replace");
+  const appendSingleIdRef = useRef(null);
+  // Probed dimensions of the mixed sequence's clips, by entry id — the
+  // sequence list reads each clip's length from here once its probe
+  // lands; before that the row simply carries no length yet.
+  const [appendVideoMeta, setAppendVideoMeta] = useState({});
+  // Which slot the library pop-up is serving, or null while it is shut.
+  const [pickerSlot, setPickerSlot] = useState(null);
   // ADR 0274: the draft entries already filed into the Assets library, by
   // entry id. A ref, not draft state — filing is a side effect of adding,
   // not part of the edit — so undo, redo, and draft restore never re-file
@@ -947,7 +973,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     generation, onSaved,
     videoUrl, videoMeta, device, preset, viewMode, appendMode, envBg, appendEnv,
     appendUrl, appendMeta, appendVideoRef, baseMuted, appendMuted,
-    appendImages, reduceMotion,
+    appendItems, reduceMotion,
     baseStart, appendStart, baseEnd, appendEnd,
     captionFont, ctaFont, fontStack,
     videoRef, activeVideoRef, paintFrameRef, isExportingRef, dirtyRef, kickPreviewRef,
@@ -958,24 +984,98 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   });
   const latestExportError = exportErrors[exportErrors.length - 1] || null;
 
-  // Retire the image sequence's derived state: the player, its decoded
-  // stills and their object URLs. The append element ref only ever holds
-  // the player when the sequence owns the slot, so a mounted clip element
-  // is never mistaken for it (the player alone answers frameCanvas).
-  const clearAppendImages = () => {
+  // Retire the second slot's derived playback state: whichever virtual
+  // player stands (the stills player or the mixed sequence player), its
+  // decoded drawables and their object URLs, and the mixed sequence's
+  // probed clip elements. The append element ref only ever holds a
+  // player when a sequence owns the slot, so a mounted clip element is
+  // never mistaken for it (a player alone answers frameCanvas).
+  const retireAppendPlayback = () => {
     if (appendPlayerRef.current) {
       appendPlayerRef.current.dispose();
       appendPlayerRef.current = null;
     }
+    appendPlayerKindRef.current = null;
     if (appendVideoRef.current && typeof appendVideoRef.current.frameCanvas === "function") {
       appendVideoRef.current = null;
     }
     appendDrawableCacheRef.current.forEach((rec) => URL.revokeObjectURL(rec.url));
     appendDrawableCacheRef.current.clear();
     appendDrawablesRef.current = [];
+    appendMixedCacheRef.current.forEach((rec) => {
+      URL.revokeObjectURL(rec.url);
+      rec.video?.pause?.();
+    });
+    appendMixedCacheRef.current.clear();
+    appendMixedDrawablesRef.current = [];
+    appendProbedRef.current.clear();
   };
 
-  // Images in the second slot: decode the stored entries, stand the
+  // Keep a mixed sequence's clip elements in step with the sequence
+  // player's clock: the element under the playhead plays (or rests,
+  // parked on the exact frame, while the player is paused), a drifted
+  // element is re-seeked, and every other element stays paused. Reads
+  // refs only, so the player created once in the effect below can call
+  // the first copy of this closure forever.
+  const syncMixedVideo = (time, playing) => {
+    const at = appendItemAt(appendItemsRef.current, appendProbedRef.current, time);
+    appendMixedCacheRef.current.forEach((rec, id) => {
+      if (!rec.video) return;
+      const active = Boolean(at) && at.item?.id === id && at.item?.kind === "video";
+      if (!active) {
+        if (!rec.video.paused) rec.video.pause();
+        return;
+      }
+      if (Math.abs((rec.video.currentTime || 0) - at.local) > 0.3) {
+        try {
+          rec.video.currentTime = at.local;
+        } catch {
+          // A not-yet-seekable element corrects itself on the next tick.
+        }
+      }
+      if (playing && rec.video.paused) rec.video.play().catch(() => {});
+      if (!playing && !rec.video.paused) rec.video.pause();
+    });
+  };
+
+  // A sequence that shrinks back to one clip — or to nothing — hands
+  // the slot back to the real element (or to nobody): the virtual
+  // player and its derived state retire, whatever path shrank it.
+  useEffect(() => {
+    if (appendShape === "empty" || appendShape === "single") retireAppendPlayback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appendShape]);
+
+  // A lone clip in the sequence plays through the real element, exactly
+  // as the second clip always did: its object URL stands in appendUrl,
+  // the mounted element probes itself, and the transport owns it. The
+  // URL follows the entry's identity, so a library stamp landing on the
+  // entry (a new object, the same id) never remounts the element.
+  useEffect(() => {
+    const entry = singleAppendVideo;
+    if (!entry) {
+      if (appendSingleIdRef.current !== null) {
+        appendSingleIdRef.current = null;
+        if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
+        appendObjectUrlRef.current = null;
+        setAppendUrl(null);
+        setAppendMeta(null);
+      }
+      return undefined;
+    }
+    if (appendSingleIdRef.current === entry.id) return undefined;
+    appendSingleIdRef.current = entry.id;
+    if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
+    const url = URL.createObjectURL(entry.blob);
+    appendObjectUrlRef.current = url;
+    setAppendUrl(url);
+    setAppendName(entry.name || "Added clip");
+    setAppendMeta(null);
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [singleAppendVideo]);
+
+  // A stills-only sequence: decode the stored entries, stand the
   // sequence's virtual player in the append element's place, and report
   // the sequence to the timeline as a clip of the summed holds
   // (appendMeta), exactly as a loaded clip reports itself — so trims, the
@@ -984,11 +1084,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   // and the export composes the same way from the same entries, so the
   // two cannot disagree (ADR 0007's contract, ADR 0237).
   useEffect(() => {
-    if (!appendImages || appendImages.length === 0) return undefined;
+    if (!appendImageEntries || appendImageEntries.length === 0) return undefined;
     let cancelled = false;
-    // Stills that left the sequence (removed, or a set replaced) release
-    // their URLs; the ones that stay keep their decode.
-    const live = new Set(appendImages.map((entry) => entry.id));
+    if (appendPlayerKindRef.current === "mixed") retireAppendPlayback();
+    // Stills that left the sequence release their URLs; the ones that
+    // stay keep their decode.
+    const live = new Set(appendImageEntries.map((entry) => entry.id));
     appendDrawableCacheRef.current.forEach((rec, id) => {
       if (!live.has(id)) {
         URL.revokeObjectURL(rec.url);
@@ -997,7 +1098,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     });
     (async () => {
       const drawables = [];
-      for (const entry of appendImages) {
+      for (const entry of appendImageEntries) {
         let rec = appendDrawableCacheRef.current.get(entry.id);
         if (!rec) {
           const url = URL.createObjectURL(entry.blob);
@@ -1014,14 +1115,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       }
       if (cancelled) return;
       appendDrawablesRef.current = drawables;
-      const total = imageSequenceDuration(appendImages);
+      const total = imageSequenceDuration(appendImageEntries);
       if (!appendPlayerRef.current) {
         if (!appendScratchRef.current) appendScratchRef.current = document.createElement("canvas");
         const player = createImageSequencePlayer({
           duration: total,
-          frameAt: (t) => composeImageFrame(appendScratchRef.current, appendDrawablesRef.current, appendImagesRef.current, t, { reduceMotion: reduceMotionRef.current }),
+          frameAt: (t) => composeImageFrame(appendScratchRef.current, appendDrawablesRef.current, appendItemsRef.current, t, { reduceMotion: reduceMotionRef.current }),
         });
         appendPlayerRef.current = player;
+        appendPlayerKindRef.current = "images";
         appendVideoRef.current = player;
       } else {
         appendPlayerRef.current.setDuration(total);
@@ -1030,7 +1132,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       const w = first?.naturalWidth || first?.width || 0;
       const h = first?.naturalHeight || first?.height || 0;
       setAppendMeta((prev) => (prev && prev.w === w && prev.h === h && prev.d === total ? prev : { w, h, d: total }));
-      setAppendName(`${appendImages.length} image${appendImages.length === 1 ? "" : "s"}`);
+      setAppendName(`${appendImageEntries.length} image${appendImageEntries.length === 1 ? "" : "s"}`);
       setAppendError(null);
       dirtyRef.current = true;
       kickPreviewRef.current?.();
@@ -1044,7 +1146,108 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appendImages]);
+  }, [appendImageEntries]);
+
+  // A mixed sequence — several clips, or clips and stills together:
+  // probe each clip (its length is part of the sequence's run), decode
+  // each still, and stand the sequence player in the append element's
+  // place, reporting the summed run as appendMeta the way the stills
+  // player reports its holds. The player composes each frame from the
+  // same entries the export decodes in the same order, so preview and
+  // export cannot disagree about what plays when.
+  useEffect(() => {
+    if (!appendMixedEntries || appendMixedEntries.length === 0) return undefined;
+    let cancelled = false;
+    if (appendPlayerKindRef.current === "images") retireAppendPlayback();
+    // Entries that left the sequence release their URLs and elements;
+    // the ones that stay keep their probe and decode.
+    const live = new Set(appendMixedEntries.map((entry) => entry.id));
+    appendMixedCacheRef.current.forEach((rec, id) => {
+      if (!live.has(id)) {
+        URL.revokeObjectURL(rec.url);
+        rec.video?.pause?.();
+        appendMixedCacheRef.current.delete(id);
+        appendProbedRef.current.delete(id);
+      }
+    });
+    (async () => {
+      const drawables = [];
+      const probed = new Map();
+      for (const entry of appendMixedEntries) {
+        let rec = appendMixedCacheRef.current.get(entry.id);
+        if (!rec) {
+          const url = URL.createObjectURL(entry.blob);
+          rec = { url, drawable: null, video: null, meta: null };
+          appendMixedCacheRef.current.set(entry.id, rec);
+          if (entry.kind === "video") {
+            const video = document.createElement("video");
+            video.muted = true;
+            video.playsInline = true;
+            video.preload = "auto";
+            rec.drawable = video;
+            rec.video = video;
+            rec.meta = await new Promise((resolve, reject) => {
+              video.onloadedmetadata = () => resolve({ w: video.videoWidth, h: video.videoHeight, d: video.duration });
+              video.onerror = () => reject(new Error(`"${entry.name || "An added clip"}" couldn't be played. Remove it, or choose another clip.`));
+              video.src = url;
+            });
+          } else {
+            const img = new Image();
+            rec.drawable = img;
+            await new Promise((resolve, reject) => {
+              img.onload = () => resolve();
+              img.onerror = () => reject(new Error(`"${entry.name || "An image"}" couldn't be read as an image. Choose a PNG or JPEG screenshot, or remove it.`));
+              img.src = url;
+            });
+          }
+        }
+        if (entry.kind === "video" && rec.meta) probed.set(entry.id, rec.meta);
+        drawables.push(rec.drawable);
+      }
+      if (cancelled) return;
+      appendMixedDrawablesRef.current = drawables;
+      appendProbedRef.current = probed;
+      const total = appendSequenceDuration(appendMixedEntries, probed);
+      if (!appendPlayerRef.current) {
+        if (!appendScratchRef.current) appendScratchRef.current = document.createElement("canvas");
+        const player = createSequencePlayer({
+          duration: total,
+          frameAt: (t) => composeAppendFrame(appendScratchRef.current, appendMixedDrawablesRef.current, appendItemsRef.current, appendProbedRef.current, t, { reduceMotion: reduceMotionRef.current }),
+          syncAt: (t, playing) => syncMixedVideo(t, playing),
+        });
+        appendPlayerRef.current = player;
+        appendPlayerKindRef.current = "mixed";
+        appendVideoRef.current = player;
+      } else {
+        appendPlayerRef.current.setDuration(total);
+      }
+      const firstEntry = appendMixedEntries[0];
+      const firstMeta = firstEntry.kind === "video"
+        ? probed.get(firstEntry.id)
+        : { w: drawables[0]?.naturalWidth || drawables[0]?.width || 0, h: drawables[0]?.naturalHeight || drawables[0]?.height || 0 };
+      const w = firstMeta?.w || 0;
+      const h = firstMeta?.h || 0;
+      setAppendMeta((prev) => (prev && prev.w === w && prev.h === h && prev.d === total ? prev : { w, h, d: total }));
+      setAppendName(`${appendMixedEntries.length} items`);
+      setAppendVideoMeta(() => {
+        const next = {};
+        probed.forEach((meta, id) => { next[id] = meta; });
+        return next;
+      });
+      setAppendError(null);
+      dirtyRef.current = true;
+      kickPreviewRef.current?.();
+    })().catch((err) => {
+      if (cancelled) return;
+      // No half-known sequence: an entry that cannot be measured leaves
+      // no duration to trim or export against, so the slot reads
+      // not-ready (Export stays disabled) until it is removed.
+      setAppendMeta(null);
+      setAppendError(err?.message || "An added item couldn't be read.");
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appendMixedEntries]);
   // The "Export ready" card, so a finished export can put itself in front of
   // the founder. A ref rather than a scrollIntoView on mount because the card
   // renders inside the PREVIEW column, which is its own scroll container at
@@ -1166,6 +1369,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   // nothing without an app profile, and never files an entry twice — so
   // editing, preview, draft save, and export keep working from the local
   // blob exactly as they did before the library grew.
+  //
+  // When the filing lands, the created row's id is stamped back onto
+  // the entry (whichever slot still holds it): the entry now names its
+  // library copy, so the library pop-up can show this exact pick as
+  // selected and take it back out. The stamp changes nothing the entry
+  // plays — same id, same blob — only what it points at.
   const fileEntryToLibrary = (entry, kind) => {
     uploadEntryToLibrary({
       profileId: openingProfileId,
@@ -1173,10 +1382,20 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       file: entry.blob,
       kind,
       sent: librarySentRef.current,
+    }).then((created) => {
+      if (!created?.id) return;
+      setBaseMedia((current) => (
+        current && current.id === entry.id && !current.assetId
+          ? { ...current, assetId: created.id }
+          : current
+      ));
+      setAppendItems((current) => current.map((item) => (
+        item.id === entry.id && !item.assetId ? { ...item, assetId: created.id } : item
+      )));
     });
   };
 
-  const handleFile = (file, { saveToLibrary = false } = {}) => {
+  const handleFile = (file, { saveToLibrary = false, assetId = null } = {}) => {
     if (!file) return;
     setError(null);
     setSaveError(null);
@@ -1199,7 +1418,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     const url = URL.createObjectURL(file);
     sourceObjectUrlRef.current = url;
     setVideoUrl(url);
-    const entry = { id: `${Date.now()}-${Math.random()}`, blob: file, name: file.name || "video" };
+    const entry = { id: `${Date.now()}-${Math.random()}`, blob: file, name: file.name || "video", ...(assetId ? { assetId } : {}) };
     setBaseMedia(entry);
     // Only the founder's own pick files a library copy: the History
     // attach path reuses this handler, and a finished render is already
@@ -1324,7 +1543,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   // cannot leave an earlier file marked ready. With locks, transport updates
   // the slider readbacks but not the exported framing, so use the locks alone.
   const exportEditKey = JSON.stringify([
-    videoUrl, appendUrl, appendImages?.map((entry) => `${entry.id}:${entry.seconds}:${normalizeImageMotion(entry.motion)}`).join("|") || "", baseStart, appendStart, baseEnd, appendEnd,
+    videoUrl, appendUrl, appendItems.map((entry) => `${entry.id}:${entry.kind}:${entry.seconds || ""}:${entry.motion ? normalizeImageMotion(entry.motion) : ""}`).join("|"), baseStart, appendStart, baseEnd, appendEnd,
     device, preset, viewMode, appendMode, bg, anim, envBg,
     appendBg, appendAnim, appendEnv, mockupStretchY, appendMockupStretchY, videoFit,
     appendVideoFit, appendVideoScale, appendVideoOffsetX, appendVideoOffsetY,
@@ -1347,7 +1566,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   }, [exportEditKey, invalidateSequence]);
 
   const editSnapshot = {
-    baseMedia, appendMedia, appendImages, baseStart, appendStart, baseEnd, appendEnd, sourceReplaced, openingProfileId,
+    baseMedia, appendItems, baseStart, appendStart, baseEnd, appendEnd, sourceReplaced, openingProfileId,
     device, bg, anim, mockupStretchY, videoFit, viewMode, envBg, screenX, screenY, screenW, screenH,
     hookEnabled, hookText, hookDuration, hookOffsetX, hookOffsetY,
     storyEnabled, storyText, storyTiming, storyOffsetY,
@@ -1359,16 +1578,20 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     appendScreenX, appendScreenY, appendScreenW, appendScreenH,
     zoomKeyframes, framing: editFraming,
   };
-  const restoreEdit = (edit) => {
+  const restoreEdit = (storedEdit) => {
+    // Drafts saved before the sequence existed carry their second clip
+    // in the old fields; they migrate to entries here, at the one
+    // funnel every restore passes through, so an old draft opens with
+    // its second clip whole.
+    const edit = migrateAppendEdit(storedEdit);
     cancelScopedReplay();
     videoRef.current?.pause();
     appendVideoRef.current?.pause();
     setIsPlaying(false);
-    // Leaving an image sequence behind (an undo, a redo, a restored draft
-    // carrying a clip instead) retires its player and decoded stills; if
-    // the restored edit carries a sequence, the decode effect rebuilds
-    // them from its entries.
-    if (!edit.appendImages?.length) clearAppendImages();
+    // The restored entries rebuild their own derived playback — a lone
+    // clip's element, a sequence's player and decoded drawables — in
+    // the effects that own them; a restore that leaves a player-shaped
+    // sequence behind retires it through the shape effect instead.
     const setters = {
       baseStart: setBaseStart, appendStart: setAppendStart, baseEnd: setBaseEnd, appendEnd: setAppendEnd, sourceReplaced: setSourceReplaced, openingProfileId: setOpeningProfileId,
       device: setDevice, bg: setBg, anim: setAnim, mockupStretchY: setMockupStretchY, videoFit: setVideoFit,
@@ -1390,7 +1613,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       appendMockupStretchY: setAppendMockupStretchY,
       appendScreenX: setAppendScreenX, appendScreenY: setAppendScreenY,
       appendScreenW: setAppendScreenW, appendScreenH: setAppendScreenH,
-      appendImages: setAppendImages,
+      appendItems: setAppendItems,
       zoomKeyframes: setZoomKeyframes,
     };
     // ADR 0374: the base always stands as Real Video — a stored
@@ -1409,7 +1632,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       setMeta(null);
     };
     restoreMedia(edit.baseMedia, baseMedia, sourceObjectUrlRef, setVideoUrl, setBaseMedia, setSourceFileName, setVideoMeta);
-    restoreMedia(edit.appendMedia, appendMedia, appendObjectUrlRef, setAppendUrl, setAppendMedia, setAppendName, setAppendMeta);
     if (edit.framing) {
       editingZoomRef.current = true;
       setEditFraming(edit.framing);
@@ -1452,8 +1674,12 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
       if (cancelled) return;
       if (edit) {
         restoredDraftRef.current = true;
-        restoreEditRef.current(edit);
-        resetSessionRef.current(edit);
+        // Migrate before the session seeds from the stored edit, so
+        // the history's present and the restored state agree on the
+        // sequence shape from the first snapshot on.
+        const migrated = migrateAppendEdit(edit);
+        restoreEditRef.current(migrated);
+        resetSessionRef.current(migrated);
       }
       setDraftLoadError(null);
       setDraftReady(true);
@@ -1478,27 +1704,23 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     return () => window.removeEventListener("keydown", key);
   }, [session, recording, draftReady]);
 
-  const handleAppendFile = (file) => {
+  // One add path for the second slot, whatever door the media came
+  // through — the device inputs, the library pop-up, or a file dropped
+  // on the sequence: the entry joins the sequence (at the end, or at
+  // the position a drop targeted), and a device file files its library
+  // copy exactly as it always has. A library pick carries its asset id
+  // instead — it is already filed, and the id is what marks it selected
+  // when the pop-up opens again.
+  const addAppendVideoFile = (file, assetId = null) => {
     if (!file) return;
     invalidateSequence();
-    // One slot, one kind: the clip takes the place of any image sequence.
-    clearAppendImages();
-    setAppendImages(null);
     setAppendError(null);
-    if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
-    const url = URL.createObjectURL(file);
-    appendObjectUrlRef.current = url;
-    setAppendMeta(null);
-    setAppendStart(0);
-    setAppendEnd(null);
-    setAppendUrl(url);
-    const entry = { id: `${Date.now()}-${Math.random()}`, blob: file, name: file.name || "added clip" };
-    setAppendMedia(entry);
-    fileEntryToLibrary(entry, "screen_recording");
-    setAppendName(file.name || "added clip");
+    const entry = makeVideoEntry(file, file.name || "Added clip", assetId);
+    if (!assetId) fileEntryToLibrary(entry, "screen_recording");
+    setAppendItems((current) => [...current, entry]);
   };
 
-  const handleAppendImages = (files, mode = "replace") => {
+  const addAppendImageFiles = (files, assetId = null) => {
     const picked = [...(files || [])].filter(
       (f) => f && (f.type?.startsWith("image/") || /\.(png|jpe?g|webp|gif|avif|heic|heif|bmp|svg)$/i.test(f.name || ""))
     );
@@ -1508,78 +1730,95 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     }
     invalidateSequence();
     setAppendError(null);
-    const entries = picked.map((file) => ({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      blob: file,
-      name: file.name || "image",
-      seconds: IMAGE_SECONDS.default,
-      // A fresh upload sits still (ADR 0354): motion is a pick, never an
-      // automatic zoom.
-      motion: DEFAULT_IMAGE_MOTION,
-    }));
-    entries.forEach((entry) => fileEntryToLibrary(entry, "screenshot"));
-    if (mode === "add" && appendImages?.length) {
-      setAppendImages([...appendImages, ...entries]);
-      return;
-    }
-    // A fresh set takes the slot: an attached clip leaves, the way Replace
-    // second clip swaps one clip for another. The decode effect stands the
-    // new sequence's player up from the entries.
-    if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
-    appendObjectUrlRef.current = null;
-    setAppendUrl(null);
-    setAppendMedia(null);
-    setAppendMeta(null);
-    setAppendStart(0);
-    setAppendEnd(null);
-    setAppendImages(entries);
+    const entries = picked.map((file) => makeImageEntry(file, file.name || "Image", assetId));
+    if (!assetId) entries.forEach((entry) => fileEntryToLibrary(entry, "screenshot"));
+    setAppendItems((current) => [...current, ...entries]);
   };
 
-  const removeAppendImage = (id) => {
-    if (!appendImages) return;
+  // Files dropped on the second clip: images and videos together, in
+  // the order the drop carried them, inserted at the tile the drop
+  // targeted (or appended when it landed on the area around the
+  // tiles). A dropped file is a device upload like any other — it
+  // files its library copy on the way in.
+  const importDroppedAppendFiles = (files, atIndex = null) => {
+    const entries = [];
+    for (const file of [...(files || [])]) {
+      if (!file) continue;
+      if (file.type?.startsWith("video/") || /\.(mp4|webm|mov|m4v)$/i.test(file.name || "")) {
+        entries.push(makeVideoEntry(file, file.name || "Added clip"));
+      } else if (file.type?.startsWith("image/") || /\.(png|jpe?g|webp|gif|avif|heic|heif|bmp|svg)$/i.test(file.name || "")) {
+        entries.push(makeImageEntry(file, file.name || "Image"));
+      }
+    }
+    if (!entries.length) {
+      setAppendError("Drop image or video files — those are the files the second clip can use.");
+      return;
+    }
     invalidateSequence();
-    const next = appendImages.filter((entry) => entry.id !== id);
+    setAppendError(null);
+    entries.forEach((entry) => fileEntryToLibrary(entry, entry.kind === "video" ? "screen_recording" : "screenshot"));
+    setAppendItems((current) => {
+      const at = atIndex == null ? current.length : Math.min(Math.max(0, atIndex), current.length);
+      return [...current.slice(0, at), ...entries, ...current.slice(at)];
+    });
+  };
+
+  const removeAppendItem = (id) => {
+    if (!appendItems.some((entry) => entry.id === id)) return;
+    invalidateSequence();
+    const next = appendItems.filter((entry) => entry.id !== id);
     if (!next.length) {
       removeAppend();
       return;
     }
-    setAppendImages(next);
+    setAppendItems(next);
   };
 
-  const moveAppendImage = (id, direction) => {
-    if (!appendImages) return;
-    const index = appendImages.findIndex((entry) => entry.id === id);
+  const moveAppendItem = (id, direction) => {
+    const index = appendItems.findIndex((entry) => entry.id === id);
     const swap = index + direction;
-    if (index < 0 || swap < 0 || swap >= appendImages.length) return;
+    if (index < 0 || swap < 0 || swap >= appendItems.length) return;
     invalidateSequence();
-    const next = [...appendImages];
+    const next = [...appendItems];
     [next[index], next[swap]] = [next[swap], next[index]];
-    setAppendImages(next);
+    setAppendItems(next);
+  };
+
+  // The pop-up strip's drag: the dragged entry takes the target's
+  // place, and everything between shifts one seat — the order the
+  // strip shows afterwards is the order the sequence plays.
+  const dropAppendItem = (dragId, targetId) => {
+    const from = appendItems.findIndex((entry) => entry.id === dragId);
+    const to = appendItems.findIndex((entry) => entry.id === targetId);
+    if (from < 0 || to < 0 || from === to) return;
+    invalidateSequence();
+    const next = [...appendItems];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setAppendItems(next);
   };
 
   const setAppendImageSeconds = (id, seconds) => {
-    if (!appendImages) return;
     // No invalidateSequence here: the export edit key carries the holds,
     // the same way the crop sliders invalidate — a drag fires dozens of
     // changes and the key catches every one.
-    setAppendImages(appendImages.map((entry) => (entry.id === id ? { ...entry, seconds: clampImageSeconds(seconds) } : entry)));
+    setAppendItems(appendItems.map((entry) => (entry.id === id ? { ...entry, seconds: clampImageSeconds(seconds) } : entry)));
   };
 
   const setAppendImageMotion = (id, motion) => {
-    if (!appendImages) return;
     // Like the holds: the export edit key carries the pick, so a change
     // retires the previous export without an explicit invalidation.
-    setAppendImages(appendImages.map((entry) => (entry.id === id ? { ...entry, motion: normalizeImageMotion(motion) } : entry)));
+    setAppendItems(appendItems.map((entry) => (entry.id === id ? { ...entry, motion: normalizeImageMotion(motion) } : entry)));
   };
 
   const removeAppend = () => {
     invalidateSequence();
-    clearAppendImages();
-    setAppendImages(null);
+    retireAppendPlayback();
+    setAppendItems([]);
     if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
     appendObjectUrlRef.current = null;
+    appendSingleIdRef.current = null;
     setAppendUrl(null);
-    setAppendMedia(null);
     setAppendMeta(null);
     setAppendStart(0);
     setAppendEnd(null);
@@ -1600,10 +1839,64 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
     setAppendScreenH(DEFAULT_SCREEN.h);
   };
 
+  // The library pop-up's picks. The bytes come from the asset's own
+  // signed link — the same link its thumbnail loads — and land in the
+  // slot as an ordinary entry that names its asset, so nothing about
+  // playback can tell a library pick from an upload.
+  const fetchLibraryFile = async (asset) => {
+    const response = await fetch(mediaUrl(asset.media_url));
+    if (!response.ok) {
+      throw new Error("That library file could not be loaded. Try again, or upload it from this device instead.");
+    }
+    const blob = await response.blob();
+    const video = isLibraryVideoAsset(asset);
+    return new File([blob], asset.label || asset.name || (video ? "Video clip" : "Image"), {
+      type: blob.type || (video ? "video/mp4" : "image/png"),
+    });
+  };
+
+  const toggleBaseAsset = async (asset) => {
+    // The base holds one pick: tapping the standing pick takes it back
+    // out (to the finished render, or to the empty frame), and tapping
+    // another replaces it — the single-pick shape the slot has always
+    // had, now served from the library as well as the device.
+    if (baseMedia?.assetId && baseMedia.assetId === asset.id) {
+      clearSource();
+      return;
+    }
+    try {
+      const file = await fetchLibraryFile(asset);
+      handleFile(file, { assetId: asset.id });
+    } catch (err) {
+      setError(err?.message || "That library file could not be loaded.");
+    }
+  };
+
+  const toggleAppendAsset = async (asset) => {
+    if (appendItems.some((item) => item.assetId === asset.id)) {
+      invalidateSequence();
+      const next = appendItems.filter((item) => item.assetId !== asset.id);
+      if (!next.length) {
+        removeAppend();
+        return;
+      }
+      setAppendItems(next);
+      return;
+    }
+    try {
+      const file = await fetchLibraryFile(asset);
+      if (isLibraryVideoAsset(asset)) addAppendVideoFile(file, asset.id);
+      else addAppendImageFiles([file], asset.id);
+    } catch (err) {
+      setAppendError(err?.message || "That library file could not be loaded.");
+    }
+  };
+
   useEffect(() => () => {
     if (sourceObjectUrlRef.current) URL.revokeObjectURL(sourceObjectUrlRef.current);
     if (appendObjectUrlRef.current) URL.revokeObjectURL(appendObjectUrlRef.current);
-    clearAppendImages();
+    retireAppendPlayback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Probe metadata and park the preview on its first frame
@@ -1874,7 +2167,41 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
   // room to spare: overestimating only scrolls a column sooner, while
   // underestimating would grow a page scrollbar beside a studio that fits.
   const settingsRef = useRef(null);
-  const appendNotReady = (!!appendUrl || !!appendImages?.length) && !appendMeta;
+  const appendNotReady = appendItems.length > 0 && !appendMeta;
+  // The sequence list's header total: a stills run sums its holds
+  // straight from the entries; anything with a clip reads the measured
+  // run the effects reported as appendMeta.
+  const appendHeaderTotal = appendShape === "images"
+    ? appendSequenceDuration(appendItems, null)
+    : (appendMeta?.d ?? appendSequenceDuration(appendItems, appendProbedRef.current));
+  // Drag-and-drop import: files dragged from the desktop over the base
+  // frame or the second clip's area light the target up, and a drop
+  // lands the files in that slot. The second clip's tiles also name
+  // the position a drop is hovering, so the drop inserts there.
+  const [baseDragOver, setBaseDragOver] = useState(false);
+  const [appendDragOver, setAppendDragOver] = useState(false);
+  const [appendDropIndex, setAppendDropIndex] = useState(null);
+  const dragCarriesFiles = (event) => Array.from(event.dataTransfer?.types || []).includes("Files");
+  const appendDropHandlers = {
+    onDragOver: (event) => {
+      if (!dragCarriesFiles(event)) return;
+      event.preventDefault();
+      setAppendDragOver(true);
+    },
+    onDragLeave: (event) => {
+      if (event.currentTarget.contains(event.relatedTarget)) return;
+      setAppendDragOver(false);
+      setAppendDropIndex(null);
+    },
+    onDrop: (event) => {
+      if (!dragCarriesFiles(event)) return;
+      event.preventDefault();
+      setAppendDragOver(false);
+      const at = appendDropIndex;
+      setAppendDropIndex(null);
+      importDroppedAppendFiles(event.dataTransfer?.files, at);
+    },
+  };
   // The plan's recording note, when there is a plan behind this clip. Sits at
   // the top of the settings column rather than inside a group: only one group
   // is open at a time, and the instruction has to stay readable while the
@@ -1946,16 +2273,15 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           onChange={(e) => {
             const file = e.target.files?.[0];
             e.target.value = "";
-            if (file) handleAppendFile(file);
+            if (file) addAppendVideoFile(file);
           }}
         />
         )}
         {/* The images input is its own door for the same reason: one input
-            per source. Which button opened it (a fresh set, or more for the
-            set on screen) rides the mode ref, so one input serves both.
-            Capture e.target.files into a plain Array BEFORE clearing
-            e.target.value = "", because FileList is a live collection that
-            is emptied in-place by value = "" in real browsers. */}
+            per source. Capture e.target.files into a plain Array BEFORE
+            clearing e.target.value = "", because FileList is a live
+            collection that is emptied in-place by value = "" in real
+            browsers. */}
         {videoUrl && (
         <input
           ref={appendImagesInputRef}
@@ -1968,7 +2294,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           onChange={(e) => {
             const files = e.target.files ? Array.from(e.target.files) : [];
             e.target.value = "";
-            if (files.length) handleAppendImages(files, appendImagesModeRef.current);
+            if (files.length) addAppendImageFiles(files);
           }}
         />
         )}
@@ -1976,7 +2302,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             clip is attached the founder has done what it asked, and a
             standing instruction for finished work reads as an unanswered
             debt. Removing the clip brings it back. */}
-        {recordBrief && !appendUrl && !appendImages?.length && <RecordBriefNote brief={recordBrief} />}
+        {recordBrief && appendItems.length === 0 && <RecordBriefNote brief={recordBrief} />}
         <EditorSection title="Base clip & look" icon={Film} open={openSections.source} onToggle={() => toggleSection("source")} testId="demo-cta-source">
           {generation ? (
             <>
@@ -1992,11 +2318,23 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             </>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
-            {/* No picker button here. The frame carries the upload action in
-                both routes, so a second button in this group was two doors to
-                the same input. The input itself lives above the sections —
-                the frame's button drives it by ref — since collapsed groups
-                unmount their children. */}
+            {/* The frame carries the upload action in both routes, so no
+                second upload button stands in this group. The library
+                pop-up is a different door — it browses what is already
+                filed — so it stands here as its own button. The input
+                itself lives above the sections — the frame's button
+                drives it by ref — since collapsed groups unmount their
+                children. */}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-10"
+              onClick={() => setPickerSlot("base")}
+              data-testid="base-library-button"
+            >
+              <Images className="h-3.5 w-3.5" />
+              <span>Choose from your library</span>
+            </Button>
             {sourceFileName && (
               <>
                 <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground" title={sourceFileName}>
@@ -2083,26 +2421,35 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
             nobody could place. */}
         {videoUrl && (
         <EditorSection title="Second clip" icon={Smartphone} open={openSections.second} onToggle={() => toggleSection("second")} testId="demo-cta-second">
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Both add buttons open the library pop-up — the one browse
+              surface for the slot. The device inputs stay one tap away
+              inside the pop-up, so uploading something new still starts
+              here. The row is also a drop target: files dropped on it
+              join the end of the sequence. */}
+          <div
+            className={`flex flex-wrap items-center gap-2 rounded-xl ${appendDragOver ? "outline outline-2 outline-[color:var(--brand-indigo)]" : ""}`}
+            data-testid="append-drop-zone"
+            {...appendDropHandlers}
+          >
             <Button
               variant="secondary"
               size="sm"
               className="h-10"
-              onClick={() => appendInputRef.current?.click()}
+              onClick={() => setPickerSlot("append")}
               data-testid="append-upload-button"
             >
               <Upload className="h-3.5 w-3.5" />
-              <span>{appendUrl ? "Replace second clip" : "Add second clip"}</span>
+              <span>{appendItems.length ? "Add another clip" : "Add second clip"}</span>
             </Button>
             <Button
               variant="secondary"
               size="sm"
               className="h-10"
-              onClick={() => { appendImagesModeRef.current = "replace"; appendImagesInputRef.current?.click(); }}
+              onClick={() => setPickerSlot("append")}
               data-testid="append-images-button"
             >
               <Images className="h-3.5 w-3.5" />
-              <span>{appendImages?.length ? "Replace images" : appendUrl ? "Replace with images" : "Add images"}</span>
+              <span>{appendItems.length ? "Add more images" : "Add images"}</span>
             </Button>
             {appendName && (
               <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground" title={appendName} data-testid="append-file-name">
@@ -2110,7 +2457,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                 {appendMeta && Number.isFinite(appendMeta.d) ? ` • ${appendDuration.toFixed(1)}s${appendStart > 0 ? " used" : ""}` : ""}
               </span>
             )}
-            {(appendUrl || !!appendImages?.length) && (
+            {appendItems.length > 0 && (
               <Button
                 variant="secondary"
                 size="sm"
@@ -2124,22 +2471,41 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               </Button>
             )}
           </div>
+          {appendDragOver && (
+            <p className="text-sm text-muted-foreground" data-testid="append-drop-hint">
+              {appendDropIndex != null ? `Release to place it as Item ${appendDropIndex + 1}` : "Release to add to the second clip"}
+            </p>
+          )}
           {appendError && <p role="alert" className="text-sm text-destructive-text">{appendError}</p>}
-          {!appendMeta && !appendError && (appendUrl || !!appendImages?.length) && <p role="status" className="text-sm text-muted-foreground">{appendImages?.length ? "Loading added images…" : "Loading added clip…"}</p>}
-          {!!appendImages?.length && (
-            <div className="space-y-2" data-testid="append-images-list">
-              <SubLabel icon={Images}>Image sequence · {imageSequenceDuration(appendImages).toFixed(1)}s</SubLabel>
-              {appendImages.map((entry, index) => (
-                <div key={entry.id} className="space-y-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-2" data-testid={`append-image-row-${entry.id}`}>
+          {!appendMeta && !appendError && appendItems.length > 0 && <p role="status" className="text-sm text-muted-foreground">{appendShape === "images" ? "Loading added images…" : appendShape === "mixed" ? "Loading the second clip sequence…" : "Loading added clip…"}</p>}
+          {appendItems.length > 0 && (
+            <div
+              className={`space-y-2 rounded-xl ${appendDragOver ? "outline outline-2 outline-[color:var(--brand-indigo)]" : ""}`}
+              data-testid="append-sequence-list"
+              {...appendDropHandlers}
+            >
+              {appendShape === "images" ? (
+                <SubLabel icon={Images}>Image sequence · {appendHeaderTotal.toFixed(1)}s</SubLabel>
+              ) : (
+                <SubLabel icon={Images}>Second clip sequence · {appendHeaderTotal.toFixed(1)}s</SubLabel>
+              )}
+              {appendItems.map((entry, index) => entry.kind === "image" ? (
+                <div
+                  key={entry.id}
+                  className={`space-y-2 rounded-xl border bg-secondary/20 px-3 py-2 ${appendDropIndex === index ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)]"}`}
+                  data-testid={`append-image-row-${entry.id}`}
+                  onDragOver={(event) => { if (dragCarriesFiles(event)) setAppendDropIndex(index); }}
+                >
                   <div className="flex items-center gap-1">
-                    <span className="min-w-0 flex-1 truncate text-sm" title={entry.name}>{index + 1}. {entry.name}</span>
-                    <Button variant="secondary" size="sm" className="h-8 w-8" disabled={index === 0} onClick={() => moveAppendImage(entry.id, -1)} data-testid={`append-image-up-${entry.id}`} title="Move earlier" aria-label={`Move ${entry.name} earlier`}>
+                    <ImageIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate text-sm" title={entry.name}>Item {index + 1} · {entry.name}</span>
+                    <Button variant="secondary" size="sm" className="h-8 w-8" disabled={index === 0} onClick={() => moveAppendItem(entry.id, -1)} data-testid={`append-image-up-${entry.id}`} title="Move earlier" aria-label={`Move ${entry.name} earlier`}>
                       <ChevronUp className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="secondary" size="sm" className="h-8 w-8" disabled={index === appendImages.length - 1} onClick={() => moveAppendImage(entry.id, 1)} data-testid={`append-image-down-${entry.id}`} title="Move later" aria-label={`Move ${entry.name} later`}>
+                    <Button variant="secondary" size="sm" className="h-8 w-8" disabled={index === appendItems.length - 1} onClick={() => moveAppendItem(entry.id, 1)} data-testid={`append-image-down-${entry.id}`} title="Move later" aria-label={`Move ${entry.name} later`}>
                       <ChevronDown className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="secondary" size="sm" className="h-8 w-8" onClick={() => removeAppendImage(entry.id)} data-testid={`append-image-remove-${entry.id}`} title="Remove this image" aria-label={`Remove ${entry.name}`}>
+                    <Button variant="secondary" size="sm" className="h-8 w-8" onClick={() => removeAppendItem(entry.id)} data-testid={`append-image-remove-${entry.id}`} title="Remove this image" aria-label={`Remove ${entry.name}`}>
                       <X className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -2151,12 +2517,37 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                     />
                   </div>
                 </div>
+              ) : (
+                <div
+                  key={entry.id}
+                  className={`rounded-xl border bg-secondary/20 px-3 py-2 ${appendDropIndex === index ? "border-[color:var(--brand-indigo)]" : "border-[color:var(--hairline)]"}`}
+                  data-testid={`append-item-row-${entry.id}`}
+                  onDragOver={(event) => { if (dragCarriesFiles(event)) setAppendDropIndex(index); }}
+                >
+                  <div className="flex items-center gap-1">
+                    <Film className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate text-sm" title={entry.name}>Item {index + 1} · {entry.name}</span>
+                    {(() => {
+                      const rowDuration = appendShape === "single" ? appendMeta?.d : appendVideoMeta[entry.id]?.d;
+                      return Number.isFinite(rowDuration) ? <span className="shrink-0 text-sm text-muted-foreground">{rowDuration.toFixed(1)}s</span> : null;
+                    })()}
+                    <Button variant="secondary" size="sm" className="h-8 w-8" disabled={index === 0} onClick={() => moveAppendItem(entry.id, -1)} data-testid={`append-item-up-${entry.id}`} title="Move earlier" aria-label={`Move ${entry.name} earlier`}>
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="secondary" size="sm" className="h-8 w-8" disabled={index === appendItems.length - 1} onClick={() => moveAppendItem(entry.id, 1)} data-testid={`append-item-down-${entry.id}`} title="Move later" aria-label={`Move ${entry.name} later`}>
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="secondary" size="sm" className="h-8 w-8" onClick={() => removeAppendItem(entry.id)} data-testid={`append-item-remove-${entry.id}`} title="Remove this clip" aria-label={`Remove ${entry.name}`}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
               ))}
               <Button
                 variant="secondary"
                 size="sm"
                 className="h-10"
-                onClick={() => { appendImagesModeRef.current = "add"; appendImagesInputRef.current?.click(); }}
+                onClick={() => appendImagesInputRef.current?.click()}
                 data-testid="append-images-add-more"
               >
                 <ImagePlus className="h-3.5 w-3.5" />
@@ -2164,7 +2555,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               </Button>
             </div>
           )}
-          {(appendUrl || !!appendImages?.length) && (
+          {appendItems.length > 0 && (
             <StylePicker
               label="Second clip style"
               value={appendMode}
@@ -2212,16 +2603,16 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               <AnimationPicker value={appendAnim} onChange={setAppendAnim} prefix="append-" />
             </>
           )}
-          {(appendUrl || !!appendImages?.length) && (
+          {appendItems.length > 0 && (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-2 text-sm text-muted-foreground transition-colors hover:border-[color:var(--hairline-strong)] hover:text-foreground has-[:checked]:border-[color:var(--indigo-35)] has-[:checked]:bg-[color:var(--indigo-6)] has-[:checked]:text-foreground">
                 <input type="checkbox" checked={appendOverlays} data-testid="append-overlays"
                   onChange={(event) => { invalidateSequence(); setAppendOverlays(event.target.checked); }} />
                 Overlays on both clips
               </label>
-              {/* A still is silent: the mute belongs to clips only, so an
-                  image sequence never offers it. */}
-              {appendUrl && (
+              {/* A still is silent: the mute belongs to clips only, so a
+                  sequence of stills alone never offers it. */}
+              {appendItems.some((item) => item.kind === "video") && (
               <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-2 text-sm text-muted-foreground transition-colors hover:border-[color:var(--hairline-strong)] hover:text-foreground has-[:checked]:border-[color:var(--indigo-35)] has-[:checked]:bg-[color:var(--indigo-6)] has-[:checked]:text-foreground">
                 <input type="checkbox" checked={appendMuted} data-testid="append-audio-mute"
                   onChange={(event) => { invalidateSequence(); setAppendMuted(event.target.checked); }} />
@@ -2242,7 +2633,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               carries no drag hint — canvas drag and scroll still drive
               the base's lock framing, so the added clip's hand framing
               is set by these sliders alone. */}
-          {(appendUrl || !!appendImages?.length) && (
+          {appendItems.length > 0 && (
           <details className="group rounded-xl border border-[color:var(--hairline)] bg-secondary/20 px-3 py-1.5" data-testid="append-fine-tune-framing">
             <GroupLabel as="summary" className="cursor-pointer list-none justify-between py-1 [&::-webkit-details-marker]:hidden">
               <span>Fine-tune framing</span>
@@ -2774,7 +3165,32 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
         <div
           className={`demo-cta-frame relative mx-auto flex items-center justify-center overflow-hidden rounded-xl border ${
             videoUrl ? "border-[color:var(--hairline)] bg-black" : "border-dashed border-[color:var(--hairline-strong)] bg-secondary/20"
-          }`}
+          } ${baseDragOver ? "outline outline-2 outline-[color:var(--brand-indigo)]" : ""}`}
+          onDragOver={(event) => {
+            if (!dragCarriesFiles(event)) return;
+            event.preventDefault();
+            setBaseDragOver(true);
+          }}
+          onDragLeave={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget)) return;
+            setBaseDragOver(false);
+          }}
+          onDrop={(event) => {
+            if (!dragCarriesFiles(event)) return;
+            event.preventDefault();
+            setBaseDragOver(false);
+            // The base is one video, so a drop takes the first video
+            // file it carries — the same single pick an upload makes.
+            // A drop of images alone names where they belong instead
+            // of failing silently.
+            const files = [...(event.dataTransfer?.files || [])];
+            const video = files.find((file) => file.type?.startsWith("video/") || /\.(mp4|webm|mov|m4v)$/i.test(file.name || ""));
+            if (video) {
+              handleFile(video, { saveToLibrary: true });
+            } else if (files.length) {
+              setError("The base clip takes a video file. Images can be dropped on the second clip instead.");
+            }
+          }}
         >
           {videoUrl ? (
             <>
@@ -2877,6 +3293,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                 >
                   {historyOpen ? "Hide History" : "Choose from History"}
                 </Button>
+
                 <p className="mt-3">
                   <TourStartLink tourId="demo-cta" />
                 </p>
@@ -3221,7 +3638,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
           className="pointer-events-none absolute h-px w-px opacity-0"
           playsInline
           muted={previewMuted}
-          loop={!appendUrl && !appendImages?.length}
+          loop={appendItems.length === 0}
         />
         {/* Second-segment playback; export decodes the original bytes. */}
         {appendUrl && (
@@ -3319,6 +3736,27 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
         )}
       </div>
     </div>
+    {/* The library pop-up both slots open. It portals onto the body, so
+        its seat in the tree is only about which slot is asking: the
+        base takes one pick, the second clip takes a sequence. Its
+        upload buttons close it first, then drive the same hidden
+        inputs the frame and the sections have always driven. */}
+    <LibraryPicker
+      open={pickerSlot !== null}
+      slot={pickerSlot === "append" ? "second" : "base"}
+      profileId={openingProfileId}
+      selectedAssetIds={pickerSlot === "base"
+        ? (baseMedia?.assetId ? [baseMedia.assetId] : [])
+        : appendItems.map((item) => item.assetId || null)}
+      sequence={pickerSlot === "append" ? appendItems.map((item) => ({ entryId: item.id, assetId: item.assetId || null, name: item.name, kind: item.kind })) : []}
+      onClose={() => setPickerSlot(null)}
+      onToggleAsset={(asset) => { if (pickerSlot === "base") toggleBaseAsset(asset); else toggleAppendAsset(asset); }}
+      onRemoveEntry={removeAppendItem}
+      onMoveEntry={moveAppendItem}
+      onDropEntry={dropAppendItem}
+      onUploadVideo={() => { setPickerSlot(null); if (pickerSlot === "base") fileInputRef.current?.click(); else appendInputRef.current?.click(); }}
+      onUploadImages={() => { setPickerSlot(null); appendImagesInputRef.current?.click(); }}
+    />
     </TooltipProvider>
   );
 }

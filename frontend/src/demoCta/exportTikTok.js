@@ -68,8 +68,14 @@ async function encodeJoinedAudio(segments, audioSource, checkCancelled) {
  * have no track to decode, so its frames are composed — each still's
  * picked motion (ADR 0354) and the crossfades included — at the same
  * 30 fps, and it carries no audio. A real
- * added clip wins if both are somehow passed; the editor never sends both. */
-export async function exportTikTok({ source, appendSource, appendImages = null, reduceMotion = false, canvas, drawFrame, onProgress, signal, baseMuted = false, appendMuted = false, baseStart = 0, appendStart = 0, baseEnd = null, appendEnd = null }) {
+ * added clip wins if both are somehow passed; the editor never sends both.
+ * The added slot may instead carry a mixed sequence — clips and stills in
+ * one ordered run. Each clip decodes as its own segment and each unbroken
+ * run of stills composes as one image segment, every one of them painted
+ * through the added slot's single paint seat (paintIndex 1), so the
+ * sequence wears the second clip's one style, framing and overlays. The
+ * start/end window trims the whole run, exactly as it trims one clip. */
+export async function exportTikTok({ source, appendSource, appendImages = null, appendSequence = null, reduceMotion = false, canvas, drawFrame, onProgress, signal, baseMuted = false, appendMuted = false, baseStart = 0, appendStart = 0, baseEnd = null, appendEnd = null }) {
   const { width, height, fps, videoBitrate, audioBitrate } = TIKTOK_EXPORT;
   const videoConfig = { codec: "avc", bitrate: videoBitrate, fullCodecString: "avc1.640028", latencyMode: "quality" };
   const audioConfig = { codec: "aac", bitrate: audioBitrate, transform: { sampleRate: 48000, numberOfChannels: 2 } };
@@ -116,6 +122,80 @@ export async function exportTikTok({ source, appendSource, appendImages = null, 
       segments.push({ kind: "images", images: appendImages, audioTrack: null, origin: run.start, duration: run.duration, start: duration, muted: true });
       duration += run.duration;
     }
+    if (!appendSource && !appendImages?.length && appendSequence?.length) {
+      // Measure the run first: a clip contributes its decoded length, a
+      // still its hold. The window then slices items the way it slices
+      // one clip — an item the window starts inside contributes from
+      // that point, an item outside it contributes nothing.
+      const itemRuns = [];
+      let total = 0;
+      for (const item of appendSequence) {
+        if (item.kind === "video") {
+          const input = new Input({ source: new BlobSource(item.blob), formats: ALL_FORMATS });
+          inputs.push(input);
+          const track = await input.getPrimaryVideoTrack();
+          if (!track || !await track.canDecode()) throw new Error("One of the added clips cannot be decoded. Upload a playable MP4 or WebM video.");
+          const first = Math.max(0, await track.getFirstTimestamp());
+          const full = (await track.computeDuration()) - first;
+          if (!Number.isFinite(full) || full <= 0) throw new Error("One of the added clips has no playable duration. Upload another video.");
+          const audioTrack = await input.getPrimaryAudioTrack();
+          if (audioTrack && (!await audioTrack.canDecode() || !await canEncodeAudio("aac", { sampleRate: 48000, numberOfChannels: 2, bitrate: audioBitrate }))) {
+            throw new Error("This browser cannot preserve this clip's audio in TikTok MP4. Use a current Chrome or Edge browser; audio will not be silently removed.");
+          }
+          itemRuns.push({ kind: "video", track, audioTrack, first, duration: full });
+          total += full;
+        } else {
+          itemRuns.push({ kind: "image", item, duration: item.seconds });
+          total += item.seconds;
+        }
+      }
+      if (!(total > 0)) throw new Error("The second clip sequence has no playable duration. Give each image at least a second on screen.");
+      const run = clipWindow(total, appendStart, undefined, appendEnd);
+      if (!(run.duration > 0)) throw new Error("The second clip sequence has nothing left after its start point. Move the start point earlier.");
+      let cursor = 0;
+      let placed = duration;
+      // One pending image segment per unbroken run of stills: the
+      // compositor lays its entries out from the run's own start, so
+      // the segment's origin is the window's offset into the run and
+      // its span is the run's sliced span, however many stills of the
+      // run fall outside the window.
+      let imageGroup = null;
+      const flushImageGroup = () => {
+        if (imageGroup?.sliced) {
+          segments.push({ kind: "images", images: imageGroup.entries, audioTrack: null, origin: imageGroup.firstSlice - imageGroup.start, duration: imageGroup.lastSlice - imageGroup.firstSlice, start: imageGroup.placedStart, muted: true, paintIndex: 1 });
+        }
+        imageGroup = null;
+      };
+      for (const itemRun of itemRuns) {
+        const itemStart = cursor;
+        const itemEnd = cursor + itemRun.duration;
+        cursor = itemEnd;
+        const sliceStart = Math.max(itemStart, run.start);
+        const sliceEnd = Math.min(itemEnd, run.start + run.duration);
+        const hasSlice = sliceEnd > sliceStart;
+        if (itemRun.kind === "video") {
+          flushImageGroup();
+          if (hasSlice) {
+            segments.push({ track: itemRun.track, audioTrack: itemRun.audioTrack, origin: itemRun.first + (sliceStart - itemStart), duration: sliceEnd - sliceStart, start: placed, muted: appendMuted, paintIndex: 1 });
+            placed += sliceEnd - sliceStart;
+          }
+        } else {
+          if (!imageGroup) imageGroup = { entries: [], start: itemStart, sliced: false, firstSlice: 0, lastSlice: 0, placedStart: 0 };
+          imageGroup.entries.push({ source: itemRun.item.source, seconds: itemRun.duration, motion: itemRun.item.motion });
+          if (hasSlice) {
+            if (!imageGroup.sliced) {
+              imageGroup.sliced = true;
+              imageGroup.firstSlice = sliceStart;
+              imageGroup.placedStart = placed;
+            }
+            imageGroup.lastSlice = sliceEnd;
+            placed += sliceEnd - sliceStart;
+          }
+        }
+      }
+      flushImageGroup();
+      duration = placed;
+    }
     canvas.width = width;
     canvas.height = height;
     output = new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target: new BufferTarget() });
@@ -139,7 +219,7 @@ export async function exportTikTok({ source, appendSource, appendImages = null, 
           for (let frame = first; frame < last; frame++) {
             checkCancelled();
             composeImageFrame(scratch, drawables, segment.images, segment.origin + frame / fps - segment.start, { reduceMotion: !!reduceMotion });
-            drawFrame(frame / fps, scratch, index);
+            drawFrame(frame / fps, scratch, segment.paintIndex ?? index);
             await videoSource.add(frame / fps, segments.length > 1 ? Math.min(1 / fps, duration - frame / fps) : 1 / fps);
             onProgress?.((frame + 1) / frameCount);
           }
@@ -152,7 +232,7 @@ export async function exportTikTok({ source, appendSource, appendImages = null, 
         for await (const decoded of new CanvasSink(segment.track, { poolSize: 2 }).canvasesAtTimestamps(timestamps())) {
           checkCancelled();
           if (!decoded) throw new Error(`The ${index ? "added" : "source"} video is missing a frame at ${(frame / fps).toFixed(2)}s. Choose another clip.`);
-          drawFrame(frame / fps, decoded.canvas, index);
+          drawFrame(frame / fps, decoded.canvas, segment.paintIndex ?? index);
           await videoSource.add(frame / fps, segments.length > 1 ? Math.min(1 / fps, duration - frame / fps) : 1 / fps);
           frame++;
           onProgress?.(frame / frameCount);

@@ -21870,7 +21870,7 @@ async function runDemoCtaChecks() {
         await clickEl(ctx, toggle, "open the second clip group");
       }
     };
-    const rowNames = () => [...ctx.container.querySelectorAll('[data-testid="append-images-list"] [data-testid^="append-image-row-"]')]
+    const rowNames = () => [...ctx.container.querySelectorAll('[data-testid="append-sequence-list"] [data-testid^="append-image-row-"]')]
       .map((row) => row.querySelector("span")?.textContent || "");
     try {
       await loadPinnedClip();
@@ -21938,9 +21938,9 @@ async function runDemoCtaChecks() {
       }
       await act(async () => ctx.root.unmount());
       const saved = global.__SMOKE_DRAFTS.get("anonymous:gen-images");
-      if (!saved?.appendImages?.length) throw new Error("the draft did not store the image sequence");
-      if (saved.appendImages.map((e) => e.name).join(",") !== "chart.png,home.png") throw new Error("the draft stored the wrong order");
-      if (!saved.appendImages[0].blob) throw new Error("the draft lost the stills' bytes");
+      if (!saved?.appendItems?.length) throw new Error("the draft did not store the image sequence");
+      if (saved.appendItems.map((e) => e.name).join(",") !== "chart.png,home.png") throw new Error("the draft stored the wrong order");
+      if (!saved.appendItems[0].blob) throw new Error("the draft lost the stills' bytes");
       ctx.root = createRoot(ctx.container);
       await mount(Editor, { generation: GEN })(ctx);
       await clip.flush();
@@ -21956,11 +21956,327 @@ async function runDemoCtaChecks() {
       if (rowNames().length !== 1) throw new Error("removing a still did not shorten the sequence");
       const lastRowId = ctx.container.querySelector('[data-testid^="append-image-row-"]').getAttribute("data-testid").replace("append-image-row-", "");
       await clickEl(ctx, ctx.container.querySelector(`[data-testid="append-image-remove-${lastRowId}"]`), "remove the last still");
-      if (ctx.container.querySelector('[data-testid="append-images-list"]')) throw new Error("removing the last still left an empty sequence behind");
+      if (ctx.container.querySelector('[data-testid="append-sequence-list"]')) throw new Error("removing the last still left an empty sequence behind");
     } finally {
       await act(async () => ctx.root.unmount());
       dom.window.Image = RealImage;
       global.Image = RealImage;
+      clip.restore();
+      delete global.__SMOKE_DRAFTS;
+    }
+  });
+
+  await check("the Demo + CTA library pop-up serves both slots: the base takes one pick, the second clip takes a sequence", async (ctx) => {
+    // The editor used to file uploads INTO the Assets library with no way
+    // back in. The pop-up is that way back: both slots' add doors open it,
+    // it lists the active clip assets (screen recordings and screenshots),
+    // the base takes one video (a pick replaces, the standing pick reads
+    // selected and tapping it takes the pick back out, images are visible
+    // but never pickable there), and the second clip takes an ordered
+    // sequence of clips and stills together — picks stand selected with
+    // their order numbers, the strip reorders and removes, and a sequence
+    // shrunk back to one clip is that clip again, element and all.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    const GEN = { id: "gen-picker", brand_profile_id: "b1" };
+    global.__SMOKE_DRAFTS = new Map();
+    const RealImage = dom.window.Image;
+    class FakeImage {
+      constructor() { this.naturalWidth = 1080; this.naturalHeight = 1920; this.width = 1080; this.height = 1920; }
+      set src(_value) { setTimeout(() => this.onload && this.onload(), 0); }
+      get src() { return ""; }
+    }
+    dom.window.Image = FakeImage;
+    global.Image = FakeImage;
+    const originalFetch = global.fetch;
+    global.fetch = async (url) => ({
+      ok: true,
+      blob: async () => new Blob([new Uint8Array(8)], { type: String(url).includes(".png") ? "image/png" : "video/mp4" }),
+    });
+    const ASSETS = [
+      { id: "lib-vid-1", kind: "screen_recording", status: "active", label: "Library clip one", name: "lib-one.mp4", media_url: "https://cdn.example/lib-one.mp4", duration_seconds: 4 },
+      { id: "lib-vid-2", kind: "screen_recording", status: "active", label: "Library clip two", name: "lib-two.mp4", media_url: "https://cdn.example/lib-two.mp4", duration_seconds: 6 },
+      { id: "lib-img-1", kind: "screenshot", status: "active", label: "Library shot", name: "lib-shot.png", media_url: "https://cdn.example/lib-shot.png" },
+      { id: "lib-face", kind: "character_reference", status: "active", label: "Founder photo", name: "face.png", media_url: "https://cdn.example/face.png" },
+      { id: "lib-old", kind: "screen_recording", status: "archived", label: "Archived clip", name: "old.mp4", media_url: "https://cdn.example/old.mp4" },
+    ];
+    const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    const doc = dom.window.document;
+    const picker = () => doc.querySelector('[data-testid="library-picker"]');
+    const tile = (id) => doc.querySelector(`[data-testid="library-picker-asset-${id}"]`);
+    const badge = (id) => tile(id)?.querySelector('[class*="rounded-full"]')?.textContent.trim() || "";
+    const stripTiles = () => [...doc.querySelectorAll('[data-testid="library-picker-sequence"] [draggable]')];
+    const stripNames = () => stripTiles().map((el) => el.textContent);
+    const firedProbes = new WeakSet();
+    const fireNewProbes = async () => {
+      for (const v of clip.createdVideos) {
+        if (v.onloadedmetadata && !firedProbes.has(v)) {
+          firedProbes.add(v);
+          await act(async () => v.onloadedmetadata());
+        }
+      }
+      await clip.flush();
+    };
+    const loadPinnedClip = async () => {
+      await mount(Editor, { generation: GEN })(ctx);
+      const input = ctx.container.querySelector('[data-testid="demo-cta-file-input"]');
+      if (!input) throw new Error("no file input");
+      const file = new dom.window.File([new Uint8Array(16)], "clip.mp4", { type: "video/mp4" });
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      await act(async () => {
+        input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      });
+      await fireNewProbes();
+      await clip.flush();
+    };
+    const openSection = async (testId, why) => {
+      const toggle = ctx.container.querySelector(`[data-testid="${testId}"] button`);
+      if (toggle && toggle.getAttribute("aria-expanded") !== "true") {
+        await clickEl(ctx, toggle, why);
+      }
+    };
+    const sequenceRows = () => [...ctx.container.querySelectorAll('[data-testid="append-sequence-list"] [data-testid^="append-item-row-"], [data-testid="append-sequence-list"] [data-testid^="append-image-row-"]')];
+    try {
+      await withApi(
+        {
+          getAssets: async () => ({ assets: ASSETS }),
+          getGenerations: async () => ({ generations: [] }),
+        },
+        async () => {
+          await loadPinnedClip();
+          // The base slot: the pop-up opens from the section's library
+          // door and lists only the active clip assets.
+          await openSection("demo-cta-source", "open the base clip group");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="base-library-button"]'), "open the library for the base clip");
+          await clip.flush();
+          if (!picker()) throw new Error("the base clip's add door opened no library pop-up");
+          if (!tile("lib-vid-1") || !tile("lib-vid-2") || !tile("lib-img-1")) throw new Error("the pop-up did not list the active clip assets");
+          if (tile("lib-face") || tile("lib-old")) throw new Error("the pop-up listed assets that are not active clip media");
+          if (!tile("lib-img-1").disabled) throw new Error("an image tile was pickable for the base clip");
+          await clickEl(ctx, tile("lib-vid-1"), "pick the first library clip for the base");
+          await fireNewProbes();
+          await clip.flush();
+          if (!ctx.container.querySelector('span[title="Library clip one"]')) throw new Error("the base did not take the library pick");
+          if (tile("lib-vid-1").getAttribute("data-selected") !== "true") throw new Error("the base's standing pick does not read selected in the pop-up");
+          // A second pick replaces the first — the base holds one clip.
+          await clickEl(ctx, tile("lib-vid-2"), "pick the second library clip for the base");
+          await fireNewProbes();
+          await clip.flush();
+          if (!ctx.container.querySelector('span[title="Library clip two"]')) throw new Error("the second library pick did not replace the first");
+          if (ctx.container.querySelector('span[title="Library clip one"]')) throw new Error("the replaced base pick is still standing");
+          if (tile("lib-vid-1").getAttribute("data-selected") === "true") throw new Error("the replaced pick still reads selected");
+          // Tapping the standing pick takes it back out.
+          await clickEl(ctx, tile("lib-vid-2"), "take the standing base pick back out");
+          await clip.flush();
+          if (ctx.container.querySelector('span[title="Library clip two"]')) throw new Error("tapping the standing pick did not clear the base");
+          if (ctx.container.querySelector('[data-testid="demo-cta-remove-source"]')) throw new Error("the cleared base still offers its upload's Remove");
+          // Put a base back so the second slot exists, then close.
+          await clickEl(ctx, tile("lib-vid-1"), "pick a base clip again");
+          await fireNewProbes();
+          await clip.flush();
+          await clickEl(ctx, doc.querySelector('[data-testid="library-picker-close"]'), "close the library pop-up");
+          if (picker()) throw new Error("the library pop-up did not close");
+          // The second slot: the images door opens the same pop-up, and
+          // picks accumulate into a sequence.
+          await openSection("demo-cta-second", "open the second clip group");
+          await clickEl(ctx, ctx.container.querySelector('[data-testid="append-images-button"]'), "open the library for the second clip");
+          await clip.flush();
+          if (!picker()) throw new Error("the second clip's add door opened no library pop-up");
+          if (!doc.querySelector('[data-testid="library-picker-upload-images"]')) throw new Error("the second clip's pop-up offers no device upload for images");
+          await clickEl(ctx, tile("lib-vid-1"), "pick a clip for the second slot");
+          await clip.flush();
+          const appendEl = ctx.container.querySelector('[data-testid="append-video"]');
+          if (!appendEl) throw new Error("a one-clip sequence did not stand the clip's own element up");
+          await act(async () => appendEl.dispatchEvent(new dom.window.Event("loadeddata")));
+          await clip.flush();
+          if (stripTiles().length !== 1) throw new Error("the pop-up strip does not carry the one standing pick");
+          if (badge("lib-vid-1") !== "1") throw new Error(`the first pick's order badge reads ${JSON.stringify(badge("lib-vid-1"))}, not 1`);
+          await clickEl(ctx, tile("lib-img-1"), "add a still to the sequence");
+          await fireNewProbes();
+          await clip.flush();
+          await clickEl(ctx, tile("lib-vid-2"), "add a second clip to the sequence");
+          await fireNewProbes();
+          await clip.flush();
+          if (sequenceRows().length !== 3) throw new Error(`the sequence lists ${sequenceRows().length} entries, not three`);
+          const names = stripNames().join("|");
+          if (!(names.indexOf("Library clip one") < names.indexOf("Library shot") && names.indexOf("Library shot") < names.indexOf("Library clip two"))) {
+            throw new Error(`the strip's order is wrong: ${names}`);
+          }
+          if (badge("lib-img-1") !== "2" || badge("lib-vid-2") !== "3") throw new Error("the picks' order badges do not follow the sequence");
+          // Reorder in the strip: the last entry moves one seat earlier,
+          // and the section list follows the same order.
+          const lastTile = stripTiles()[2];
+          const lastEntryId = lastTile.getAttribute("data-testid").replace("library-picker-item-", "");
+          await clickEl(ctx, doc.querySelector(`[data-testid="library-picker-item-up-${lastEntryId}"]`), "move the last entry earlier in the strip");
+          await clip.flush();
+          const reordered = stripNames().join("|");
+          if (!(reordered.indexOf("Library clip one") < reordered.indexOf("Library clip two") && reordered.indexOf("Library clip two") < reordered.indexOf("Library shot"))) {
+            throw new Error(`the strip's reorder did not take: ${reordered}`);
+          }
+          const rowText = sequenceRows().map((row) => row.textContent).join("|");
+          if (!(rowText.indexOf("Library clip one") < rowText.indexOf("Library clip two") && rowText.indexOf("Library clip two") < rowText.indexOf("Library shot"))) {
+            throw new Error(`the section list did not follow the reorder: ${rowText}`);
+          }
+          // Remove from inside the pop-up: the still leaves the sequence
+          // without hunting the grid.
+          const imageTile = stripTiles().find((el) => el.textContent.includes("Library shot"));
+          const imageEntryId = imageTile.getAttribute("data-testid").replace("library-picker-item-", "");
+          await clickEl(ctx, doc.querySelector(`[data-testid="library-picker-item-remove-${imageEntryId}"]`), "remove the still from inside the pop-up");
+          await fireNewProbes();
+          await clip.flush();
+          if (sequenceRows().length !== 2) throw new Error("removing from the pop-up did not shorten the sequence");
+          if (tile("lib-img-1").getAttribute("data-selected") === "true") throw new Error("the removed still still reads selected");
+          // Toggling a standing pick in the grid takes it out too, and a
+          // sequence back to one clip is the single second clip again.
+          await clickEl(ctx, tile("lib-vid-1"), "toggle the first clip back out of the sequence");
+          await clip.flush();
+          const singleEl = ctx.container.querySelector('[data-testid="append-video"]');
+          if (!singleEl) throw new Error("the sequence back to one clip did not restore the clip's own element");
+          await act(async () => singleEl.dispatchEvent(new dom.window.Event("loadeddata")));
+          await clip.flush();
+          const fileLine = ctx.container.querySelector('[data-testid="append-file-name"]');
+          if (!fileLine || !fileLine.textContent.includes("Library clip two")) {
+            throw new Error(`the one-clip sequence's summary line is wrong: ${fileLine?.textContent}`);
+          }
+          await act(async () => ctx.root.unmount());
+          const saved = global.__SMOKE_DRAFTS.get("anonymous:gen-picker");
+          if (!saved?.appendItems || saved.appendItems.length !== 1) throw new Error("the draft did not store the one-entry sequence");
+          if (saved.appendItems[0].kind !== "video" || saved.appendItems[0].assetId !== "lib-vid-2" || saved.appendItems[0].name !== "Library clip two") {
+            throw new Error(`the draft stored the wrong entry: ${JSON.stringify(saved.appendItems[0] && { kind: saved.appendItems[0].kind, assetId: saved.appendItems[0].assetId, name: saved.appendItems[0].name })}`);
+          }
+        }
+      );
+    } finally {
+      await act(async () => ctx.root.unmount());
+      dom.window.Image = RealImage;
+      global.Image = RealImage;
+      global.fetch = originalFetch;
+      clip.restore();
+      delete global.__SMOKE_DRAFTS;
+    }
+  });
+
+  await check("a pre-sequence Demo + CTA draft migrates its second clip, and dropped files join the sequence in place", async (ctx) => {
+    // Drafts saved before the sequence existed carry a lone appendMedia
+    // clip and/or an appendImages still list with no kind on the entries:
+    // they open as one mixed sequence in the stored order, under neutral
+    // Item names (a slot can hold either kind, so no slot is named for a
+    // video). Files dropped on the sequence area join it too — a drop on
+    // a tile inserts at that tile's seat — and a dropped file files its
+    // library copy like any other device add.
+    const clip = installLoadedClipStubs({ width: 1080, height: 1920 });
+    const GEN = { id: "gen-legacy", brand_profile_id: "b1" };
+    global.__SMOKE_DRAFTS = new Map();
+    const RealImage = dom.window.Image;
+    class FakeImage {
+      constructor() { this.naturalWidth = 1080; this.naturalHeight = 1920; this.width = 1080; this.height = 1920; }
+      set src(_value) { setTimeout(() => this.onload && this.onload(), 0); }
+      get src() { return ""; }
+    }
+    dom.window.Image = FakeImage;
+    global.Image = FakeImage;
+    const nodeFormData = global.FormData;
+    global.FormData = dom.window.FormData;
+    const uploads = [];
+    const Editor = load("demoCta/DemoCtaEditor.jsx").DemoCtaEditor;
+    const firedProbes = new WeakSet();
+    const fireNewProbes = async () => {
+      for (const v of clip.createdVideos) {
+        if (v.onloadedmetadata && !firedProbes.has(v)) {
+          firedProbes.add(v);
+          await act(async () => v.onloadedmetadata());
+        }
+      }
+      await clip.flush();
+    };
+    const pick = async (testid, files) => {
+      const input = ctx.container.querySelector(`[data-testid="${testid}"]`);
+      if (!input) throw new Error(`no ${testid} input`);
+      Object.defineProperty(input, "files", { value: files, configurable: true });
+      await act(async () => {
+        input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      });
+      await clip.flush();
+    };
+    const sequenceRows = () => [...ctx.container.querySelectorAll('[data-testid="append-sequence-list"] [data-testid^="append-item-row-"], [data-testid="append-sequence-list"] [data-testid^="append-image-row-"]')];
+    const rowLabels = () => sequenceRows().map((row) => row.querySelector("span")?.textContent || "");
+    try {
+      await withApi(
+        {
+          getGenerations: async () => ({ generations: [] }),
+          uploadAsset: async (profileId, form) => {
+            uploads.push(`${form.get("kind")}:${form.get("file")?.name}`);
+            return { id: `asset-${uploads.length}` };
+          },
+        },
+        async () => {
+          await mount(Editor, { generation: GEN })(ctx);
+          await pick("demo-cta-file-input", [new dom.window.File([new Uint8Array(16)], "clip.mp4", { type: "video/mp4" })]);
+          await fireNewProbes();
+          await pick("append-images-input", [
+            new dom.window.File([new Uint8Array(8)], "first.png", { type: "image/png" }),
+            new dom.window.File([new Uint8Array(8)], "second.png", { type: "image/png" }),
+          ]);
+          await clip.flush();
+          await clip.flush();
+          await act(async () => ctx.root.unmount());
+          const saved = global.__SMOKE_DRAFTS.get("anonymous:gen-legacy");
+          if (!saved?.appendItems || saved.appendItems.length !== 2) throw new Error("the first save did not store the still sequence");
+          // Rewrite the stored draft into the pre-sequence shape: a lone
+          // clip field, a still list whose entries carry no kind, and no
+          // sequence field at all.
+          const legacyDraft = { ...saved };
+          delete legacyDraft.appendItems;
+          legacyDraft.appendMedia = { id: "legacy-vid-1", blob: new dom.window.File([new Uint8Array(8)], "legacy.mp4", { type: "video/mp4" }), name: "legacy.mp4" };
+          legacyDraft.appendImages = saved.appendItems.map((entry) => {
+            const { kind, ...rest } = entry;
+            return rest;
+          });
+          global.__SMOKE_DRAFTS.set("anonymous:gen-legacy", legacyDraft);
+          ctx.root = createRoot(ctx.container);
+          await mount(Editor, { generation: GEN })(ctx);
+          await fireNewProbes();
+          await clip.flush();
+          await clip.flush();
+          const toggle = ctx.container.querySelector('[data-testid="demo-cta-second"] button');
+          if (toggle && toggle.getAttribute("aria-expanded") !== "true") {
+            await clickEl(ctx, toggle, "open the second clip group");
+          }
+          const labels = rowLabels();
+          if (labels.length !== 3) throw new Error(`the migrated draft lists ${labels.length} entries, not three: ${JSON.stringify(labels)}`);
+          if (!labels[0].startsWith("Item 1") || !labels[0].includes("legacy.mp4")) throw new Error(`the migrated clip's row is wrong: ${JSON.stringify(labels[0])}`);
+          if (!labels[1].startsWith("Item 2") || !labels[1].includes("first.png")) throw new Error(`the first migrated still's row is wrong: ${JSON.stringify(labels[1])}`);
+          if (!labels[2].startsWith("Item 3") || !labels[2].includes("second.png")) throw new Error(`the second migrated still's row is wrong: ${JSON.stringify(labels[2])}`);
+          if (labels.some((label) => /Video \d/.test(label))) throw new Error("a sequence row is named for a video");
+          // Drop a clip on the second tile: it inserts at that seat and
+          // files its library copy on the way in.
+          const dropFile = new dom.window.File([new Uint8Array(8)], "dropped.mp4", { type: "video/mp4" });
+          const dragEvent = (type) => {
+            const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+            Object.defineProperty(event, "dataTransfer", { value: { files: [dropFile], types: ["Files"] } });
+            return event;
+          };
+          await act(async () => {
+            sequenceRows()[1].dispatchEvent(dragEvent("dragover"));
+          });
+          await clip.flush();
+          const hint = ctx.container.querySelector('[data-testid="append-drop-hint"]');
+          if (!hint || !hint.textContent.includes("Item 2")) throw new Error(`the drag over the second tile named no seat: ${hint?.textContent}`);
+          await act(async () => {
+            ctx.container.querySelector('[data-testid="append-sequence-list"]').dispatchEvent(dragEvent("drop"));
+          });
+          await fireNewProbes();
+          await clip.flush();
+          const afterDrop = rowLabels();
+          if (afterDrop.length !== 4) throw new Error(`the drop left ${afterDrop.length} entries, not four: ${JSON.stringify(afterDrop)}`);
+          if (!afterDrop[1].startsWith("Item 2") || !afterDrop[1].includes("dropped.mp4")) throw new Error(`the dropped clip did not land in the second seat: ${JSON.stringify(afterDrop)}`);
+          if (!uploads.includes("screen_recording:dropped.mp4")) throw new Error(`the dropped file was not filed to the library: ${uploads.join(", ")}`);
+        }
+      );
+    } finally {
+      await act(async () => ctx.root.unmount());
+      dom.window.Image = RealImage;
+      global.Image = RealImage;
+      global.FormData = nodeFormData;
       clip.restore();
       delete global.__SMOKE_DRAFTS;
     }
@@ -23776,7 +24092,7 @@ async function runDemoCtaChecks() {
     // follows the moved code.
     const src = fs.readFileSync(path.join(SRC, "demoCta", "DemoCtaEditor.jsx"), "utf8")
       + fs.readFileSync(path.join(SRC, "demoCta", "exportFlow.js"), "utf8");
-    const probeAt = src.indexOf("await probeRecordingPlays(blob, expectedDuration, appendBlob || appendImageSet ? audioSegments : [])");
+    const probeAt = src.indexOf("await probeRecordingPlays(blob, expectedDuration, appendBlob || appendImageSet || appendSequenceSet ? audioSegments : [])");
     const resultAt = src.indexOf("setResult({ url, name, size: blob.size, mime, blob })");
     if (probeAt < 0 || resultAt < probeAt || src.indexOf("await saveExport(blob, name)") < resultAt) throw new Error("invalid MP4 can reach download or History");
     for (const marker of ["probe.onloadeddata", "Math.abs(probe.duration - expectedDuration)", "probe.videoWidth === TIKTOK_EXPORT.width", "probe.videoHeight === TIKTOK_EXPORT.height"]) {

@@ -265,6 +265,23 @@ One render path, single-pass video generation via OpenRouter.
   that slider this session; the silent stop's explainer replaces the long
   silent-voice sentence, and the note that remains on HookSnap is the
   text-to-speech handover alone.
+- Demo + CTA library picker + second-clip sequence (Nov 27 2026, Kasra's
+  order): both clip slots' add doors open the Assets library pop-up
+  (`demoCta/LibraryPicker.jsx`, the pop-scrim portal shell) listing the
+  active screen recordings and screenshots as tappable thumbnails. The
+  base takes one video pick (replaces; images shown, never pickable);
+  the second slot's media model is now one ordered sequence of entries
+  (`demoCta/appendSequence.js`) mixing clips and stills — multi-pick in
+  the pop-up, reorder by strip drag or arrows, remove from inside the
+  pop-up, and per-sequence settings stay per-sequence so a one-entry
+  sequence behaves exactly like the old single second clip (one video
+  still plays through the real element; stills keep the ADR 0237
+  player; mixed runs play and export through per-item segments painted
+  as the second clip). Pre-sequence drafts (appendMedia/appendImages)
+  migrate to entries at restore. Files dropped on the second clip's
+  area insert at the hovered tile's seat and file to the library like
+  any device add; sequence rows are named Item 1, Item 2, … with the
+  kind carried by the row's icon, never by the slot's name.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no

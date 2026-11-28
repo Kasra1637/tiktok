@@ -7,10 +7,13 @@
 // reload — the exact "my edit didn't save" report this check prevents. It
 // fails loudly naming the offending key and direction.
 //
-// Media objects (baseMedia/appendMedia) restore through restoreMedia rather
-// than the setters map, and the zoom draft is stored under the `framing` key
-// and restored via setEditFraming(edit.framing) — both are pinned below so a
-// refactor that inlines them has to update this contract, not slip past it.
+// The base media object (baseMedia) restores through restoreMedia rather
+// than the setters map; the second clip's entries (appendItems) ride the
+// setters map like any other field, and drafts saved before the sequence
+// existed migrate to entries inside restoreEdit before either path runs.
+// The zoom draft is stored under the `framing` key and restored via
+// setEditFraming(edit.framing) — both are pinned below so a refactor that
+// inlines them has to update this contract, not slip past it.
 //
 // Run: node scripts/check-demo-cta-draft.cjs
 const fs = require("fs");
@@ -55,7 +58,6 @@ const setterKeys = [
 const ALIASES = {
   framing: "setEditFraming(edit.framing)",
   baseMedia: "restoreMedia(edit.baseMedia",
-  appendMedia: "restoreMedia(edit.appendMedia",
 };
 for (const [key, ref] of Object.entries(ALIASES)) {
   if (!snapshotKeys.includes(key)) {

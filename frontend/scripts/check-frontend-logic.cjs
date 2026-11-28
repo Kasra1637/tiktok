@@ -1373,8 +1373,11 @@ check("a picked motion survives the draft document round-trip",
   SEQ.normalizeImageMotion(JSON.parse(JSON.stringify({ id: "x", seconds: 2.5 })).motion) === "none");
 const editorMotionSrc = fs.readFileSync(path.join(__dirname, "..", "src", "demoCta", "DemoCtaEditor.jsx"), "utf8");
 const exportFlowSrc = fs.readFileSync(path.join(__dirname, "..", "src", "demoCta", "exportFlow.js"), "utf8");
+// Entry creation moved into appendSequence.js when the second slot became
+// a sequence; the default-motion contract rides with the factory.
+const appendSequenceSrc = fs.readFileSync(path.join(__dirname, "..", "src", "demoCta", "appendSequence.js"), "utf8");
 check("a fresh upload is created carrying the default motion",
-  editorMotionSrc.includes("motion: DEFAULT_IMAGE_MOTION"));
+  appendSequenceSrc.includes("motion: DEFAULT_IMAGE_MOTION"));
 check("the editor offers the motion pick on each image row",
   editorMotionSrc.includes("append-image-motion-") && editorMotionSrc.includes("setAppendImageMotion"));
 check("a changed motion retires the previous export",
