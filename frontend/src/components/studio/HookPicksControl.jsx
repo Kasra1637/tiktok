@@ -133,6 +133,7 @@ const SHAPE_OPTIONS = [
   { value: "auto", label: "App's choice" },
   { value: "question", label: "Question" },
   { value: "statement", label: "Statement" },
+  { value: "command", label: "Command" },
 ];
 
 // The third pick (Kasra's order, Nov 27 2026): how the hook opens —
@@ -144,6 +145,7 @@ const OPENING_OPTIONS = [
   { value: "auto", label: "App's choice" },
   { value: "action", label: "Action" },
   { value: "feeling", label: "Feeling" },
+  { value: "reaction", label: "Reaction" },
 ];
 
 // The small option sets wear the resolution treatment (ADR 0331,

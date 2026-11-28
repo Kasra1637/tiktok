@@ -88,6 +88,9 @@ def _two_section_schema(middle_seconds: int, camera_setup: str = "handheld") -> 
     if camera_setup == "fixed":
         middle_goal = "what the middle must achieve: develop the hook and end at the moment the viewer reaches for the app"
         middle_action = "what they do through the middle, ending at the handoff moment"
+    elif camera_setup == "walking":
+        middle_goal = "what the middle must achieve: develop the hook and end before the last second"
+        middle_action = "what they do through the middle while walking steadily through the scene, the phone held at arm's length in one hand the whole time, ending before the final physical beat - never a reach toward a phone or camera, never a second free hand, never scrolling, swiping, or tapping a chart, graph, app, screen, report, or dashboard or looking at one"
     else:
         middle_goal = "what the middle must achieve: develop the hook and end before the last second"
         middle_action = "what they do through the middle, ending before the final physical beat - never a reach toward a phone or camera, never a second free hand, never scrolling, swiping, or tapping a chart, graph, app, screen, report, or dashboard or looking at one"
@@ -274,8 +277,8 @@ def normalize_strategy(raw: dict) -> dict:
     result["segments"] = _normalize_sections(raw.get("segments"))
     result["camera_beat"] = _normalize_camera_beat(raw.get("camera_beat"))
     result["camera_setup"] = raw.get("camera_setup") or "handheld"
-    if result["camera_setup"] not in ("handheld", "fixed"):
-        raise ValueError("Camera setup must be handheld or fixed; rebuild the strategy.")
+    if result["camera_setup"] not in ("handheld", "walking", "fixed"):
+        raise ValueError("Camera setup must be handheld, walking or fixed; rebuild the strategy.")
     # One setup, one set of camera words, cleaned on the way to the panel
     # (ADR 0108): a handheld selfie names no phone in its action/concept/
     # movement lines, and its camera wording describes a handheld selfie

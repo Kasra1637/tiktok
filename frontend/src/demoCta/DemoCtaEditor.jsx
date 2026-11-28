@@ -245,12 +245,14 @@ function RecordBriefNote({ brief }) {
 }
 
 /**
- * Three-way presentation picker. It once served both clips; since
+ * Four-way presentation picker. It once served both clips; since
  * ADR 0374 the base always stands as Real Video, so the picker lives
  * on the added clip alone (`append-mode-*` testids). It wears the
  * one unified slider now (Kasra's order, Nov 27 2026), like every
- * pick-one-of-a-few control in the app; the ids it writes are the
- * same three it has always written.
+ * pick-one-of-a-few control in the app. The fourth stop (Nov 27
+ * 2026, the four-stop rule) is Propped: the phone rests propped on
+ * a surface inside the room scene — no hand, not floating — painted
+ * by the same painter the preview and the export share.
  */
 function StylePicker({ label, hint, value, onChange, prefix }) {
   return (
@@ -262,6 +264,7 @@ function StylePicker({ label, hint, value, onChange, prefix }) {
           { value: "floating", label: "Floating Phone" },
           { value: "hand", label: "Hand Holding" },
           { value: "realistic", label: "Real Video" },
+          { value: "propped", label: "Propped" },
         ]}
         explainers={CLIP_STYLE_EXPLAINERS}
         current={value}
@@ -2572,7 +2575,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               Reduced motion is on — transitions play as cuts in preview and export.
             </p>
           )}
-          {appendMeta && appendMode === "hand" && (
+          {appendMeta && (appendMode === "hand" || appendMode === "propped") && (
             <EnvGrid value={appendEnv} onChange={setAppendEnv} prefix="append-" />
           )}
           {appendMeta && appendMode === "floating" && (
@@ -2638,7 +2641,7 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
             </GroupLabel>
             <div className="space-y-2 pb-2 pt-1">
-          {appendMode === "floating" && (
+          {(appendMode === "floating" || appendMode === "propped") && (
               <ControlSlider label="Phone size" value={appendScale} min={RANGES.scale.min} max={RANGES.scale.max} step={RANGES.scale.step} onChange={setAppendScale} testId="append-phone-size-slider" format={(v) => `${Math.round(v * 100)}%`} />
           )}
           {appendMode === "hand" && (

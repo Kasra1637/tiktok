@@ -1416,6 +1416,55 @@ SILENT_PERFORMANCE_DIRECTION = (
 )
 
 
+# The voiceover performance (Nov 27 2026, the voice pick's third
+# stop): the presenter stays silent-lipped exactly as in the silent
+# performance, and the model's own native audio carries the words as
+# narration over the picture instead of the presenter speaking them.
+# It rides the same generate_audio path as a talking render — the
+# only audio the app has ever had is the video model's own — so the
+# direction below is what separates a voiceover from a silent clip:
+# audio is billed and requested, and the prompt tells the model the
+# voice is a narrator's, never the presenter's.
+VOICEOVER_PERFORMANCE_DIRECTION = (
+    "\n\nVOICEOVER PERFORMANCE — NARRATED, NOT SPOKEN ON CAMERA: the "
+    "presenter does not speak the words above aloud and does not "
+    "mouth them — the mouth stays closed and still for the whole "
+    "clip, with no lip movement at all, while the presenter still "
+    "performs the opening and closing actions exactly as directed: "
+    "the beats, gestures, gaze and posture all happen. The words "
+    "above are delivered as a clear voiceover narration laid over "
+    "the picture by an off-camera narrator voice — the presenter is "
+    "never the one speaking, and no other sound replaces the "
+    "narration."
+)
+
+
+# The voice pick's four stops (Nov 27 2026). "auto" is the pick as
+# stored; it resolves at generation to a concrete mode, below.
+VOICE_MODES = ("auto", "talking", "voiceover", "silent")
+
+
+def resolve_voice_mode(pick, angle=None, profile=None) -> str:
+    """Resolve a stored voice pick to the mode a render actually uses.
+
+    "auto" (and anything unset or unknown) resolves to talking unless
+    the angle or the profile carries a silent direction — a "silent"
+    marker in the angle's own fields or the profile's voice fields —
+    in which case it resolves to silent. Every other pick resolves to
+    itself.
+    """
+    value = str(pick or "").strip().lower()
+    if value in ("talking", "voiceover", "silent"):
+        return value
+    for source in (angle, profile):
+        if not isinstance(source, dict):
+            continue
+        for key in ("voice_mode", "voice_direction", "delivery", "voice_delivery"):
+            if str(source.get(key) or "").strip().lower() == "silent":
+                return "silent"
+    return "talking"
+
+
 async def _submit_generation(
     project: dict,
     profile: dict,
@@ -1495,15 +1544,49 @@ async def _submit_generation(
     if (project.get("surface") or "") == "hook_cta" and camera_setup != "handheld":
         project = {**project, "camera_setup": "handheld"}
         camera_setup = "handheld"
-    # The presenter voice pick (ADR 0246): a silent project never bills
-    # audio, whatever the caller passed — the pick is the founder's
-    # standing choice for this project, and a caller that forgot it
-    # (a retry, an older client) must not resurrect a voice the
-    # founder turned off. The prompt carries the matching direction
-    # further down, where the prompt is finished.
-    silent = (project.get("voice_mode") or "talking") == "silent"
+    # The generations row records the setup the render carries, not
+    # the pick (Nov 27 2026): resolve the pick now — the same
+    # resolution the prompt chain restamps from the strategy below.
+    camera_setup = generation_planning.resolve_camera_setup(camera_setup)
+    # The presenter voice pick (ADR 0246, widened Nov 27 2026 to the
+    # pick's four stops): the pick resolves to the mode this render
+    # actually uses before anything bills audio — "auto" talks unless
+    # the angle or profile carries a silent direction. A silent render
+    # never bills audio, whatever the caller passed: the pick is the
+    # founder's standing choice for this project, and a caller that
+    # forgot it (a retry, an older client) must not resurrect a voice
+    # the founder turned off. A voiceover render always bills audio —
+    # the model's own narration IS the voiceover — and refuses up
+    # front, before any spend, on a model that carries no audio of
+    # its own rather than silently shipping a mute clip. The prompt
+    # carries the matching direction further down, where the prompt
+    # is finished, and the generations row records the resolved mode.
+    voice_pick = str(project.get("voice_mode") or "auto").strip().lower()
+    if voice_pick not in VOICE_MODES:
+        voice_pick = "auto"
+    voice_angle = None
+    if voice_pick == "auto" and project.get("content_angle_id"):
+        voice_angle = await _fetch_one(
+            "SELECT * FROM content_angles WHERE id = ? AND user_id = ?",
+            (project["content_angle_id"], user_id),
+        )
+    resolved_voice_mode = resolve_voice_mode(
+        voice_pick, angle=voice_angle, profile=profile)
+    silent = resolved_voice_mode == "silent"
+    voiceover = resolved_voice_mode == "voiceover"
     if silent:
         generate_audio = False
+    if voiceover:
+        if not cap.get("supports_native_audio"):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Voiceover needs the model's own audio, and the picked "
+                    "model carries none. Pick Character talks or Character "
+                    "stays silent for this render."
+                ),
+            )
+        generate_audio = True
     # No model guard stands here (ADR 0225): every model left on the list
     # pins the photo as its first frame, and a fixed submit renders on
     # them — the fixed prompt opens on the presenter already framed by a
@@ -1584,6 +1667,27 @@ async def _submit_generation(
             "SELECT * FROM content_angles WHERE id = ? AND user_id = ?",
             (content_angle_id, user_id),
         )
+    if strategy and (project.get("surface") or "") != "hook_cta":
+        # The prompt chain reads the strategy's camera_setup: restamp
+        # the working copy with the setup the project's pick resolves
+        # to against THIS render's angle (Nov 27 2026), so a pick
+        # changed after the strategy was built — or an "auto" pick —
+        # still renders the setup the founder's pick means now. The
+        # stored strategy is untouched.
+        strategy = {**strategy, "camera_setup": generation_planning.resolve_camera_setup(
+            project.get("camera_setup"), angle=content_angle)}
+    if voice_pick == "auto" and not silent and strategy:
+        # The strategy is the last carrier of a silent direction for
+        # an "auto" voice pick: its performance delivery can hold the
+        # silent marker the angle/profile check above could not see
+        # yet. Only an auto pick re-resolves here — an explicit pick
+        # settled above stands.
+        _performance = strategy.get("performance")
+        _performance = _performance if isinstance(_performance, dict) else {}
+        if str(_performance.get("voice_delivery") or "").strip().lower() == "silent":
+            resolved_voice_mode = "silent"
+            silent = True
+            generate_audio = False
     # The strategy carries the spoken words too — the hook in section 0 and
     # the middle in section 1. They are bound from the plan's approved words
     # inside _guard_render_scene, immediately before the audit that judges
@@ -1647,13 +1751,20 @@ async def _submit_generation(
     # own words.
     prompt_ceiling = video_providers.capability(model_key).get("prompt_char_limit")
     prompt_budget = prompt_ceiling
-    if silent and prompt_budget:
-        # The silence direction appended below is a fixed instruction
-        # (ADR 0246): reserve its characters from the BUILDER's budget
-        # so the assembled prompt, silence direction included, still fits
-        # the provider's ceiling. The reserve is a building allowance,
-        # not a new limit.
-        prompt_budget = max(1, prompt_budget - len(SILENT_PERFORMANCE_DIRECTION))
+    # The performance direction this render carries at the prompt's
+    # tail: the silence direction for a silent render (ADR 0246), the
+    # voiceover direction for a voiceover render (Nov 27 2026), and
+    # nothing for a talking one.
+    performance_direction = (
+        SILENT_PERFORMANCE_DIRECTION if silent
+        else VOICEOVER_PERFORMANCE_DIRECTION if voiceover else ""
+    )
+    if performance_direction and prompt_budget:
+        # The direction appended below is a fixed instruction: reserve
+        # its characters from the BUILDER's budget so the assembled
+        # prompt, direction included, still fits the provider's
+        # ceiling. The reserve is a building allowance, not a new limit.
+        prompt_budget = max(1, prompt_budget - len(performance_direction))
     if strategy:
         try:
             prompt = generation_planning.build_segment_prompt(
@@ -1687,13 +1798,15 @@ async def _submit_generation(
             script_sacred=video_providers.script_is_sacred(model_key),
         )
 
-    if silent:
-        # The silence direction (ADR 0246) rides at the prompt's tail,
-        # after every speaking instruction it overrides: the presenter
-        # performs the beats but does not deliver the words. Appended before
-        # the ceiling check below so the check prices it like any
-        # other fixed instruction.
-        prompt = prompt + SILENT_PERFORMANCE_DIRECTION
+    if performance_direction:
+        # The performance direction rides at the prompt's tail, after
+        # every speaking instruction it overrides: the presenter
+        # performs the beats but does not deliver the words — silently
+        # (ADR 0246), or under a narration the model lays over the
+        # picture (voiceover, Nov 27 2026). Appended before the ceiling
+        # check below so the check prices it like any other fixed
+        # instruction.
+        prompt = prompt + performance_direction
 
     # No ceiling guard stands here any more (ADR 0327). It used to refuse
     # a prompt that still landed over its ceiling after fitting — latterly
@@ -1827,8 +1940,8 @@ async def _submit_generation(
             script_version, model, model_id, requested_duration, duration, status,
             segment_role, segment_index, strategy_version, continuity, trim_to_seconds,
             attempt, prompt_used, adjustments, retryable, approved,
-            requested_at, created_at, updated_at, user_id, idempotency_key, camera_setup, location, final_beat, quality_report)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            requested_at, created_at, updated_at, user_id, idempotency_key, camera_setup, location, final_beat, quality_report, voice_mode)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (generation_id, project["id"], project.get("brand_profile_id"),
          project.get("template_id"), project.get("template_version"),
          project.get("script_version"), model_key, cap["id"],
@@ -1838,7 +1951,8 @@ async def _submit_generation(
          claim_key or None, camera_setup,
          ((strategy or {}).get("scene") or {}).get("location") or "",
          ((strategy or {}).get("final_beat") or "") or None,
-         json.dumps(frozen_quality_report) if frozen_quality_report else None),
+         json.dumps(frozen_quality_report) if frozen_quality_report else None,
+         resolved_voice_mode),
         )
     except Exception as exc:
         # The unique index refused this row, which means a concurrent request

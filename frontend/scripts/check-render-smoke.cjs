@@ -1697,6 +1697,36 @@ async function main() {
         if (ctx.container.querySelector('[data-testid="voice-mode-talking"]').getAttribute("aria-pressed") !== "true") {
           throw new Error("the clicked voice pick does not stand picked");
         }
+        // The four-stop rule (Nov 27 2026): the camera and voice
+        // sliders each carry exactly four stops, in the settled
+        // order, and the new stops save like the old ones.
+        const cameraStops = [...camGroup.querySelectorAll(".pick-slider-stop")].map((b) => b.dataset.value);
+        if (cameraStops.join(",") !== "auto,handheld,walking,fixed") {
+          throw new Error(`the camera slider carries ${cameraStops.join(",") || "no stops"}, not the four stops in order`);
+        }
+        const voiceGroup = ctx.container.querySelector('[data-testid="voice-mode-slider"]');
+        if (!voiceGroup) throw new Error("the voice slider is gone");
+        const voiceStops = [...voiceGroup.querySelectorAll(".pick-slider-stop")].map((b) => b.dataset.value);
+        if (voiceStops.join(",") !== "auto,talking,voiceover,silent") {
+          throw new Error(`the voice slider carries ${voiceStops.join(",") || "no stops"}, not the four stops in order`);
+        }
+        await pickPairButton(ctx, "camera-setup", "walking");
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-voiceover"]'));
+        // The picks ride the page's autosave, about a second after
+        // the last change — the same wait the direction save check
+        // below uses.
+        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
+        if (saved.camera_setup !== "walking") {
+          throw new Error(`the walking pick never saved: ${JSON.stringify(saved.camera_setup)}`);
+        }
+        if (saved.voice_mode !== "voiceover") {
+          throw new Error(`the voiceover pick never saved: ${JSON.stringify(saved.voice_mode)}`);
+        }
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-auto"]'));
+        await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
+        if (saved.voice_mode !== "auto") {
+          throw new Error(`the voice app's-choice pick never saved: ${JSON.stringify(saved.voice_mode)}`);
+        }
         // A saved pick off the default stands picked on return.
         await act(async () => ctx.root.render(null));
         saved = { ...PROJECT_WITH_STRATEGY, camera_setup: "fixed", voice_mode: "silent" };
@@ -4452,14 +4482,18 @@ async function main() {
         }
         // ADR 0330: the camera setup and the direction fields are
         // pairs of black buttons — no dropdown stands among them.
+        // The camera setup is the unified slider now, and since
+        // the four-stop rule (Nov 27 2026) it stands four stops;
+        // the direction fields still stand their two picks.
         for (const id of ["camera-setup", "review-location-direction", "review-wardrobe"]) {
           const control = ctx.container.querySelector(`[data-testid="${id}"]`);
           if (!control) throw new Error(`the ${id} pair is missing`);
           if (control.getAttribute("aria-haspopup") === "listbox" || control.querySelector("select")) {
             throw new Error(`${id} still renders as a dropdown`);
           }
-          if (control.querySelectorAll("button").length !== 2) {
-            throw new Error(`${id} does not stand two options side by side`);
+          const expected = id === "camera-setup" ? 4 : 2;
+          if (control.querySelectorAll("button").length !== expected) {
+            throw new Error(`${id} does not stand ${expected} options side by side`);
           }
         }
       });
@@ -16299,8 +16333,8 @@ async function runHookCtaChecks() {
         }
         const groups = [
           { key: "tone", stops: ["auto", "plain", "warm", "bold"], names: ["App's choice", "Plain", "Warm", "Bold"] },
-          { key: "shape", stops: ["auto", "question", "statement"], names: ["App's choice", "Question", "Statement"] },
-          { key: "opening", stops: ["auto", "action", "feeling"], names: ["App's choice", "Action", "Feeling"] },
+          { key: "shape", stops: ["auto", "question", "statement", "command"], names: ["App's choice", "Question", "Statement", "Command"] },
+          { key: "opening", stops: ["auto", "action", "feeling", "reaction"], names: ["App's choice", "Action", "Feeling", "Reaction"] },
         ];
         for (const group of groups) {
           const slider = card.querySelector(`[data-testid="hook-picks-${group.key}-slider"]`);
@@ -16366,6 +16400,28 @@ async function runHookCtaChecks() {
         if (!patches.some((p) => p.tone === "warm")) {
           throw new Error(`the tone pick never saved from its slider: ${JSON.stringify(patches)}`);
         }
+        // The fourth stops save through the same PATCH (Nov 27
+        // 2026, the four-stop rule): Command rides as hook_shape,
+        // Reaction as hook_opening, and each names itself under
+        // its knob.
+        await clickEl(ctx, card.querySelector('[data-testid="hook-picks-shape-command"]'));
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        if (!patches.some((p) => p.hook_shape === "command")) {
+          throw new Error(`the command pick never saved from its slider: ${JSON.stringify(patches)}`);
+        }
+        const shapeValue = card.querySelector('[data-testid="hook-picks-shape-value"]');
+        if (!shapeValue || shapeValue.textContent.trim() !== "Command") {
+          throw new Error("the shape slider does not name Command under its knob");
+        }
+        await clickEl(ctx, card.querySelector('[data-testid="hook-picks-opening-reaction"]'));
+        await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
+        if (!patches.some((p) => p.hook_opening === "reaction")) {
+          throw new Error(`the reaction pick never saved from its slider: ${JSON.stringify(patches)}`);
+        }
+        const reactionValue = card.querySelector('[data-testid="hook-picks-opening-value"]');
+        if (!reactionValue || reactionValue.textContent.trim() !== "Reaction") {
+          throw new Error("the opening slider does not name Reaction under its knob");
+        }
       }
     );
     // The knob wears the app's own selection tokens: the indigo
@@ -16385,6 +16441,13 @@ async function runHookCtaChecks() {
     const trackRule = css.slice(trackAt, css.indexOf("}", trackAt));
     if (!trackRule.includes("width: 9.375rem")) {
       throw new Error("the slider track does not carry the one fixed width");
+    }
+    // The four-stop safeguard (Nov 27 2026): the fixed width is
+    // capped at the seat's own width, so a narrow seat — a thin
+    // desktop trio cell, a small phone — is never overflowed by
+    // the track now that every slider carries four stops.
+    if (!trackRule.includes("max-width: 100%")) {
+      throw new Error("the slider track is not capped at its seat's width");
     }
     // The pick's name and its explainer stand in one quiet,
     // matched voice (Nov 27 2026, Kasra's order): the same
@@ -16483,19 +16546,25 @@ async function runHookCtaChecks() {
         if (sliders.length !== 3) {
           throw new Error(`the direction trio carries ${sliders.length} sliders, not three`);
         }
-        // Voice: two stops, no pick lit on a fresh draft (ADR
-        // 0361), the knob resting on the mode that will render —
-        // talking, the left stop (Kasra's order, Nov 27 2026:
-        // every toggle rests on the left by default) — with its
-        // name under the track. Neither the note nor the slider's
+        // Voice: four stops (Nov 27 2026, the four-stop rule), no
+        // pick lit on a fresh draft (ADR 0361), the knob resting
+        // on the mode that will render — talking, the standing
+        // mode a fresh draft is born with (Kasra's left-stop
+        // order, Nov 27 2026), which is the second stop now that
+        // the app's choice stands at the left — with its name
+        // under the track. Neither the note nor the slider's
         // explainer stands: both belong to a change the user
         // makes, never to the standing state (Nov 27 2026).
         const voiceKnob = card.querySelector('[data-testid="voice-mode-knob"]');
         if (!voiceKnob || voiceKnob.getAttribute("role") !== "slider") {
           throw new Error("the voice pick carries no slider knob");
         }
-        if (voiceKnob.getAttribute("aria-valuenow") !== "0") {
-          throw new Error("the voice knob does not rest on Character talks, the left stop and standing mode");
+        if (voiceKnob.getAttribute("aria-valuenow") !== "1") {
+          throw new Error("the voice knob does not rest on Character talks, the standing mode a fresh draft is born with");
+        }
+        const voiceStops = [...card.querySelectorAll('[data-testid="voice-mode-slider"] .pick-slider-stop')].map((b) => b.dataset.value);
+        if (voiceStops.join(",") !== "auto,talking,voiceover,silent") {
+          throw new Error(`the voice slider carries ${voiceStops.join(",") || "no stops"}, not the four stops in order`);
         }
         for (const id of ["voice-mode-talking", "voice-mode-silent"]) {
           const stop = card.querySelector(`[data-testid="${id}"]`);
@@ -21780,6 +21849,39 @@ async function runDemoCtaChecks() {
       if (Math.abs(value("append-screen-left-slider") - 0.3275) > 0.001) throw new Error("reset did not return the second clip's screen rect to the photo screen");
       await clickEl(ctx, ctx.container.querySelector('[data-testid="append-hand-transform-reset-btn"]'), "reset the second clip's hand framing");
       if (value("append-hand-zoom-slider") !== 1) throw new Error("reset did not return the second clip's hand Zoom to 1x");
+
+      // Propped (Nov 27 2026, the clip style's fourth stop): the
+      // style slider carries exactly four stops in order; propped
+      // stands the phone on a surface inside the room scene, so
+      // the room picker and the Phone size stand with it, the hand
+      // framing leaves, and the shared painter paints the phone
+      // for the added segment — the same painter the export calls.
+      const styleSlider = ctx.container.querySelector('[data-testid="append-mode-slider"]');
+      if (!styleSlider) throw new Error("the second clip's style slider is gone");
+      const styleStops = [...styleSlider.querySelectorAll(".pick-slider-stop")].map((b) => b.dataset.value);
+      if (styleStops.join(",") !== "floating,hand,realistic,propped") {
+        throw new Error(`the style slider carries ${styleStops.join(",") || "no stops"}, not the four stops in order`);
+      }
+      await clickEl(ctx, ctx.container.querySelector('[data-testid="append-mode-propped"]'), "prop the second clip");
+      if (!ctx.container.querySelector('[data-testid="append-env-slider"]')) {
+        throw new Error("the propped second clip does not offer its room scene");
+      }
+      await openAppendFraming();
+      if (!thumb("append-phone-size-slider")) throw new Error("the propped second clip's framing has no Phone size slider");
+      if (thumb("append-hand-zoom-slider")) throw new Error("hand framing leaked into the propped framing");
+      const proppedBox = await paintAppend();
+      if (!proppedBox) throw new Error("the propped second clip never painted its phone");
+      // The export path prepares the propped room plate and the
+      // painter carries the branch — source pins, the harness's
+      // way for the encode side.
+      const painterSource = fs.readFileSync(path.join(SRC, "demoCta", "usePreviewLoop.js"), "utf8");
+      if (!painterSource.includes('mode === "propped"') || !painterSource.includes("paintEnvironmentPlate")) {
+        throw new Error("the shared painter carries no propped branch over the room plate");
+      }
+      const exportSource = fs.readFileSync(path.join(SRC, "demoCta", "exportFlow.js"), "utf8");
+      if (!exportSource.includes('appendMode === "propped"') || !exportSource.includes("prepareProppedViewImages")) {
+        throw new Error("the export never prepares the propped room plate");
+      }
     } finally {
       clip.restore();
     }
@@ -25282,10 +25384,26 @@ async function runDemoCtaChecks() {
       if (newest.join() !== "generation-v-old,generation-v-top,generation-v-none") {
         throw new Error(`newest-first did not preserve server order: ${newest.join()}`);
       }
-      await chooseOption(ctx, ctx.container.querySelector('[data-testid="history-sort"]'), "views");
+      // The sort keeps its toggle face after a pick (Kasra's order,
+      // Nov 27 2026): the face it wears on Newest first is the face
+      // it still wears on Most viewed — same classes, and never the
+      // active-filter data-active that used to flip it into a plain
+      // selected button.
+      const sortEl = ctx.container.querySelector('[data-testid="history-sort"]');
+      const faceBefore = sortEl.className;
+      if (sortEl.getAttribute("data-active")) {
+        throw new Error("the sort on its default already reads as an active filter");
+      }
+      await chooseOption(ctx, sortEl, "views");
       const ranked = order();
       if (ranked.join() !== "generation-v-top,generation-v-old,generation-v-none") {
         throw new Error(`most-viewed did not rank counted rows first: ${ranked.join()}`);
+      }
+      if (sortEl.getAttribute("data-active")) {
+        throw new Error("the sort wears the active-filter face after a pick — its face flipped");
+      }
+      if (sortEl.className !== faceBefore) {
+        throw new Error(`the sort's face changed after a pick: "${faceBefore}" -> "${sortEl.className}"`);
       }
     });
   });

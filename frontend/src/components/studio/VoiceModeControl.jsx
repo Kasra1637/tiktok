@@ -10,12 +10,15 @@ import { VOICE_EXPLAINERS } from "../../lib/pickExplainers";
  * direction card and Create Video's direction section — the two
  * places movement and direction are set.
  *
- * Exactly two choices, Kasra's settled binary: the character talks
- * (voice, lips moving with the words — the behavior every render
- * used to have by default), or the character stays silent (no
+ * Four choices (Nov 27 2026, the four-stop rule): the app's
+ * choice (resolves at generation — talking unless the angle or
+ * profile carries a silent direction), the character talks (voice,
+ * lips moving with the words), voiceover (the character stays
+ * silent-lipped on camera while the model's own narration carries
+ * the line over the segment), or the character stays silent (no
  * voice, and NO lip movement at all: the mouth stays closed and
  * still for the whole clip, while the opening and closing actions
- * still happen). There is no voiceover middle option.
+ * still happen).
  *
  * The words are gender-neutral (ADR 0248): the founder uploads the
  * face, and the app does not know — or presume — whose it is, so
@@ -45,7 +48,9 @@ import { VOICE_EXPLAINERS } from "../../lib/pickExplainers";
  * nothing and keeps the note).
  */
 const OPTIONS = [
+  { value: "auto", label: "App's choice" },
   { value: "talking", label: "Character talks" },
+  { value: "voiceover", label: "Voiceover" },
   { value: "silent", label: "Character stays silent" },
 ];
 
@@ -73,11 +78,12 @@ export default function VoiceModeControl({
     setChangedTo(next);
     onChange?.(next);
   };
-  // The unset state resolves to the left stop (Kasra's order,
-  // Nov 27 2026: every toggle rests on the left by default):
-  // only an explicit silent pick reads as silent — an unset or
-  // unrecognized value is the talking default, never silence.
-  const current = value === "silent" ? "silent" : "talking";
+  // The current mode the slider names and rests on: the stored
+  // pick itself when it is one of the four stops — an "auto" pick
+  // stands as the app's choice, its resolution happening at
+  // generation — and the talking default for an unset or
+  // unrecognized value, never silence.
+  const current = OPTIONS.some((option) => option.value === value) ? value : "talking";
   // Which choice the buttons may show as picked (ADR 0361): a
   // caller that tracks picks separately from the effective mode
   // passes pickedValue — "" stands for no pick made, so neither
@@ -97,7 +103,7 @@ export default function VoiceModeControl({
           and thumb-selected on the pick. The slider form (Kasra's
           order, Nov 27 2026) supersedes the row wherever a host
           passes asSlider — HookSnap first, then Create too, when
-          the unified toggle spread app-wide: the same two choices
+          the unified toggle spread app-wide: the same four choices
           as the one groove slider, the knob resting on the mode
           that will render while no pick stands (ADR 0361's
           unpicked state, restValue), a click or drag earning the

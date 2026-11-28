@@ -2551,6 +2551,14 @@ h1,
 .pick-slider-track {
     position: relative;
     width: 9.375rem;
+    /* The four-stop safeguard (Nov 27 2026): the width above stays
+       the one fixed width in every seat, and this cap only engages
+       if a seat is ever narrower than the track itself — a thin
+       desktop trio cell, a small phone — so four stops can never
+       push a seat wider than its container or overflow it. The
+       knob's travel is percentage-based, so a capped track still
+       lands the knob exactly on each stop. */
+    max-width: 100%;
     height: 1.125rem;
     border: 1px solid var(--hairline);
     border-radius: 999px;

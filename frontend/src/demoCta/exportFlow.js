@@ -5,7 +5,7 @@ import { buildExportFilename, sniffRecordingContainer } from "./constants";
 import { exportTikTok, TIKTOK_EXPORT } from "./exportTikTok";
 import { clampImageSeconds, normalizeImageMotion } from "./imageSequence";
 import { appendShapeOf } from "./appendSequence";
-import { prepareHandViewImages } from "./handView";
+import { prepareHandViewImages, prepareProppedViewImages } from "./handView";
 import { useExportErrors } from "./useExportErrors";
 import { clearPendingSavesFor, recordFailedSave } from "./saveOutbox";
 
@@ -193,6 +193,11 @@ export function useExportFlow(settings) {
       }
       if ((appendUrl || appendItems.length) && appendMode === "hand") {
         await prepareHandViewImages(appendEnv ?? envBg);
+      }
+      // A propped added clip stands in its room scene too: decode
+      // that plate before the first frame paints, the same rule.
+      if ((appendUrl || appendItems.length) && appendMode === "propped") {
+        await prepareProppedViewImages(appendEnv ?? envBg);
       }
       const response = await fetch(videoUrl, { signal: controller.signal });
       if (!response.ok) throw new Error("The source clip could not be read. Reload it and export again.");

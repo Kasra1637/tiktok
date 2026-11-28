@@ -630,8 +630,46 @@ FIXED_STARTING_SHOT = (
 )
 
 
+WALKING_STARTING_SHOT = (
+    "Walking selfie: the presenter holds the phone at arm's length and walks "
+    "steadily through the scene while talking, the background moving slowly "
+    "past. Frame head and shoulders with headroom, face central and lit, the "
+    "gentle bob of real walking in the frame. Natural amateur phone footage, "
+    "not a polished studio shoot."
+)
+
+
+# The camera pick's four stops (Nov 27 2026: every fixed setting toggle
+# carries exactly four real choices). "auto" is the pick as stored; it is
+# never a setup a prompt may carry — resolve_camera_setup turns it into a
+# concrete setup before any prompt is built.
+CAMERA_SETUPS = ("auto", "handheld", "walking", "fixed")
+
+
+def resolve_camera_setup(pick, angle=None) -> str:
+    """Resolve a stored camera pick to the concrete setup a prompt carries.
+
+    "auto" (and anything unset or unknown) resolves per angle: the angle's
+    own camera direction wins when the angle carries one, else handheld.
+    Every other pick resolves to itself. Fixed stays exactly what it was —
+    the indoor-only chain keys off the resolved value, unchanged.
+    """
+    value = str(pick or "").strip().lower()
+    if value in ("handheld", "walking", "fixed"):
+        return value
+    angle = angle if isinstance(angle, dict) else {}
+    own = str(angle.get("camera_setup") or "").strip().lower()
+    if own in ("handheld", "walking", "fixed"):
+        return own
+    return "handheld"
+
+
 def starting_shot(camera_setup="handheld") -> str:
-    return FIXED_STARTING_SHOT if camera_setup == "fixed" else SELFIE_STARTING_SHOT
+    if camera_setup == "fixed":
+        return FIXED_STARTING_SHOT
+    if camera_setup == "walking":
+        return WALKING_STARTING_SHOT
+    return SELFIE_STARTING_SHOT
 
 
 # Detect explicit conflicting directions, not spoken dialogue. Refuse instead
@@ -837,6 +875,15 @@ def camera_move_section(strategy: dict, hook_seconds=None, condensed: bool = Fal
     if hook_surface and (strategy or {}).get("camera_setup") != "fixed":
         template = _CONDENSED_HOOK_SELFIE_CAMERA_MOVE if condensed else _HOOK_SELFIE_CAMERA_MOVE
         return template.format(gesture=clause)
+    if (strategy or {}).get("camera_setup") == "walking":
+        return (
+            "Walking selfie for the whole take: the phone stays at arm's length in one hand "
+            "while she walks steadily through the scene, the frame carrying the gentle bob "
+            "and sway of real walking and the background drifting slowly past. "
+            "When the story begins, one small actor gesture" + clause + ". "
+            "Keep her face central and lit; never set the phone down, never stand still, "
+            "and never reach toward the lens with the free hand."
+        )
     if (strategy or {}).get("camera_setup") != "fixed":
         template = _CONDENSED_SELFIE_CAMERA_MOVE if condensed else _SELFIE_CAMERA_MOVE
         return template.format(gesture=clause)

@@ -2208,18 +2208,23 @@ export default function CreateVideo() {
               <div className="space-y-2">
                 <GroupLabel icon={Camera}>Camera setup</GroupLabel>
                 {/* The unified slider (Kasra's order, Nov 27 2026):
-                    the two setups are the slider's stops, the knob
-                    resting on the setup that will render while no
-                    pick stands (the same unpicked face the voice
-                    slider keeps), a tap or drag earning the pick
-                    through the same draft edit the buttons used. */}
+                    the four setups are the slider's stops — the
+                    app's choice (resolved per angle at generation),
+                    handheld selfie, walking selfie, fixed camera —
+                    the knob resting on the setup that will render
+                    while no pick stands (the same unpicked face the
+                    voice slider keeps), a tap or drag earning the
+                    pick through the same draft edit the buttons
+                    used. */}
                 <div
                   data-testid="camera-setup"
                   data-value={editValue("camera_setup", "handheld")}
                 >
                   <PickSlider
                     options={[
+                      { value: "auto", label: "App's choice" },
                       { value: "handheld", label: "Handheld selfie" },
+                      { value: "walking", label: "Walking" },
                       { value: "fixed", label: "Fixed camera" },
                     ]}
                     explainers={CAMERA_EXPLAINERS}

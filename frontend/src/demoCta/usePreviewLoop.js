@@ -10,7 +10,7 @@ import {
 } from "./constants";
 import { drawEndCard, drawHookOverlay, drawStoryOverlay, paintsEndCard, paintsHookStory } from "./overlays";
 import { transitionAt, transitionWindow, effectiveTransition, easeInOut, hash01 } from "./transitions";
-import { drawHandView } from "./handView";
+import { drawHandView, paintEnvironmentPlate } from "./handView";
 import { fitVideoToScreen } from "./fit";
 import { getEffectiveZoom } from "./zoom";
 
@@ -665,6 +665,35 @@ export function usePreviewLoop(settings) {
             const maxOffY = Math.max(0, (box.dh - ch) / 2);
             ctx.drawImage(frame, (cw - box.dw) / 2 + (segOffX / 100) * maxOffX, (ch - box.dh) / 2 + (segOffY / 100) * maxOffY, box.dw, box.dh);
           }
+        }
+        drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration, { segment, mirrorOverlays: appendOverlays });
+        paintJointTransition(target, vt);
+        return;
+      }
+
+      // Propped (Nov 27 2026, the clip style's fourth stop): the
+      // phone rests propped on a surface inside the room scene — the
+      // same environment plate the hand view stands in, the device
+      // standing still on a surface line low in the frame with a
+      // soft contact shadow under it. No hand, no bob, no tilt: it
+      // rests. Preview and export share this painter, so both record
+      // the same frame.
+      if (mode === "propped") {
+        paintEnvironmentPlate(ctx, cw, ch, lookEnv);
+        const surfaceY = ch * 0.88;
+        const fit = Math.min(cw / phoneW, surfaceY / segPhoneH) * segPhoneScale;
+        const drawW = phoneW * fit;
+        const drawH = segPhoneH * fit;
+        const x = (cw - drawW) / 2;
+        const y = surfaceY - drawH;
+        ctx.save();
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.beginPath();
+        ctx.ellipse(cw / 2, surfaceY + drawH * 0.012, drawW * 0.42, drawH * 0.018, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        if (mediaReady(frame)) {
+          drawPhone(ctx, x, y, drawW, drawH, dev, frame, segFit, segScale, segOffX, segOffY, palette?.bg2);
         }
         drawOverlays(ctx, segment ? vt - baseDuration : vt, segment ? appendDuration : baseDuration, { segment, mirrorOverlays: appendOverlays });
         paintJointTransition(target, vt);

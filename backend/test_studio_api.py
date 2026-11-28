@@ -172,7 +172,11 @@ class TestProjectCreation:
         unchanged = _run(api.update_studio_project(project["id"],
             UpdateStudioProjectRequest(camera_setup="handheld"), ANON))
         assert unchanged["script_version"] == version
-        assert _a_project(api, profile, _a_template(api))["camera_setup"] == "handheld"
+        # A project created with no camera pick opens on the app's
+        # choice (Nov 27 2026, the four-stop rule): "auto" is the
+        # pick's left stop and the create default, resolving to a
+        # concrete setup only at generation.
+        assert _a_project(api, profile, _a_template(api))["camera_setup"] == "auto"
         for value in ("orbit", None):
             with pytest.raises(ValidationError):
                 UpdateStudioProjectRequest(camera_setup=value)

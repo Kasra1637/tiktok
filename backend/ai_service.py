@@ -21,7 +21,8 @@ import httpx
 from face_crop import crop_face_from_path
 # Strategy and rendering share the selected camera's shot instructions.
 from generation_planning import (
-    camera_move_section, require_camera_setup_directions, starting_shot,
+    camera_move_section, require_camera_setup_directions,
+    resolve_camera_setup, starting_shot,
 )
 from template_library import (
     CONTENT_ANGLE_KINDS,
@@ -3339,8 +3340,8 @@ FOCUS_LINE_LIMIT = 6
 # unpicked shape is "auto" — both are the behavior the hook had
 # before the picks existed.
 HOOK_TONE_PICKS = ("plain", "warm", "bold")
-HOOK_SHAPE_PICKS = ("auto", "question", "statement")
-HOOK_OPENING_PICKS = ("auto", "action", "feeling")
+HOOK_SHAPE_PICKS = ("auto", "question", "statement", "command")
+HOOK_OPENING_PICKS = ("auto", "action", "feeling", "reaction")
 
 
 def _hook_shape_pick(project: dict) -> str:
@@ -3417,6 +3418,15 @@ def _hook_steering_block(project: dict, profile: dict) -> str:
             "pain point outright and holds the answer back: the demo "
             "that follows is the answer."
         )
+    elif shape == "command":
+        lines.append(
+            "- SHAPE: a command — the hook is a direct imperative "
+            "dare aimed at the viewer: it orders her to try the "
+            "thing, second person, verb first, the pain it answers "
+            "named inside the dare. Never a question, never a "
+            "first-person report — a challenge she feels dared to "
+            "take, and the demo that follows is the proof."
+        )
     opening = _hook_opening_pick(project)
     if opening == "action":
         lines.append(
@@ -3435,6 +3445,16 @@ def _hook_steering_block(project: dict, profile: dict) -> str:
             "effort, what she is trying to do about it. The "
             "sensation first — never a label for it, never the "
             "activity."
+        )
+    elif opening == "reaction":
+        lines.append(
+            "- OPENING: reaction — the hook opens on her face: the "
+            "presenter's reaction to the moment lands first, the "
+            "expression itself the opening beat — a flinch, a wince, "
+            "a caught breath made visible — and the spoken line "
+            "starts from inside that reaction, the effort and its "
+            "cost right behind it. The face reacts before anything "
+            "moves — never a neutral face over an action opening."
         )
     if not lines:
         return ""
@@ -3567,7 +3587,7 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
         f"{_angle_grounding_block(None)}\n\n"
         f"{_angle_goal_block(None, '')}\n"
     )
-    if (project.get("camera_setup") or "handheld") == "fixed":
+    if resolve_camera_setup(project.get("camera_setup")) == "fixed":
         prompt += (
             "FIXED CAMERA: the camera is placed, not held — the location "
             "must be indoors (inside a home, an office, a bed), never "
@@ -3705,6 +3725,15 @@ async def generate_hook_line(project: dict, profile: dict) -> dict:
             dangling = _dangling_question_issue(hook)
             if dangling:
                 issues.append(dangling)
+        if shape == "command" and re.match(
+                r"(?i)^(i\b|i'm\b|i am\b)", hook.strip()):
+            # A command dares the viewer; a first-person opener is a
+            # report, not a dare (Nov 27 2026, the fourth shape stop).
+            # The gate above already refuses a question shape here.
+            issues.append(
+                "the founder picked a command hook, but the line "
+                "reports in the first person — dare the viewer "
+                "instead: an imperative, verb first, aimed at her")
         if existing_line and hook.lower() == existing_line.lower():
             issues.append(
                 "the line repeats the hook already on file word for "
@@ -5148,6 +5177,13 @@ async def rewrite_hook_line(profile: dict, angle: Optional[dict], hook_line: str
             " The founder picked a statement hook: the clearer line "
             "states it outright, never as a question."
         )
+    elif shape == "command":
+        steering += (
+            " The founder picked a command hook: the clearer line "
+            "dares the viewer directly — an imperative, verb first, "
+            "aimed at her, never a question and never a first-person "
+            "report."
+        )
     prompt = (
         f"VERIFIED APP FACTS:\n{facts or '- (none recorded)'}\n\n"
         f"{_angle_goal_block(angle, objective)}\n\n"
@@ -6071,6 +6107,12 @@ async def generate_creative_plan(
 
     Returns a dict matching REQUIRED_PLAN_KEYS.
     """
+    # The camera pick resolves before the plan prompt is built (Nov
+    # 27 2026): "auto" becomes the angle's own setup when the angle
+    # carries one, else handheld — the plan is written for a concrete
+    # setup, never for the pick itself.
+    camera_setup = resolve_camera_setup(camera_setup, angle=angle)
+
     def _list(name):
         val = profile.get(name)
         if isinstance(val, list):
@@ -6267,6 +6309,20 @@ async def generate_creative_plan(
         if camera_setup != "fixed" else ""
     )
 
+    # Walking (Nov 27 2026, the camera pick's third stop): the selfie
+    # rule above already binds — one hand holds the phone — and the
+    # plan's movement is the walk itself: she moves steadily through
+    # the scene for the whole piece, never planting in one spot.
+    walking_rule = (
+        "- WALKING: she films herself while walking steadily through "
+        "the scene for the whole piece — the Movement, Position in "
+        "Frame and both What they do lines are written for a presenter "
+        "in motion: a steady walk, the background passing slowly, "
+        "never standing planted in one spot, never sitting down, and "
+        "never setting the phone down.\n"
+        if camera_setup == "walking" else ""
+    )
+
     # Fixed camera (ADR 0219): the placed camera lives indoors, so a
     # fixed plan's location is an interior. Stated in the rules the
     # location field is written under — the same rule the strategy and
@@ -6333,6 +6389,7 @@ async def generate_creative_plan(
         f"empty derive a benefit from a feature. The generated piece is {duration_seconds} seconds; anything "
         "after it is the founder's own footage.\n"
         f"{selfie_ending_rule}"
+        f"{walking_rule}"
         f"{fixed_location_rule}"
         # The spoken budget, in characters, is the same number the render gate
         # imposes downstream (hook spoken separately over the opening beat, the
@@ -7155,6 +7212,12 @@ async def generate_video_strategy(
     one they approved, so the approved words win and this only fills in what a
     plan cannot express: the on-camera action per section and the locked scene.
     """
+    # The camera pick resolves before any prompt is built (Nov 27
+    # 2026): "auto" becomes the angle's own setup when the angle
+    # carries one, else handheld, and the strategy is stamped with
+    # the resolved setup — a prompt never carries the pick itself.
+    camera_setup = resolve_camera_setup(camera_setup, angle=angle)
+
     def _list(name):
         val = profile.get(name)
         if isinstance(val, list):

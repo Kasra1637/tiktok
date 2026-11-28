@@ -21,12 +21,16 @@
  */
 
 export const VOICE_EXPLAINERS = {
+  auto: "The app picks the voice: talking, unless set to stay silent.",
   talking: "The character speaks the line aloud, lips moving with the words.",
+  voiceover: "She stays silent on camera while a voice narrates the line.",
   silent: "No voice is recorded; TikTok text-to-speech can carry the line.",
 };
 
 export const CAMERA_EXPLAINERS = {
+  auto: "The app picks the camera setup that fits the angle best.",
   handheld: "The character holds the phone, selfie style, free to move.",
+  walking: "She films herself selfie style while walking through it.",
   fixed: "The camera stays set down in one indoor spot for the take.",
 };
 
@@ -41,12 +45,14 @@ export const SHAPE_EXPLAINERS = {
   auto: "The app picks the hook's shape from the app and the angle.",
   question: "The hook asks a question and holds the answer for the demo.",
   statement: "The hook states the pain plainly and holds back the answer.",
+  command: "The hook dares the viewer directly, an order to try it.",
 };
 
 export const OPENING_EXPLAINERS = {
   auto: "The app picks how the hook opens from the app and the angle.",
   action: "The hook opens mid-action, on the verb already in motion.",
   feeling: "The hook opens on the felt sensation before anything moves.",
+  reaction: "The hook opens on her facial reaction before she moves.",
 };
 
 // The Focus pick's stops are the app's choice plus the profile's
@@ -70,6 +76,7 @@ export const CLIP_STYLE_EXPLAINERS = {
   floating: "The phone floats over a backdrop, clear of any hand at all.",
   hand: "A hand holds the phone inside a real room scene on screen.",
   realistic: "The clip plays full-screen, as if filmed on the phone itself.",
+  propped: "The phone rests propped on a surface inside the room scene.",
 };
 
 export const TRANSITION_EXPLAINERS = {

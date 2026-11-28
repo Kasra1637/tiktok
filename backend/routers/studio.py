@@ -341,8 +341,13 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
         out["location"] = scene_consistency.repair_location_fragment(
             out.get("location"), _anchor_text
         )
+    # The strategy carries the RESOLVED setup while the project carries
+    # the pick (Nov 27 2026): currency compares resolved to resolved, so
+    # an "auto" pick whose resolution matches the strategy's setup reads
+    # current instead of stale forever.
     out["strategy_is_current"] = out["strategy_is_current"] and (
-        (out["strategy"].get("camera_setup") or "handheld") == out["camera_setup"]
+        (out["strategy"].get("camera_setup") or "handheld")
+        == generation_planning.resolve_camera_setup(out["camera_setup"])
     )
     # A strategy stamped with a different objective/template than the project
     # now carries is stale, but a strategy predating the stamp (an empty value
@@ -583,7 +588,8 @@ def _require_current_strategy(project: dict) -> dict:
     # a mismatch, and the founder is not blocked for it -- matching
     # _public_project's own reading of the same two columns.
     if (built_from and current and built_from != current) or (
-        (strategy.get("camera_setup") or "handheld") != (project.get("camera_setup") or "handheld")
+        (strategy.get("camera_setup") or "handheld")
+        != generation_planning.resolve_camera_setup(project.get("camera_setup"))
     ):
         raise HTTPException(
             status_code=409,
@@ -1310,20 +1316,20 @@ async def update_studio_project(
             # control offers, refused in words rather than stored for
             # a reader to trip over at render time.
             value = (value or "").strip().lower()
-            if value not in ("talking", "silent"):
+            if value not in ("auto", "talking", "voiceover", "silent"):
                 raise HTTPException(
                     status_code=400,
-                    detail="Voice is either talking or silent.",
+                    detail="Voice is the app's choice, talking, voiceover, or silent.",
                 )
         elif key == "hook_shape":
             # The hook shape pick (ADR 0247) is a closed set like the
             # voice pick above: the app's choice, a question, or a
             # statement. Anything else is a value no control offers.
             value = (value or "").strip().lower()
-            if value not in ("auto", "question", "statement"):
+            if value not in ("auto", "question", "statement", "command"):
                 raise HTTPException(
                     status_code=400,
-                    detail="Shape is the app's choice, a question, or a statement.",
+                    detail="Shape is the app's choice, a question, a statement, or a command.",
                 )
         elif key == "hook_opening":
             # The hook opening pick (Nov 27 2026) is a closed set
@@ -1331,10 +1337,10 @@ async def update_studio_project(
             # or a feeling. Anything else is a value no control
             # offers.
             value = (value or "").strip().lower()
-            if value not in ("auto", "action", "feeling"):
+            if value not in ("auto", "action", "feeling", "reaction"):
                 raise HTTPException(
                     status_code=400,
-                    detail="Opening is the app's choice, an action, or a feeling.",
+                    detail="Opening is the app's choice, an action, a feeling, or a reaction.",
                 )
         elif key == "tone" and (row.get("surface") or "") == "hook_cta":
             # On the Hook + CTA surface the tone column carries the
@@ -2072,7 +2078,7 @@ async def generate_plan(
                 visual_direction=look["visual_direction"],
                 # Selfie plans must not write a phone ending into the timeline
                 # (ADR 0093); fixed-camera plans may.
-                camera_setup=row.get("camera_setup") or "handheld",
+                camera_setup=row.get("camera_setup") or "auto",
                 brand_voice=(profile.get("tone_voice") or "").strip(),
                 verdict_feedback=verdict_feedback,
                 recent_hooks=recent_hooks,
@@ -2504,7 +2510,7 @@ async def generate_project_strategy(
                 brand_voice=profile.get("tone_voice") or "",
                 verdict_feedback=verdict_feedback,
                 plan=approved_plan,
-                camera_setup=row.get("camera_setup") or "handheld",
+                camera_setup=row.get("camera_setup") or "auto",
                 recent_hooks=recent_hooks,
                 goal_rationale=goal_rationale,
             ),
@@ -2568,7 +2574,11 @@ async def generate_project_strategy(
     # finish about 0.6s later. Never promise generated spoken-word sync.
     strategy = dict(strategy or {})
     strategy["camera_beat"] = normalize_strategy(strategy)["camera_beat"]
-    strategy["camera_setup"] = row.get("camera_setup") or "handheld"
+    # The stored strategy carries the RESOLVED setup, never the pick
+    # itself (Nov 27 2026): an "auto" pick stamps the setup it resolved
+    # to, so the render chain and the currency checks read one value.
+    strategy["camera_setup"] = generation_planning.resolve_camera_setup(
+        row.get("camera_setup"), angle=angle)
 
     version = int(row.get("strategy_version") or 0) + 1
     now = now_iso()
@@ -2750,7 +2760,7 @@ async def suggest_strategy_refresh(
                 audience=(row.get("audience") or "").strip(),
                 location=(row.get("location") or "").strip(),
                 visual_direction=look["visual_direction"],
-                camera_setup=row.get("camera_setup") or "handheld",
+                camera_setup=row.get("camera_setup") or "auto",
                 brand_voice=(profile.get("tone_voice") or "").strip(),
                 verdict_feedback=verdict_feedback,
                 recent_hooks=recent_hooks,

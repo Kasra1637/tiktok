@@ -1353,7 +1353,13 @@ export default function GenerationHistory() {
               adjacent, in that order. The sort stays a dropdown —
               it is a true sort, not a filter pick. The copy filter
               that stood here is gone whole: the list no longer
-              splits on post copy or plan context. */}
+              splits on post copy or plan context. The sort never
+              wears the active-filter face (Kasra's order, later
+              Nov 27 2026): picking Most viewed used to flip it to
+              the indigo selected treatment, so the control stopped
+              looking like itself after a pick — it keeps the one
+              plain toggle face before, during and after any pick,
+              so no dataActive is ever passed for it. */}
           <AppPicker
             profiles={profiles}
             value={profileFilter}
@@ -1368,7 +1374,6 @@ export default function GenerationHistory() {
             onChange={setSort}
             ariaLabel="Sort history"
             testId="history-sort"
-            dataActive={sort !== "newest"}
             className={PILL_SELECT_CLASS}
             options={[
               { value: "newest", label: "Newest first" },

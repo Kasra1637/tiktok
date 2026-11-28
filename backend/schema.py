@@ -641,6 +641,7 @@ async def _apply_baseline_schema(conn, *, analysis_frame_path, normalize_analysi
         ("generations", "segment_index", "INTEGER DEFAULT 0"),
         ("generations", "strategy_version", "INTEGER DEFAULT 0"),
         ("generations", "camera_setup", "TEXT NOT NULL DEFAULT 'handheld'"),
+        ("generations", "voice_mode", "TEXT NOT NULL DEFAULT 'talking'"),
         ("generations", "continuity", "TEXT"),
         ("generations", "approved", "INTEGER DEFAULT 0"),
         ("generations", "approved_at", "TEXT"),

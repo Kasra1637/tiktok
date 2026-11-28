@@ -45,6 +45,44 @@ export async function prepareHandViewImages(environmentId, transparentBackground
   }));
 }
 
+/** The propped view needs only its room plate decoded before export. */
+export async function prepareProppedViewImages(environmentId) {
+  const environment = ENVIRONMENTS.find((env) => env.id === environmentId);
+  if (!environment?.url) return;
+  loadImage(environment.url);
+  try {
+    await imageCache.get(environment.url).decode();
+  } catch {
+    throw new Error("The room image could not be loaded. Check your connection and export again.");
+  }
+}
+
+/**
+ * Paint the room plate the hand and propped views stand in: the
+ * environment photo cover-fit over the frame, softly blurred for
+ * depth, or the plain dark fill while it loads. Returns true when a
+ * photo was painted. Shared by both views so the room reads the
+ * same behind a held phone and a propped one.
+ */
+export function paintEnvironmentPlate(ctx, cw, ch, envId) {
+  const env = ENVIRONMENTS.find((e) => e.id === envId) ?? ENVIRONMENTS[0];
+  const bgImg = loadImage(env.url);
+  ctx.clearRect(0, 0, cw, ch);
+  if (!bgImg) {
+    ctx.fillStyle = "#15130f";
+    ctx.fillRect(0, 0, cw, ch);
+    return false;
+  }
+  const bgScale = Math.max(cw / bgImg.naturalWidth, ch / bgImg.naturalHeight);
+  const bw = bgImg.naturalWidth * bgScale;
+  const bh = bgImg.naturalHeight * bgScale;
+  ctx.save();
+  ctx.filter = "brightness(0.86) blur(6px)";
+  ctx.drawImage(bgImg, (cw - bw) / 2, (ch - bh) / 2, bw, bh);
+  ctx.restore();
+  return true;
+}
+
 let keyedHandCache = null;
 
 /**
@@ -238,24 +276,13 @@ export function drawHandView(
   transparentBackground = false,
 ) {
   const SCREEN = screenOverride ?? DEFAULT_SCREEN;
-  const env = ENVIRONMENTS.find((e) => e.id === envId) ?? ENVIRONMENTS[0];
-  const bgImg = transparentBackground ? null : loadImage(env.url);
   const handImg = loadImage(HAND_IMAGE_URL);
 
-  ctx.clearRect(0, 0, cw, ch);
-
   // --- 1. Environment background, native aspect, softly blurred for depth ---
-  if (!transparentBackground && bgImg) {
-    const bgScale = Math.max(cw / bgImg.naturalWidth, ch / bgImg.naturalHeight);
-    const bw = bgImg.naturalWidth * bgScale;
-    const bh = bgImg.naturalHeight * bgScale;
-    ctx.save();
-    ctx.filter = "brightness(0.86) blur(6px)";
-    ctx.drawImage(bgImg, (cw - bw) / 2, (ch - bh) / 2, bw, bh);
-    ctx.restore();
-  } else if (!transparentBackground) {
-    ctx.fillStyle = "#15130f";
-    ctx.fillRect(0, 0, cw, ch);
+  if (transparentBackground) {
+    ctx.clearRect(0, 0, cw, ch);
+  } else {
+    paintEnvironmentPlate(ctx, cw, ch, envId);
   }
 
   if (!handImg) {

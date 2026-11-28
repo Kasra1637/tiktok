@@ -336,6 +336,37 @@ One render path, single-pass video generation via OpenRouter.
   clip's top row (beside "Add another clip") is the only add door.
   The hidden images input stays: the library pop-up's upload door
   drives it.
+- Four stops on every setting toggle (Nov 27 2026, Kasra's order):
+  every fixed setting PickSlider carries exactly four real choices.
+  Shape gains Command (an imperative dare, steered and gate-charged
+  like question/statement) and Opening gains Reaction (the hook
+  opens on the presenter's facial reaction), both wired through
+  the hook generator and the clearer-hook rewrite. Camera gains
+  App's choice — resolved per angle at generation by
+  `generation_planning.resolve_camera_setup` (the angle's own setup
+  wins, else handheld; strategies and generation rows record the
+  resolved setup, never the pick) — and Walking (a selfie take
+  while the presenter walks, carried through plan, strategy schema
+  and prompt); Fixed stays indoor-only exactly as before. Voice
+  gains App's choice (talking unless the angle/profile/strategy
+  carries a silent direction) and Voiceover: the presenter renders
+  silent-lipped and the line is delivered as the video model's own
+  native-audio narration over the segment (`generate_audio` forced
+  on, a VOICEOVER prompt direction in place of the silence one, a
+  plain refusal on a model with no native audio, and the resolved
+  mode recorded on the generations row) — the app has no other
+  audio path. The Demo + CTA second clip gains Propped: the phone
+  rests propped on a surface inside the room scene, painted by the
+  shared preview/export painter over the environment plate, with
+  the room picker and Phone size standing for it. Every new stop
+  carries an explainer in the 55–65 band. The slider track keeps
+  its one fixed width, now capped at its seat's width so four
+  stops never overflow a narrow seat.
+- History sort face (Nov 27 2026, Kasra's order): the sort control
+  never wears the active-filter face — picking Most viewed no
+  longer flips it into the indigo selected treatment. It keeps the
+  one plain toggle face before, during and after any pick; the
+  sort's options and behavior are unchanged.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no

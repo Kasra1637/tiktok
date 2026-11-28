@@ -360,7 +360,7 @@ class CreateStudioProjectRequest(BaseModel):
     # story rows anymore, but existing rows keep the marker and History
     # reads it to show their saved story kits.
     kind: Literal["video", "story"] = "video"
-    camera_setup: Literal["handheld", "fixed"] = "handheld"
+    camera_setup: Literal["auto", "handheld", "walking", "fixed"] = "auto"
     content_angle_id: Optional[str] = ""
     template_id: Optional[str] = ""
     objective: Optional[str] = ""
@@ -376,7 +376,7 @@ class CreateStudioProjectRequest(BaseModel):
 
 class UpdateStudioProjectRequest(BaseModel):
     """Edit any draft field. Every field optional; only set fields change."""
-    camera_setup: Literal["handheld", "fixed"] = "handheld"
+    camera_setup: Literal["auto", "handheld", "walking", "fixed"] = "auto"
     content_angle_id: Optional[str] = None
     template_id: Optional[str] = None
     objective: Optional[str] = None
