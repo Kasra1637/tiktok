@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { GroupLabel } from "../SectionCard";
 import { PickSlider } from "./HookPicksControl";
-import { locationExplainer, wardrobeExplainer } from "../../lib/pickExplainers";
 
 /**
  * One profile-aware set of option buttons for a direction field (the
@@ -81,12 +80,12 @@ export function DirectionSelect({
   // a founder who has seen all four has nowhere else to go.
   // { onRefresh, refreshing, refreshTestId }.
   refresh = null,
-  // The slider form (Kasra's order, Nov 27 2026): the two standing
-  // picks stand as the unified slider's stops instead of two
-  // buttons — first on HookSnap's surface, then on Create's too,
-  // when the unified toggle spread app-wide. The reveal is
-  // untouched — New options still opens the full set as the pill
-  // row below, and a pick from it seats into the slider's stops by
+  // The slider form (Kasra's order, Nov 27 2026): the standing
+  // picks stand as the unified slider's stops instead of buttons
+  // — first on HookSnap's surface, then on Create's too, when
+  // the unified toggle spread app-wide. The reveal is untouched
+  // — New options still opens the full set as the pill row
+  // below, and a pick from it seats into the slider's stops by
   // the same last-seat rule when the row stands collapsed again.
   asSlider = false,
 }) {
@@ -96,17 +95,18 @@ export function DirectionSelect({
   // panels' 480p / 768p row stands — spaced by the row's gap,
   // never stuck together.
   //
-  // ADR 0365 (Kasra's rule, Nov 26 2026): TWO buttons stand by
-  // default, not three. The rest of the set stands only once the
-  // founder presses "New options": the press reveals the set in
-  // place, and the refreshed set that lands in answer stays
-  // revealed. A set that arrives any other way — a profile or
-  // camera change re-reads the lists — starts at two again. The
-  // last-seat rule survives at the smaller width, reconciled with
-  // it: a saved pick outside the visible two takes the SECOND
-  // seat beside the first option (where the three-wide row seated
-  // it last of three), so what applies is always on a lit button
-  // and never hides behind the reveal.
+  // FOUR picks stand by default (Kasra's order, Nov 27 2026,
+  // superseding ADR 0365's two-standing rule for these fields —
+  // his 3–4 range rule now reaches Location and Wardrobe). The
+  // rest of the set stands only once the founder presses "New
+  // options": the press reveals the set in place, and the
+  // refreshed set that lands in answer stays revealed. A set
+  // that arrives any other way — a profile or camera change
+  // re-reads the lists — starts collapsed at four again. The
+  // last-seat rule survives at the wider width: a saved pick
+  // outside the standing four takes the FOURTH seat beside the
+  // first three options, so what applies is always on a lit
+  // button and never hides behind the reveal.
   const all = options || [];
   const [revealed, setRevealed] = useState(false);
   const revealEarnedRef = useRef(false);
@@ -129,9 +129,9 @@ export function DirectionSelect({
     }
     wasRefreshingRef.current = Boolean(refresh?.refreshing);
   }, [refresh?.refreshing]);
-  let shown = revealed ? all : all.slice(0, 2);
+  let shown = revealed ? all : all.slice(0, 4);
   if (!revealed && value && all.includes(value) && !shown.includes(value)) {
-    shown = [all[0], value];
+    shown = [...all.slice(0, 3), value];
   }
   return (
     <div className="space-y-2">
@@ -168,9 +168,6 @@ export function DirectionSelect({
             disabled={disabled}
             testId={`${testId}-slider`}
             ariaLabel={label}
-            explainers={(option) => (label === "Wardrobe"
-              ? wardrobeExplainer(option.label)
-              : locationExplainer(option.label))}
           />
         </div>
       ) : (

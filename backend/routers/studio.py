@@ -267,6 +267,11 @@ def _public_project(row: dict, brand_name: str = "") -> dict:
     # step 10 has no value at all, and it talks — say so rather than
     # pass a missing pick through to a reader that branches on it.
     out["voice_mode"] = out.get("voice_mode") or "talking"
+    # The legacy heal (Nov 27 2026): a row stored with the removed
+    # "voiceover" stop reads as talking — the closest standing
+    # behavior — so no stored project surfaces a dead pick.
+    if out["voice_mode"] == "voiceover":
+        out["voice_mode"] = "talking"
     # The hook picks (ADR 0247): a row from before migration step 11
     # has no shape at all — it reads as the app's choice, the
     # behavior its hooks have always had — and no focus.
@@ -1316,10 +1321,10 @@ async def update_studio_project(
             # control offers, refused in words rather than stored for
             # a reader to trip over at render time.
             value = (value or "").strip().lower()
-            if value not in ("auto", "talking", "voiceover", "silent"):
+            if value not in ("auto", "talking", "silent"):
                 raise HTTPException(
                     status_code=400,
-                    detail="Voice is the app's choice, talking, voiceover, or silent.",
+                    detail="Voice is the app's choice, talking, or silent.",
                 )
         elif key == "hook_shape":
             # The hook shape pick (ADR 0247) is a closed set like the

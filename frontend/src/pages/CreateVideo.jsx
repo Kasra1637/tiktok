@@ -39,7 +39,6 @@ import { CraftCheckCard } from "../components/CraftCheckCard";
 import { DemoCtaGenerationEditor } from "./DemoCtaStudio";
 import { api, getErrorMessage } from "../lib/api";
 import { signalSaved } from "../lib/saveSignal";
-import { CAMERA_EXPLAINERS } from "../lib/pickExplainers";
 import { BUSY_ETA_SECONDS } from "../lib/busyEta";
 import { recordSignal, recordBehavior, classifyScriptEdit } from "../lib/feedback";
 import { readyRefusalMessage } from "../lib/readyRefusal";
@@ -2227,7 +2226,6 @@ export default function CreateVideo() {
                       { value: "walking", label: "Walking" },
                       { value: "fixed", label: "Fixed camera" },
                     ]}
-                    explainers={CAMERA_EXPLAINERS}
                     current={editPick("camera_setup", "handheld")}
                     restValue={editValue("camera_setup", "handheld")}
                     onChange={(value) => {
@@ -2247,23 +2245,18 @@ export default function CreateVideo() {
                   edit as the camera setup above it. Inside the pair
                   the divider is the pair's own, so this block no
                   longer carries the stacked border. ADR 0362: this
-                  section carries no descriptive lines, so Create
-                  hides the control's note (hideNote); HookSnap's
-                  card passes nothing and keeps it. */}
+                  section carries no descriptive lines. The
+                  control's text-to-speech handover note is
+                  removed whole on every surface (Kasra's order,
+                  Nov 27 2026) — it duplicated the silent pick. */}
               <div className="space-y-2">
                 <VoiceModeControl
                   value={editValue("voice_mode", "talking")}
                   pickedValue={editPick("voice_mode", "talking")}
-                  hideNote
                   asSlider
                   onChange={(value) => {
                     dispatchDraft({ type: "edit-field", field: "voice_mode", value, omitDefault: true, fallback: "talking" });
                   }}
-                  silentText={[editValue("hook_line", ""), editValue("script", "")]
-                    .map((line) => String(line || "").trim())
-                    .filter(Boolean)
-                    .join(" ")}
-                  silentTextName="the spoken lines"
                   disabled={busy}
                 />
               </div>

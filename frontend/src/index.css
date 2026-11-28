@@ -2514,6 +2514,12 @@ h1,
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 0;
     }
+    /* The quad (Nov 27 2026): The Hook's pick row carries four
+       groups — Focus, Tone, Shape, Opening — on the same trio
+       mechanism, four equal columns with the same dividers. */
+    .section-trio.section-quad {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
     .section-trio > :first-child {
         padding-right: 2rem;
     }
@@ -2657,19 +2663,6 @@ h1,
     to {
         opacity: 1;
     }
-}
-
-/* The pick explainer (Nov 27 2026): the brief meaning of the
-   stop the user just set, standing under the pick's name in one
-   matched voice with it — the same size and regular weight,
-   one tone quieter in the muted foreground — one line in the
-   shared band, shown only after the slider changes this
-   session. */
-.pick-slider-explain {
-    margin-top: 0.25rem;
-    font-size: 0.875rem;
-    font-weight: 400;
-    color: var(--muted-foreground);
 }
 
 /* The saved check's pulse (Nov 27 2026): the one green check in

@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import { GroupLabel } from "./SectionCard";
 import { PickSlider } from "./studio/HookPicksControl";
-import { resolutionExplainer } from "../lib/pickExplainers";
 import { GenerateAnotherConfirmDialog } from "./studio/GenerateAnotherConfirmDialog";
 import PlatformPreview from "./studio/PlatformPreview";
 
@@ -972,7 +971,6 @@ const handleGenerate = async () => {
                 <PickSlider
                   options={[capability.resolution, ...(capability.supported_resolutions || []).filter((r) => r !== capability.resolution)]
                     .map((r) => ({ value: r, label: r }))}
-                  explainers={(option) => resolutionExplainer(option.value, option.value === capability.resolution)}
                   current={selectedResolution || capability.resolution}
                   onChange={(r) => {
                     const next = r === capability.resolution ? "" : r;

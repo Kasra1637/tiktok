@@ -210,20 +210,24 @@ describe("HookPicksControl", () => {
     await view.unmount();
   });
 
-  test("the slider form renders three sliders, the opening among them", async () => {
+  test("the slider form renders four sliders, Focus first among them", async () => {
+    // Focus stands in the pick row as its first group (Kasra's
+    // order, Nov 27 2026) — four sliders on one line.
     const onOpeningChange = jest.fn();
     const view = await mount({ picksAsSliders: true, opening: "auto", onOpeningChange });
-    for (const key of ["tone", "shape", "opening"]) {
+    for (const key of ["focus", "tone", "shape", "opening"]) {
       expect(view.q(`hook-picks-${key}-slider`)).not.toBeNull();
       const knob = view.q(`hook-picks-${key}-knob`);
       expect(knob).not.toBeNull();
       expect(knob.getAttribute("role")).toBe("slider");
       expect(knob.getAttribute("aria-valuenow")).toBe("0");
-      expect(view.q(`hook-picks-${key}-value`).textContent).toBe("App's choice");
+      expect(view.q(`hook-picks-${key}-value`).textContent).toBe(
+        key === "focus" ? "Let the app choose" : "App's choice"
+      );
     }
     // The unified face (Nov 27 2026): no stop-names row stands
     // under any slider — only the one pick-name line, asserted
-    // above for each of the three.
+    // above for each of the four.
     expect(view.q("hook-picks-opening-names")).toBeNull();
     expect(view.container.querySelector(".pick-slider-name")).toBeNull();
     // Tapping a stop reports the pick, like the pills do.
@@ -232,6 +236,26 @@ describe("HookPicksControl", () => {
     await act(async () => { view.q("hook-picks-tone-warm").click(); });
     expect(view.onToneChange).toHaveBeenCalledWith("warm");
     await view.unmount();
+  });
+
+  test("the slider form caps the Focus stops at four standing (Nov 27 2026)", async () => {
+    // Kasra's 3–4 range rule: the Focus slider's standing stops
+    // are the app's choice plus the first three complete lines;
+    // a chosen line outside them takes the fourth seat. The
+    // option list itself (the pop-up form's menu) keeps every
+    // line — profileOutcomeLines' six-line cap above stands.
+    const lines = ["Line one", "Line two", "Line three", "Line four", "Line five"];
+    const stopsOf = (view) =>
+      [...view.container.querySelectorAll('[data-testid="hook-picks-focus-slider"] .pick-slider-stop')]
+        .map((b) => b.dataset.value);
+    const plain = await mount({ picksAsSliders: true, focusOptions: lines, focus: "" });
+    expect(stopsOf(plain)).toEqual(["", "Line one", "Line two", "Line three"]);
+    await plain.unmount();
+    const chosen = await mount({ picksAsSliders: true, focusOptions: lines, focus: "Line five" });
+    expect(stopsOf(chosen)).toEqual(["", "Line one", "Line two", "Line five"]);
+    expect(chosen.q("hook-picks-focus-knob").getAttribute("aria-valuenow")).toBe("3");
+    expect(chosen.q("hook-picks-focus-value").textContent).toBe("Line five");
+    await chosen.unmount();
   });
 
   test("a saved focus the profile no longer carries reads as the app's choice", async () => {

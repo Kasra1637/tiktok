@@ -4,13 +4,6 @@ import { Check, Focus, HelpCircle, Maximize2, MessagesSquare, RefreshCw, Rocket,
 import { Button } from "../ui/button";
 import { CONTROL_CLASS } from "../formControls";
 import { GroupLabel } from "../SectionCard";
-import {
-  FOCUS_APP_EXPLAINER,
-  FOCUS_LINE_EXPLAINER,
-  OPENING_EXPLAINERS,
-  SHAPE_EXPLAINERS,
-  TONE_EXPLAINERS,
-} from "../../lib/pickExplainers";
 
 /**
  * The founder's steering picks for the Hook + CTA hook (ADR 0247),
@@ -192,16 +185,12 @@ export function PickPills({ options, current, onChange, disabled, testId, ariaLa
 // repeating the pick — the other stops reveal themselves on the
 // change itself. Dragging is never the only way: every stop dot
 // is tappable, and the knob itself is a keyboard slider.
-export function PickSlider({ options, current, onChange, disabled, testId, ariaLabel, restValue, restLabel, explainers }) {
+export function PickSlider({ options, current, onChange, disabled, testId, ariaLabel, restValue, restLabel }) {
   const trackRef = useRef(null);
-  // The explainer (Kasra's order, Nov 27 2026): after the user
-  // changes this slider this session, the meaning of the stop
-  // they just set stands under the pick's name — one brief line
-  // from lib/pickExplainers, in the shared 55–65 character band.
-  // An untouched slider shows none: the record of the change is
-  // local interaction state, and the explainer stands only while
-  // the current value is the stop that change landed on.
-  const [touchedValue, setTouchedValue] = useState(null);
+  // No explainer line stands under any toggle (Kasra's order,
+  // later Nov 27 2026, superseding the same day's explainer
+  // rounds): the pick's name under the track is the whole
+  // information — "just Garden bench is enough."
   // The switch glide (Kasra's order, Nov 27 2026): while the
   // pointer is down the knob follows the hand directly; the soft
   // ease in index.css applies only when the slider is not being
@@ -229,16 +218,9 @@ export function PickSlider({ options, current, onChange, disabled, testId, ariaL
   const jump = (next) => {
     const option = options[Math.min(options.length - 1, Math.max(0, next))];
     if (option && option.value !== current) {
-      setTouchedValue(option.value);
       onChange?.(option.value);
     }
   };
-  const currentOption = found >= 0 ? options[found] : null;
-  const explainText = currentOption && touchedValue === currentOption.value
-    ? (typeof explainers === "function"
-      ? explainers(currentOption)
-      : explainers?.[currentOption.value])
-    : null;
   const indexFromClientX = (clientX) => {
     const el = trackRef.current;
     if (!el) return index;
@@ -324,11 +306,6 @@ export function PickSlider({ options, current, onChange, disabled, testId, ariaL
       <div className="pick-slider-value" data-testid={`${testId}-value`} key={valueLabel}>
         {valueLabel}
       </div>
-      {explainText && (
-        <p className="pick-slider-explain" data-testid={`${testId}-explain`}>
-          {explainText}
-        </p>
-      )}
     </div>
   );
 }
@@ -379,13 +356,18 @@ export default function HookPicksControl({
     { value: "", label: "Let the app choose" },
     ...focusOptions.map((line) => ({ value: line, label: line })),
   ];
-  return (
-    // Layout reset: the pick groups start at the container's
-    // inset like everything else in the app; each group's own
-    // rows keep their internal order (the Buffet still stands
-    // beside its label).
-    <div className="space-y-4">
-      <div className="space-y-2">
+  // The slider's STANDING stops cap at four (Kasra's 3–4 range
+  // rule, Nov 27 2026): the app's choice plus the first three
+  // complete lines. A chosen line outside the standing four takes
+  // the fourth seat beside the app's choice and the first two
+  // lines, so the pick always stands visible and selected. The
+  // pop-up form above keeps the full list — it is a menu, not a
+  // standing toggle track.
+  const focusSliderRows =
+    focusValue && !focusRows.slice(1, 4).some((row) => row.value === focusValue)
+      ? [...focusRows.slice(0, 3), focusRows.find((row) => row.value === focusValue)]
+      : focusRows.slice(0, 4);
+  const focusHeader = (
         <div className="flex items-center gap-2">
           <GroupLabel icon={Focus}>Focus</GroupLabel>
           {/* The outcome refresh (ADR 0288, Kasra's order): one click
@@ -435,27 +417,16 @@ export default function HookPicksControl({
             </button>
           )}
         </div>
-        {picksAsSliders ? (
-          // The unified slider form (Kasra's order, Nov 27 2026):
-          // on the slider surface the Focus pick wears the same
-          // groove face as every other pick — the app's choice and
-          // the profile's standing lines are its stops, the chosen
-          // line names itself under the track, and the refresh
-          // beside the label above keeps its seat. The pop-up form
-          // below stands only where the host does not pass
-          // picksAsSliders.
-          <div data-testid={`${testId}-focus`}>
-            <PickSlider
-              options={focusRows}
-              current={focusValue}
-              onChange={onFocusChange}
-              disabled={disabled}
-              testId={`${testId}-focus`}
-              ariaLabel="Focus"
-              explainers={(option) => (option.value === "" ? FOCUS_APP_EXPLAINER : FOCUS_LINE_EXPLAINER)}
-            />
-          </div>
-        ) : (
+  );
+  return (
+    // Layout reset: the pick groups start at the container's
+    // inset like everything else in the app; each group's own
+    // rows keep their internal order (the Buffet still stands
+    // beside its label).
+    <div className="space-y-4">
+      {!picksAsSliders && (
+      <div className="space-y-2">
+        {focusHeader}
         <div>
           <button
             type="button"
@@ -532,20 +503,8 @@ export default function HookPicksControl({
             document.body
           )}
         </div>
-        )}
-        {focusStale && !hasHook && (
-          <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-focus-stale-note`}>
-            {focusRefreshAsLink
-              ? "Some stored outcomes are fragments the menu can’t offer whole — use New options for a fresh set from your profile."
-              : "Some stored outcomes are fragments the menu can’t offer whole — Buffet writes a fresh set from your profile."}
-          </p>
-        )}
-        {focusRefreshError && (
-          <p role="alert" className="text-sm text-destructive-text" data-testid={`${testId}-focus-refresh-error`}>
-            {focusRefreshError}
-          </p>
-        )}
       </div>
+      )}
 
       {/* ADR 0366: Tone and Shape are the card's two comparable
           pick-groups, so they stand side by side in the shared
@@ -556,13 +515,31 @@ export default function HookPicksControl({
           the stale notes below are state and stay.
           The slider form (Kasra's order, Nov 27 2026) supersedes
           the pair on the HookSnap surface only: a host passing
-          picksAsSliders gets the three picks — Tone, Shape and
-          the new Opening — as drag sliders in the section trio,
-          one line with dividers between, exactly the spread the
-          page's direction card wears. Without the prop this block
-          renders the pair of pill rows above, unchanged. */}
+          picksAsSliders gets the picks as drag sliders in the
+          section trio, one line with dividers between, exactly
+          the spread the page's direction card wears. Later the
+          same night Kasra moved Focus onto that same row as its
+          first group — four groups on one line (Focus, Tone,
+          Shape, Opening), the trio extended to a quad — and the
+          full-width Focus block above stands only in the pop-up
+          form. Without the prop this block renders the pair of
+          pill rows above, unchanged. */}
       {picksAsSliders ? (
-        <div className="section-trio">
+        <div className="section-trio section-quad">
+          <div className="space-y-2">
+            {focusHeader}
+            <div data-testid={`${testId}-focus`}>
+              <PickSlider
+                options={focusSliderRows}
+                current={focusValue}
+                onChange={onFocusChange}
+                disabled={disabled}
+                testId={`${testId}-focus`}
+                ariaLabel="Focus"
+              />
+            </div>
+          </div>
+
           <div className="space-y-2">
             <GroupLabel icon={MessagesSquare}>Tone</GroupLabel>
             <PickSlider
@@ -572,7 +549,6 @@ export default function HookPicksControl({
               disabled={disabled}
               testId={`${testId}-tone`}
               ariaLabel="Hook tone"
-              explainers={TONE_EXPLAINERS}
             />
           </div>
 
@@ -585,7 +561,6 @@ export default function HookPicksControl({
               disabled={disabled}
               testId={`${testId}-shape`}
               ariaLabel="Hook shape"
-              explainers={SHAPE_EXPLAINERS}
             />
           </div>
 
@@ -598,7 +573,6 @@ export default function HookPicksControl({
               disabled={disabled}
               testId={`${testId}-opening`}
               ariaLabel="Hook opening"
-              explainers={OPENING_EXPLAINERS}
             />
           </div>
         </div>
@@ -630,6 +604,18 @@ export default function HookPicksControl({
         </div>
       )}
 
+        {focusStale && !hasHook && (
+          <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-focus-stale-note`}>
+            {focusRefreshAsLink
+              ? "Some stored outcomes are fragments the menu can’t offer whole — use New options for a fresh set from your profile."
+              : "Some stored outcomes are fragments the menu can’t offer whole — Buffet writes a fresh set from your profile."}
+          </p>
+        )}
+        {focusRefreshError && (
+          <p role="alert" className="text-sm text-destructive-text" data-testid={`${testId}-focus-refresh-error`}>
+            {focusRefreshError}
+          </p>
+        )}
       {stale && (
         <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-stale-note`}>
           The line on file was written before these picks — generate a new hook to

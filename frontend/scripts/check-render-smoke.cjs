@@ -1677,17 +1677,16 @@ async function main() {
           }
         }
         // The default still renders — a fresh project is talking
-        // at render (Kasra's left-stop order, Nov 27 2026) — but
-        // the note that used to name the other mode no longer
-        // stands on this page: ADR 0362 took every descriptive
-        // line out of Create's direction section, the voice note
-        // among them, so Create passes hideNote and the note's
-        // absence here is the new pin. HookSnap passes nothing and
-        // keeps the note; its own checks below pin it there. What
-        // 0361 still promises on this page is the value and the
-        // faces, asserted above and below.
+        // at render (Kasra's left-stop order, Nov 27 2026) — and
+        // no voice note stands on this page: ADR 0362 took every
+        // descriptive line out of Create's direction section, and
+        // the silent handover note itself is since removed whole
+        // on every caller (Kasra's order, later Nov 27 2026 — it
+        // duplicated what the silent pick already says). What 0361
+        // still promises on this page is the value and the faces,
+        // asserted above and below.
         if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the voice note stands on Create — ADR 0362 removed the section's descriptive lines");
+          throw new Error("the voice note stands on Create — the handover note is removed whole (Nov 27 2026)");
         }
         await pickPairButton(ctx, "camera-setup", "fixed");
         if (camGroup.querySelector('[data-value="fixed"]').getAttribute("aria-pressed") !== "true") {
@@ -1697,9 +1696,13 @@ async function main() {
         if (ctx.container.querySelector('[data-testid="voice-mode-talking"]').getAttribute("aria-pressed") !== "true") {
           throw new Error("the clicked voice pick does not stand picked");
         }
-        // The four-stop rule (Nov 27 2026): the camera and voice
-        // sliders each carry exactly four stops, in the settled
-        // order, and the new stops save like the old ones.
+        // The four-stop rule (Nov 27 2026): the camera slider
+        // carries exactly four stops, in the settled order, and the
+        // new stops save like the old ones. Voice carries THREE
+        // stops since Kasra ordered the Voiceover selection removed
+        // later the same night — App's choice / Character talks /
+        // Character stays silent, and three sits inside his 3–4
+        // range, so no replacement stop stands.
         const cameraStops = [...camGroup.querySelectorAll(".pick-slider-stop")].map((b) => b.dataset.value);
         if (cameraStops.join(",") !== "auto,handheld,walking,fixed") {
           throw new Error(`the camera slider carries ${cameraStops.join(",") || "no stops"}, not the four stops in order`);
@@ -1707,11 +1710,14 @@ async function main() {
         const voiceGroup = ctx.container.querySelector('[data-testid="voice-mode-slider"]');
         if (!voiceGroup) throw new Error("the voice slider is gone");
         const voiceStops = [...voiceGroup.querySelectorAll(".pick-slider-stop")].map((b) => b.dataset.value);
-        if (voiceStops.join(",") !== "auto,talking,voiceover,silent") {
-          throw new Error(`the voice slider carries ${voiceStops.join(",") || "no stops"}, not the four stops in order`);
+        if (voiceStops.join(",") !== "auto,talking,silent") {
+          throw new Error(`the voice slider carries ${voiceStops.join(",") || "no stops"}, not the three stops in order`);
+        }
+        if (ctx.container.querySelector('[data-testid="voice-mode-voiceover"]')) {
+          throw new Error("the removed Voiceover stop still stands on the voice slider");
         }
         await pickPairButton(ctx, "camera-setup", "walking");
-        await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-voiceover"]'));
+        await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-silent"]'));
         // The picks ride the page's autosave, about a second after
         // the last change — the same wait the direction save check
         // below uses.
@@ -1719,8 +1725,8 @@ async function main() {
         if (saved.camera_setup !== "walking") {
           throw new Error(`the walking pick never saved: ${JSON.stringify(saved.camera_setup)}`);
         }
-        if (saved.voice_mode !== "voiceover") {
-          throw new Error(`the voiceover pick never saved: ${JSON.stringify(saved.voice_mode)}`);
+        if (saved.voice_mode !== "silent") {
+          throw new Error(`the silent pick never saved: ${JSON.stringify(saved.voice_mode)}`);
         }
         await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-auto"]'));
         await act(async () => { await new Promise((r) => setTimeout(r, 1300)); });
@@ -1886,7 +1892,7 @@ async function main() {
           }
         }
         if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the voice note still stands on Create (ADR 0362)");
+          throw new Error("the voice note still stands on Create — it is removed whole (Nov 27 2026)");
         }
         // The fixed camera's framing line and the talking note are
         // gone in their faces too.
@@ -4484,7 +4490,9 @@ async function main() {
         // pairs of black buttons — no dropdown stands among them.
         // The camera setup is the unified slider now, and since
         // the four-stop rule (Nov 27 2026) it stands four stops;
-        // the direction fields still stand their two picks.
+        // the direction fields stand their first four picks since
+        // the same rule reached them (later Nov 27 2026) — this
+        // fixture offers only two of each, so both stand here.
         for (const id of ["camera-setup", "review-location-direction", "review-wardrobe"]) {
           const control = ctx.container.querySelector(`[data-testid="${id}"]`);
           if (!control) throw new Error(`the ${id} pair is missing`);
@@ -9106,13 +9114,14 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         // ADR 0330 (as corrected at Kasra's live review): the
         // direction fields stand their options as spaced pills in
         // the Voice pick's design, and "New options" brings the
-        // next set. ADR 0365: two stand by default, not three.
+        // next set. Four stand by default (Kasra's order, later
+        // Nov 27 2026, superseding ADR 0365's two-standing rule).
         for (const [id, list] of Object.entries({ "review-location-direction": OPTIONS.location, "review-wardrobe": OPTIONS.wardrobe })) {
           const pair = ctx.container.querySelector(`[data-testid="${id}"]`);
           if (!pair) throw new Error(`the step lost the ${id} pair`);
           const buttons = [...pair.querySelectorAll("button")].map((b) => b.dataset.value);
-          if (JSON.stringify(buttons) !== JSON.stringify(list.slice(0, 2))) {
-            throw new Error(`${id} does not stand its first two options as buttons: ${JSON.stringify(buttons)}`);
+          if (JSON.stringify(buttons) !== JSON.stringify(list.slice(0, 4))) {
+            throw new Error(`${id} does not stand its first four options as buttons: ${JSON.stringify(buttons)}`);
           }
           if (pair.dataset.value !== "") throw new Error(`${id} preselected a legacy note it cannot name`);
         }
@@ -9290,10 +9299,12 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         await clickEl(ctx, stepPill(ctx, "Audience & template"));
         // ADR 0330: the set stands its offered places as buttons;
         // the camera filter still decides what is offered.
-        // ADR 0365: two stand by default — the offered set itself
-        // is unchanged, and New options reveals the rest of it.
+        // Four stand by default (Kasra's order, later Nov 27
+        // 2026, superseding ADR 0365's two-standing rule) — the
+        // offered set itself is unchanged, and New options
+        // reveals the rest of it.
         const pairValues = () => [...ctx.container.querySelectorAll('[data-testid="review-location-direction"] button')].map((b) => b.dataset.value);
-        if (JSON.stringify(pairValues()) !== JSON.stringify(ALL_LOCATIONS.slice(0, 2))) {
+        if (JSON.stringify(pairValues()) !== JSON.stringify(ALL_LOCATIONS.slice(0, 4))) {
           throw new Error(`a handheld camera was not offered its first locations: ${JSON.stringify(pairValues())}`);
         }
         // ADR 0337 (Kasra's ruling, Nov 25 2026): a direction
@@ -9303,7 +9314,7 @@ await check("Review never overwrites unsaved edits with a refetch", async (ctx) 
         // shape), never wearing dots. The fixture's long places
         // shorten to their complete cores.
         const pairLabels = [...ctx.container.querySelectorAll('[data-testid="review-location-direction"] button')].map((b) => b.getAttribute("aria-label"));
-        if (JSON.stringify(pairLabels) !== JSON.stringify(["Quiet garden bench", "Calm living room"])) {
+        if (JSON.stringify(pairLabels) !== JSON.stringify(["Quiet garden bench", "Calm living room", "Balcony", "Tidy desk with a notebook"])) {
           throw new Error(`a direction stop's label is not the safely shortened phrase: ${JSON.stringify(pairLabels)}`);
         }
         if (pairLabels.some((t) => t.length > 25 || t.includes("…"))) {
@@ -16142,7 +16153,9 @@ async function runHookCtaChecks() {
 
   await check("the HookSnap hook card carries no descriptive lines (ADR 0366)", async (ctx) => {
     // ADR 0366: Tone and Shape stand in a .section-pair with Focus
-    // full-width above them; the card subtitle, the line under
+    // full-width above them (Focus has since moved into the pick
+    // row itself — Kasra's order, later Nov 27 2026, pinned
+    // below); the card subtitle, the line under
     // Focus and the line under Shape are gone, and so is the
     // spoken-line subtitle inside the shared HookLineEditor. The
     // Focus pop-up's header wears the eyebrow face with the Focus
@@ -16169,26 +16182,31 @@ async function runHookCtaChecks() {
             throw new Error(`the hook card still carries a removed descriptive line: ${JSON.stringify(gone)} (ADR 0366)`);
           }
         }
-        // Focus stands full-width above the slider row, never
-        // inside it. (ADR 0366 stood Tone and Shape in a pair here;
-        // the slider round, Nov 27 2026, supersedes that on this
-        // page: the three picks stand as sliders in the trio, and
-        // the slider check below pins their form.)
+        // Focus stands INSIDE the pick row now, its first group —
+        // Kasra's order, later Nov 27 2026: the row carries four
+        // groups on one line (Focus, Tone, Shape, Opening), the
+        // trio mechanism extended to a quad. (ADR 0366 stood Tone
+        // and Shape in a pair with Focus full-width above them; the
+        // slider round and then this order supersede that on this
+        // page, and the slider check below pins their form.)
         const trio = card.querySelector(".section-trio");
         if (!trio) throw new Error("the hook card carries no section trio for its picks");
-        if (trio.querySelector('[data-testid="hook-picks-focus"]')) {
-          throw new Error("the Focus pick stands inside the trio — it stays full-width above it");
+        if (!trio.querySelector('[data-testid="hook-picks-focus"]')) {
+          throw new Error("the Focus pick does not stand inside the pick row — Kasra moved it onto the row");
         }
         const cells = [...trio.children];
-        if (cells.length !== 3) throw new Error("the picks trio does not hold three areas");
-        if (!cells[0].querySelector('[data-testid^="hook-picks-tone"]')) {
-          throw new Error("the trio's first area is not Tone");
+        if (cells.length !== 4) throw new Error("the picks row does not hold four areas");
+        if (!cells[0].querySelector('[data-testid^="hook-picks-focus"]')) {
+          throw new Error("the row's first area is not Focus");
         }
-        if (!cells[1].querySelector('[data-testid^="hook-picks-shape"]')) {
-          throw new Error("the trio's second area is not Shape");
+        if (!cells[1].querySelector('[data-testid^="hook-picks-tone"]')) {
+          throw new Error("the row's second area is not Tone");
         }
-        if (!cells[2].querySelector('[data-testid^="hook-picks-opening"]')) {
-          throw new Error("the trio's third area is not Opening");
+        if (!cells[2].querySelector('[data-testid^="hook-picks-shape"]')) {
+          throw new Error("the row's third area is not Shape");
+        }
+        if (!cells[3].querySelector('[data-testid^="hook-picks-opening"]')) {
+          throw new Error("the row's fourth area is not Opening");
         }
         // The Focus group's header wears the one face, and its
         // pick is the unified slider (Nov 27 2026) — no pop-up
@@ -16218,88 +16236,44 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("every slider explainer is brief and lands in the shared band (Nov 27 2026)", async () => {
-    // Kasra's order (Nov 27 2026): every PickSlider carries one
-    // explainer per stop, brief and uniform — the fixed texts land
-    // in one 55–65 character band, the five label seats (Location,
-    // Wardrobe, environment, backdrop, animation) carry one fixed
-    // line each in a wider 45–70 band, and every one is far under
-    // the old silent note's ~200 characters. A future explainer
-    // that drifts out of the band fails here.
-    const ex = load("lib/pickExplainers.js");
-    // The copy filter is removed whole (Nov 27 2026): its explainer
-    // map goes with it, and the status slider's All statuses stop
-    // carries no explainer — the band below measures only the texts
-    // that stand.
-    if (ex.COPY_FILTER_EXPLAINERS !== undefined) {
-      throw new Error("the removed copy filter's explainer map still stands in pickExplainers");
+  await check("no explainer line stands under any toggle — the pick name is the information (Nov 27 2026)", async () => {
+    // Kasra's order (later Nov 27 2026, superseding the same
+    // day's explainer rounds whole): the longer line under every
+    // toggle is removed — "just Garden bench is enough", "just
+    // Character talks is enough info". The module that carried
+    // the texts is gone, no source imports it, the shared slider
+    // renders no explainer element, and the stylesheet carries
+    // no explainer face. The DOM absence on real pages is pinned
+    // by the direction, History and editor checks below.
+    const modulePath = path.join(SRC, "lib", "pickExplainers.js");
+    if (fs.existsSync(modulePath)) {
+      throw new Error("lib/pickExplainers.js still stands — Kasra ordered the explainer lines removed whole");
     }
-    if (ex.STATUS_FILTER_EXPLAINERS[""] !== undefined) {
-      throw new Error("the All statuses stop still carries an explainer — Kasra ordered the line removed (Nov 27 2026)");
-    }
-    const fixedMaps = [
-      ex.VOICE_EXPLAINERS, ex.CAMERA_EXPLAINERS, ex.TONE_EXPLAINERS,
-      ex.SHAPE_EXPLAINERS, ex.OPENING_EXPLAINERS,
-      ex.STATUS_FILTER_EXPLAINERS, ex.CLIP_STYLE_EXPLAINERS,
-      ex.TRANSITION_EXPLAINERS,
-    ];
-    for (const map of fixedMaps) {
-      for (const [key, text] of Object.entries(map)) {
-        if (typeof text !== "string" || text.length < 55 || text.length > 65) {
-          throw new Error(`an explainer sits outside the 55–65 band (${text && text.length} chars, stop ${JSON.stringify(key)}): ${JSON.stringify(text)}`);
+    const scanRoots = ["components", "pages", "demoCta", "lib"];
+    const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      return entry.isDirectory() ? walk(full) : [full];
+    });
+    for (const root of scanRoots) {
+      for (const file of walk(path.join(SRC, root))) {
+        if (!/\.(jsx?|js)$/.test(file) || file.endsWith(".test.jsx") || file.endsWith(".test.js")) continue;
+        const text = fs.readFileSync(file, "utf8");
+        if (text.includes("pickExplainers") || text.includes("pick-slider-explain") || text.includes("explainers=")) {
+          throw new Error(`${path.relative(SRC, file)} still carries explainer plumbing after the removal`);
         }
       }
     }
-    for (const text of [ex.FOCUS_APP_EXPLAINER, ex.FOCUS_LINE_EXPLAINER]) {
-      if (text.length < 55 || text.length > 65) {
-        throw new Error(`a Focus explainer sits outside the 55–65 band (${text.length} chars): ${JSON.stringify(text)}`);
-      }
-    }
-    for (const text of [ex.resolutionExplainer("768p", true), ex.resolutionExplainer("1080p", false)]) {
-      if (text.length < 55 || text.length > 65) {
-        throw new Error(`a resolution explainer sits outside the 55–65 band (${text.length} chars): ${JSON.stringify(text)}`);
-      }
-    }
-    // The five label seats no longer restate the pick (Kasra's
-    // order, later Nov 27 2026): each is ONE fixed line explaining
-    // what the seat controls — the same words for every stop,
-    // never naming the pick. The exact texts are pinned here
-    // against the app's real labels, and each still lands in the
-    // 45–70 band.
-    const seatExplainers = [
-      [ex.locationExplainer, "The place the hook is filmed in — pick the room or spot."],
-      [ex.wardrobeExplainer, "What the presenter wears on camera for this hook."],
-      [ex.environmentExplainer, "The setting painted around the clip in the editor."],
-      [ex.backdropExplainer, "What stands behind the phone in the second clip."],
-      [ex.animationExplainer, "How a still image moves while it is on screen."],
-    ];
-    const { ENVIRONMENTS, BACKGROUNDS, ANIMATIONS } = load("demoCta/constants.js");
-    const realLabels = [
-      ...ENVIRONMENTS.map((env) => env.label),
-      ...BACKGROUNDS.map((b) => b.label),
-      ...ANIMATIONS.map((a) => a.label),
-      "A quiet kitchen",
-      "A plain dark hoodie",
-      "Plan default",
-    ];
-    for (const [explain, expected] of seatExplainers) {
-      if (expected.length < 45 || expected.length > 70) {
-        throw new Error(`a seat explainer sits outside the 45–70 band (${expected.length} chars): ${JSON.stringify(expected)}`);
-      }
-      for (const label of realLabels) {
-        const text = explain(label);
-        if (text !== expected) {
-          throw new Error(`a seat explainer is not its one fixed line for label ${JSON.stringify(label)}: ${JSON.stringify(text)}`);
-        }
-      }
+    const css = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
+    if (css.includes(".pick-slider-explain")) {
+      throw new Error("the stylesheet still carries the removed explainer face");
     }
     const voiceSrc = fs.readFileSync(path.join(SRC, "components", "studio", "VoiceModeControl.jsx"), "utf8");
     if (voiceSrc.includes("no voice, and the mouth never moves")) {
-      throw new Error("the long silent-voice sentence still stands in VoiceModeControl — the brief explainer replaces it");
+      throw new Error("the long silent-voice sentence still stands in VoiceModeControl");
     }
   });
 
-  await check("HookSnap's hook picks are drag sliders — Tone, Shape and Opening on one line (Nov 27 2026)", async (ctx) => {
+  await check("HookSnap's hook picks are drag sliders — Focus, Tone, Shape and Opening on one line (Nov 27 2026)", async (ctx) => {
     // Kasra's order (Nov 27 2026, from his approved mockups): on
     // HookSnap the Tone and Shape pill rows become drag sliders and
     // a third pick, Opening, joins them — three sliders on one line
@@ -16309,7 +16283,9 @@ async function runHookCtaChecks() {
     // The unified face (Kasra's sharpening, later Nov 27 2026):
     // no row naming every stop and no smaller line repeating the
     // pick — one bigger-font name only, on a track that carries
-    // the one fixed width.
+    // the one fixed width. Later the same night Kasra moved Focus
+    // onto this same row as its first group — four groups on one
+    // line — pinned by the last assertion below.
     const row = hookRow({ id: "hook-cta-1", hook_line: HOOK });
     const patches = [];
     await inHookCta(
@@ -16374,6 +16350,16 @@ async function runHookCtaChecks() {
           if (knob.querySelectorAll("span").length !== 3) {
             throw new Error(`the ${group.key} knob does not carry its three grip lines`);
           }
+        }
+        // Focus stands in the row as its FIRST group (Kasra's
+        // order, later Nov 27 2026) — the unified slider inside the
+        // trio, before Tone.
+        const focusSlider = card.querySelector('[data-testid="hook-picks-focus-slider"]');
+        if (!focusSlider) throw new Error("the Focus slider did not render");
+        if (!trio.contains(focusSlider)) throw new Error("the Focus slider stands outside the pick row");
+        const firstCell = trio.children[0];
+        if (!firstCell || !firstCell.contains(focusSlider)) {
+          throw new Error("the Focus slider is not the row's first group");
         }
         // Tapping a stop jumps the pick and saves it through the
         // same draft PATCH the pills used — the Opening pick rides
@@ -16449,12 +16435,13 @@ async function runHookCtaChecks() {
     if (!trackRule.includes("max-width: 100%")) {
       throw new Error("the slider track is not capped at its seat's width");
     }
-    // The pick's name and its explainer stand in one quiet,
-    // matched voice (Nov 27 2026, Kasra's order): the same
-    // 0.875rem size and the same regular weight — the name in
-    // the foreground tone, the explainer one tone quieter in
-    // the muted foreground. The old bold value face (weight
-    // 600) made the pair read as one bold white block.
+    // The pick's name stands alone in its quiet voice (Nov 27
+    // 2026, Kasra's order): 0.875rem at regular weight in the
+    // foreground tone — the old bold value face (weight 600)
+    // made it read as one bold white block. The explainer that
+    // once stood under it in the muted tone is removed whole
+    // (later the same night): the name is the whole information,
+    // and the stylesheet carries no explainer face anymore.
     const valueAt = css.indexOf(".pick-slider-value");
     if (valueAt < 0) throw new Error("index.css carries no pick slider value");
     const valueRule = css.slice(valueAt, css.indexOf("}", valueAt));
@@ -16464,14 +16451,8 @@ async function runHookCtaChecks() {
     if (!valueRule.includes("font-weight: 400") || valueRule.includes("font-weight: 600")) {
       throw new Error("the pick's name still shouts — it must stand at regular weight, not bold");
     }
-    const explainAt = css.indexOf(".pick-slider-explain");
-    if (explainAt < 0) throw new Error("index.css carries no pick slider explainer");
-    const explainRule = css.slice(explainAt, css.indexOf("}", explainAt));
-    if (!explainRule.includes("font-size: 0.875rem") || !explainRule.includes("font-weight: 400")) {
-      throw new Error("the explainer is not matched to the pick's name in size and regular weight");
-    }
-    if (!explainRule.includes("color: var(--muted-foreground)")) {
-      throw new Error("the explainer does not stand in the muted tone, one step quieter than the name");
+    if (css.includes(".pick-slider-explain")) {
+      throw new Error("the removed explainer face still stands in the stylesheet");
     }
   });
 
@@ -16506,10 +16487,12 @@ async function runHookCtaChecks() {
 
   await check("HookSnap's direction groups are sliders too — Voice, Location and Wardrobe (Nov 27 2026)", async (ctx) => {
     // Kasra's order (Nov 27 2026): the direction trio wears the
-    // same slider form as The hook's picks — Voice a two-stop
-    // slider (Character talks / Character stays silent), Location
-    // and Wardrobe sliders whose stops are the two standing picks
-    // (ADR 0365, the last-seat rule included), the New options
+    // same slider form as The hook's picks — Voice a slider
+    // (three stops since the Voiceover removal later that
+    // night), Location
+    // and Wardrobe sliders whose stops are the four standing picks
+    // (later Nov 27 2026, superseding ADR 0365's two-standing
+    // rule, the last-seat rule included), the New options
     // link beside each label exactly as it stands today, revealing
     // the full set as the pill row it has always been. Create's
     // direction controls wear the same sliders since the unified
@@ -16552,9 +16535,8 @@ async function runHookCtaChecks() {
         // mode a fresh draft is born with (Kasra's left-stop
         // order, Nov 27 2026), which is the second stop now that
         // the app's choice stands at the left — with its name
-        // under the track. Neither the note nor the slider's
-        // explainer stands: both belong to a change the user
-        // makes, never to the standing state (Nov 27 2026).
+        // under the track. No note and no explainer line stands
+        // under the pick: both are removed whole (Nov 27 2026).
         const voiceKnob = card.querySelector('[data-testid="voice-mode-knob"]');
         if (!voiceKnob || voiceKnob.getAttribute("role") !== "slider") {
           throw new Error("the voice pick carries no slider knob");
@@ -16563,8 +16545,11 @@ async function runHookCtaChecks() {
           throw new Error("the voice knob does not rest on Character talks, the standing mode a fresh draft is born with");
         }
         const voiceStops = [...card.querySelectorAll('[data-testid="voice-mode-slider"] .pick-slider-stop')].map((b) => b.dataset.value);
-        if (voiceStops.join(",") !== "auto,talking,voiceover,silent") {
-          throw new Error(`the voice slider carries ${voiceStops.join(",") || "no stops"}, not the four stops in order`);
+        // Three voice stops since the Voiceover removal (Nov 27
+        // 2026) — App's choice / Character talks / Character stays
+        // silent, inside Kasra's 3–4 range.
+        if (voiceStops.join(",") !== "auto,talking,silent") {
+          throw new Error(`the voice slider carries ${voiceStops.join(",") || "no stops"}, not the three stops in order`);
         }
         for (const id of ["voice-mode-talking", "voice-mode-silent"]) {
           const stop = card.querySelector(`[data-testid="${id}"]`);
@@ -16578,16 +16563,16 @@ async function runHookCtaChecks() {
           throw new Error("the voice slider does not name the standing mode under its knob");
         }
         if (card.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the silent note stands on a fresh draft — it belongs to the change, not the standing state (Nov 27 2026)");
+          throw new Error("the silent note stands on a fresh draft — it is removed whole (Kasra's order, later Nov 27 2026)");
         }
         if (card.querySelector('[data-testid="voice-mode-explain"]')) {
-          throw new Error("the voice explainer stands on a fresh draft — it belongs to the change, not the standing state (Nov 27 2026)");
+          throw new Error("an explainer line stands under Voice — Kasra ordered every toggle's explainer removed whole (Nov 27 2026)");
         }
-        // Location and Wardrobe: the two standing picks are the
+        // Location and Wardrobe: the four standing picks are the
         // stops, and New options stands beside the label.
         for (const [testId, names] of [
-          ["hook-cta-location-direction", ["Location one", "Location two"]],
-          ["hook-cta-wardrobe", ["Wardrobe one", "Wardrobe two"]],
+          ["hook-cta-location-direction", ["Location one", "Location two", "Location three", "Location four"]],
+          ["hook-cta-wardrobe", ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"]],
         ]) {
           const group = card.querySelector(`[data-testid="${testId}"]`);
           if (!group || !group.querySelector(".pick-slider")) {
@@ -16595,7 +16580,7 @@ async function runHookCtaChecks() {
           }
           const stopValues = [...group.querySelectorAll("button[data-value]")].map((b) => b.dataset.value);
           if (JSON.stringify(stopValues) !== JSON.stringify(names)) {
-            throw new Error(`the ${testId} slider's stops are ${JSON.stringify(stopValues)}, not the two standing picks (ADR 0365)`);
+            throw new Error(`the ${testId} slider's stops are ${JSON.stringify(stopValues)}, not the four standing picks (Nov 27 2026)`);
           }
         }
         if (!card.querySelector('[data-testid="hook-cta-location-refresh"]')) {
@@ -16622,34 +16607,22 @@ async function runHookCtaChecks() {
         if (card.querySelector('[data-testid="voice-mode-silent"]').getAttribute("aria-pressed") !== "true") {
           throw new Error("the silent pick did not survive the autosave settling on the slider (ADR 0373)");
         }
-        // The note belongs to that change (Nov 27 2026): the user
-        // just slid Voice onto silent, so the note stands now —
-        // and sliding back to talking takes it away again. The
-        // note is the text-to-speech handover only: the long
-        // sentence that used to open it is replaced by the
-        // slider's brief explainer, which stands beside it now
-        // naming what the silent stop means.
-        const silentNote = card.querySelector('[data-testid="voice-mode-silent-note"]');
-        if (!silentNote) {
-          throw new Error("the silent note did not rise when the user changed Voice to silent");
+        // No line rises on that change (Kasra's orders, later
+        // Nov 27 2026): the text-to-speech handover note is
+        // removed whole, and no explainer stands under the pick
+        // either — the pick's name is the whole information.
+        if (card.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note rose when the user changed Voice to silent — it is removed whole (Nov 27 2026)");
         }
-        if (silentNote.textContent.includes("The character stays silent in this video")) {
-          throw new Error("the long silent sentence still opens the note — the brief explainer replaces it (Nov 27 2026)");
-        }
-        if (!silentNote.textContent.includes("text-to-speech")) {
-          throw new Error("the silent note lost the text-to-speech handover");
-        }
-        const silentExplain = card.querySelector('[data-testid="voice-mode-explain"]');
-        if (!silentExplain || silentExplain.textContent.trim() !== "No voice is recorded; TikTok text-to-speech can carry the line.") {
-          throw new Error("the silent stop's explainer does not stand after the change onto silent");
+        if (card.querySelector('[data-testid="voice-mode-explain"]')) {
+          throw new Error("an explainer line rose under Voice on the change onto silent — every toggle's explainer is removed whole (Nov 27 2026)");
         }
         await clickEl(ctx, card.querySelector('[data-testid="voice-mode-talking"]'));
         if (card.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the silent note stayed after the user slid back to talking");
+          throw new Error("the silent note stands after the user slid back to talking — it is removed whole (Nov 27 2026)");
         }
-        const talkingExplain = card.querySelector('[data-testid="voice-mode-explain"]');
-        if (!talkingExplain || talkingExplain.textContent.trim() !== "The character speaks the line aloud, lips moving with the words.") {
-          throw new Error("the talking stop's explainer does not stand after the change back to talking");
+        if (card.querySelector('[data-testid="voice-mode-explain"]')) {
+          throw new Error("an explainer line stands under Voice after the change back to talking — removed whole (Nov 27 2026)");
         }
         // New options reveals the full set as the pill row it has
         // always been, and a pick from it applies.
@@ -16710,17 +16683,19 @@ async function runHookCtaChecks() {
     }
   });
 
-  await check("a saved direction pick takes the slider's second seat (ADR 0365, Nov 27 2026)", async (ctx) => {
-    // The last-seat rule in slider form: a saved Location pick
-    // outside the visible two stands as the slider's second stop,
-    // picked — what applies is always on the slider, never hidden
-    // behind the reveal.
-    const LOCATIONS = ["Location one", "Location two", "Location three", "Location four"];
+  await check("a saved direction pick takes the slider's last seat (four standing, Nov 27 2026)", async (ctx) => {
+    // The last-seat rule in slider form, at the four-standing
+    // count (Kasra's order, later Nov 27 2026, superseding ADR
+    // 0365's second seat): a saved Location pick outside the
+    // standing four stands as the slider's fourth stop, beside
+    // the first three options, picked — what applies is always
+    // on the slider, never hidden behind the reveal.
+    const LOCATIONS = ["Location one", "Location two", "Location three", "Location four", "Location five"];
     const WARDROBES = ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"];
     await inHookCta(
       ctx,
       {
-        createHookCtaProject: async () => blankRow({ id: "hook-cta-1", location: "Location four" }),
+        createHookCtaProject: async () => blankRow({ id: "hook-cta-1", location: "Location five" }),
         getDirectionOptions: async () => ({
           group: "default",
           location: LOCATIONS, wardrobe: WARDROBES,
@@ -16734,15 +16709,15 @@ async function runHookCtaChecks() {
         if (!group) throw new Error("the location group did not render");
         if (!group.querySelector(".pick-slider")) throw new Error("the location group carries no slider");
         const stopValues = [...group.querySelectorAll("button[data-value]")].map((b) => b.dataset.value);
-        if (JSON.stringify(stopValues) !== JSON.stringify(["Location one", "Location four"])) {
-          throw new Error(`the slider's stops are ${JSON.stringify(stopValues)} — the saved pick did not take the second seat (ADR 0365)`);
+        if (JSON.stringify(stopValues) !== JSON.stringify(["Location one", "Location two", "Location three", "Location five"])) {
+          throw new Error(`the slider's stops are ${JSON.stringify(stopValues)} — the saved pick did not take the last seat beside the first three (Nov 27 2026)`);
         }
-        const picked = group.querySelector('[data-value="Location four"]');
+        const picked = group.querySelector('[data-value="Location five"]');
         if (picked.getAttribute("aria-pressed") !== "true") {
           throw new Error("the saved location pick does not stand picked on its slider stop");
         }
         const value = group.querySelector('[data-testid="hook-cta-location-direction-slider-value"]');
-        if (!value || value.textContent.trim() !== "Location four") {
+        if (!value || value.textContent.trim() !== "Location five") {
           throw new Error("the slider does not name the saved pick under its knob");
         }
       }
@@ -17245,7 +17220,7 @@ async function runHookCtaChecks() {
     }
   });
 
-  await check("the silent pick saves, names the hook line for text-to-speech, and submits audio off", async (ctx) => {
+  await check("the silent pick saves and submits audio off, with no text-to-speech note (Nov 27 2026)", async (ctx) => {
     const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
     // The row states talking explicitly — a fresh row starts
     // talking too (Kasra's left-stop order, Nov 27 2026) — and
@@ -17274,13 +17249,12 @@ async function runHookCtaChecks() {
         const silentPill = ctx.container.querySelector('[data-testid="voice-mode-silent"]');
         if (!silentPill) throw new Error("the voice pick did not render in the direction card");
         await clickEl(ctx, silentPill);
-        const note = ctx.container.querySelector('[data-testid="voice-mode-silent-note"]');
-        if (!note) throw new Error("the silent note did not render at the pick");
-        if (!note.textContent.includes("text-to-speech")) {
-          throw new Error("the silent note does not name TikTok's text-to-speech");
-        }
-        if (!note.textContent.includes(HOOK)) {
-          throw new Error("the silent note does not show the hook line itself");
+        // Kasra's order (later Nov 27 2026): the text-to-speech
+        // handover note under Voice is removed whole — it
+        // duplicated what the silent pick already says. Picking
+        // silent raises no note and shows no line for pasting.
+        if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note renders at the pick — it is removed whole (Nov 27 2026)");
         }
         await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
         if (!patches.some((p) => p.voice_mode === "silent")) {
@@ -17314,11 +17288,10 @@ async function runHookCtaChecks() {
     // (ADR 0248); since Kasra's left-stop order (Nov 27 2026) the
     // default is talking, so a stored "silent" now stands picked
     // on return — the mirror of the old read, and the stored pick
-    // itself is untouched. The note does NOT render for the
-    // standing pick (Nov 27 2026: it belongs to the change, never
-    // to the standing state) — it rises at this check's end, when
-    // the user changes back onto silent — and the switch-back
-    // path below is the regression pin, unchanged.
+    // itself is untouched. No note renders at any point (the
+    // text-to-speech handover note is removed whole, Kasra's
+    // order, later Nov 27 2026) — and the switch-back path below
+    // is the regression pin, unchanged.
     const face = [{ asset_id: "a1", kind: "character_reference", label: "Founder face" }];
     let row = hookRow({ id: "hook-cta-1", hook_line: HOOK, assets: face, voice_mode: "silent" });
     const patches = [];
@@ -17342,24 +17315,24 @@ async function runHookCtaChecks() {
           throw new Error("a saved-silent draft does not read as the stored pick — silent stands off the talking default (Nov 27 2026)");
         }
         if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the silent note stands for the saved silent pick — it belongs to the change, not the standing state (Nov 27 2026)");
+          throw new Error("the silent note stands for the saved silent pick — it is removed whole (Nov 27 2026)");
         }
         await clickEl(ctx, talkingPill);
         if (talkingPill.getAttribute("aria-pressed") !== "true") {
           throw new Error("tapping Character talks did not pick it — the tap changed nothing");
         }
         if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the silent note stayed after switching to talking");
+          throw new Error("the silent note stands after switching to talking — it is removed whole (Nov 27 2026)");
         }
         await act(async () => { await new Promise((r) => setTimeout(r, 1400)); });
         if (!patches.some((p) => p.voice_mode === "talking")) {
           throw new Error(`the switch back to talking never saved: ${JSON.stringify(patches)}`);
         }
-        // The note belongs to the change (Nov 27 2026): sliding
-        // back onto silent is a change, so the note rises now.
+        // Sliding back onto silent raises no note either (the
+        // handover note is removed whole, Nov 27 2026).
         await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-silent"]'));
-        if (!ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the silent note did not rise when the user changed Voice to silent");
+        if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note rose when the user changed Voice to silent — it is removed whole (Nov 27 2026)");
         }
       }
     );
@@ -17702,6 +17675,77 @@ async function runHookCtaChecks() {
         const valueAfter = card.querySelector('[data-testid="hook-picks-focus-value"]');
         if (!valueAfter || valueAfter.textContent.trim() !== OUTCOME) {
           throw new Error("the Focus slider does not name the picked line under its track");
+        }
+      }
+    );
+  });
+
+  await check("the Focus slider stands on four stops — the app's choice and three lines (Nov 27 2026)", async (ctx) => {
+    // Kasra's 3–4 range rule (Nov 27 2026, from his screenshot):
+    // the Focus slider stood above the range with a stop per
+    // outcome line, so its STANDING stops cap at four — the app's
+    // choice plus the first three complete lines. A chosen line
+    // outside the standing four takes the fourth seat beside the
+    // app's choice and the first two lines, so the pick always
+    // stands visible and selected. The profile still OFFERS up to
+    // six complete lines — the cap is on the slider's standing
+    // display only; the pop-up form's full list is untouched.
+    const LINES = [
+      "Naming the feeling before it grows",
+      "Saying the thought out loud once",
+      "Letting the tight chest soften",
+      "Catching the spiral early today",
+      "Keeping my own words on record",
+      "Ending the day a little clearer",
+    ];
+    const fullProfile = {
+      ...PROFILE,
+      outcome_statements: LINES.map((outcome) => ({ outcome, from_feature: "Voice entries" })),
+      desired_outcomes: [],
+    };
+    const stopsOf = () => {
+      const slider = ctx.container.querySelector('[data-testid="hook-picks-focus-slider"]');
+      if (!slider) throw new Error("the Focus slider did not render");
+      return [...slider.querySelectorAll(".pick-slider-stop")].map((b) => b.dataset.value);
+    };
+    await inHookCta(
+      ctx,
+      {
+        getAppProfiles: async () => ({ profiles: [fullProfile] }),
+        getAppProfile: async () => fullProfile,
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-1", hook_focus: LINES[5] }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const stops = stopsOf();
+        if (stops.join("|") !== ["", LINES[0], LINES[1], LINES[5]].join("|")) {
+          throw new Error(`the Focus slider stands on ${JSON.stringify(stops)} — the chosen sixth line must take the fourth seat`);
+        }
+        const knob = ctx.container.querySelector('[data-testid="hook-picks-focus-knob"]');
+        if (!knob || knob.getAttribute("aria-valuenow") !== "3") {
+          throw new Error("the Focus knob does not stand on the chosen line's fourth seat");
+        }
+      }
+    );
+    // Unmount between the two scenarios: a bare re-render of the
+    // same page component would keep the first mount's draft
+    // state (the chosen focus included) instead of loading the
+    // second scenario's project.
+    await act(async () => ctx.root.render(null));
+    await inHookCta(
+      ctx,
+      {
+        getAppProfiles: async () => ({ profiles: [fullProfile] }),
+        getAppProfile: async () => fullProfile,
+        createHookCtaProject: async () => hookRow({ id: "hook-cta-2" }),
+        getGenerations: async () => ({ generations: [] }),
+      },
+      "",
+      async () => {
+        const stops = stopsOf();
+        if (stops.join("|") !== ["", LINES[0], LINES[1], LINES[2]].join("|")) {
+          throw new Error(`the Focus slider stands on ${JSON.stringify(stops)} — the app's choice and the first three lines belong there`);
         }
       }
     );
@@ -18155,18 +18199,21 @@ async function runHookCtaChecks() {
     );
   });
 
-  await check("HookSnap's voice, place and wardrobe stand on one line, two stops until New options (ADRs 0364-0365, trio)", async (ctx) => {
+  await check("HookSnap's voice, place and wardrobe stand on one line, four stops until New options (ADR 0364, trio)", async (ctx) => {
     // ADR 0364: the card takes Create's second pair — Location and
     // Wardrobe side by side, each heading wearing the GroupLabel
     // eyebrow with its own icon; the card subtitle and the
-    // apply-together sentence are gone; the voice note rises
-    // only when the user changes Voice onto silent (Nov 27
-    // 2026); and ADR 0361 lands on this page — a
+    // apply-together sentence are gone; no voice note stands at
+    // any point (the text-to-speech handover note is removed
+    // whole, Kasra's order, later Nov 27 2026); and ADR 0361
+    // lands on this page — a
     // create-fresh silent project shows NO voice button picked
-    // until a click earns it. ADR 0365: each direction field shows
-    // TWO buttons by default; the full set stands only after New
-    // options is pressed, and a saved pick outside the visible two
-    // still stands as the pick, seated in the second seat. The
+    // until a click earns it. Four picks stand by default in each
+    // direction field (Kasra's order, later Nov 27 2026,
+    // superseding ADR 0365's two-standing rule); the full set
+    // stands only after New
+    // options is pressed, and a saved pick outside the standing
+    // four still stands as the pick, seated in the last seat. The
     // ADR 0357 collapse gate reads dirSel only, and this check
     // walks it end to end over the new pair to prove it.
     // Nov 27 2026 (Kasra's order, from his mockup): Voice joins
@@ -18233,26 +18280,26 @@ async function runHookCtaChecks() {
           throw new Error("a voice button stands picked on a fresh draft before any click (ADR 0364, landing ADR 0361 here)");
         }
         if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the voice note stands before any change — it belongs to the change, not the standing state (Nov 27 2026)");
+          throw new Error("the voice note stands before any change — it is removed whole (Nov 27 2026)");
         }
         await clickEl(ctx, talkingBtn);
         await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-silent"]'));
-        if (!ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the voice note did not rise when the user changed Voice to silent (Nov 27 2026)");
+        if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the voice note rose when the user changed Voice to silent — it is removed whole (Nov 27 2026)");
         }
         const shownValues = (group) => [...group.querySelectorAll("button[data-value]")].map((b) => b.dataset.value);
         const locGroup = ctx.container.querySelector('[data-testid="hook-cta-location-direction"]');
         const wardGroup = ctx.container.querySelector('[data-testid="hook-cta-wardrobe"]');
-        if (JSON.stringify(shownValues(locGroup)) !== JSON.stringify(LOCATIONS.slice(0, 2))) {
-          throw new Error(`Location shows ${JSON.stringify(shownValues(locGroup))} by default, not the first two (ADR 0365)`);
+        if (JSON.stringify(shownValues(locGroup)) !== JSON.stringify(LOCATIONS.slice(0, 4))) {
+          throw new Error(`Location shows ${JSON.stringify(shownValues(locGroup))} by default, not the first four (Nov 27 2026)`);
         }
-        if (JSON.stringify(shownValues(wardGroup)) !== JSON.stringify(WARDROBES.slice(0, 2))) {
-          throw new Error(`Wardrobe shows ${JSON.stringify(shownValues(wardGroup))} by default, not the first two (ADR 0365)`);
+        if (JSON.stringify(shownValues(wardGroup)) !== JSON.stringify(WARDROBES.slice(0, 4))) {
+          throw new Error(`Wardrobe shows ${JSON.stringify(shownValues(wardGroup))} by default, not the first four (Nov 27 2026)`);
         }
         await clickEl(ctx, ctx.container.querySelector('[data-testid="hook-cta-location-refresh"]'));
         await act(async () => {});
         if (JSON.stringify(shownValues(locGroup)) !== JSON.stringify(FRESH_LOCATIONS)) {
-          throw new Error(`after New options Location shows ${JSON.stringify(shownValues(locGroup))}, not the full refreshed set (ADR 0365)`);
+          throw new Error(`after New options Location shows ${JSON.stringify(shownValues(locGroup))}, not the full refreshed set (Nov 27 2026)`);
         }
         await pickPairButton(ctx, "hook-cta-location-direction", "Fresh place four");
         if (!bodyCollapsed(ctx, "hook-cta-hook-card")) {
@@ -18344,9 +18391,9 @@ async function runHookCtaChecks() {
     // speaks the line on camera — voice on, and the lips move
     // with the words." — is removed whole, on HookSnap and on
     // Create alike (the control is shared). The silent mode's
-    // note is a different line in a different role — it hands
-    // over the exact text for TikTok's text-to-speech — and it
-    // stays, standing only while silent is picked.
+    // text-to-speech handover note is removed whole too (Kasra's
+    // order, later Nov 27 2026): it duplicated what the silent
+    // pick already says.
     await inHookCta(
       ctx,
       {
@@ -18372,25 +18419,27 @@ async function runHookCtaChecks() {
         }
         await clickEl(ctx, ctx.container.querySelector('[data-testid="voice-mode-silent"]'));
         await act(async () => {});
-        if (!ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
-          throw new Error("the silent note is gone — it stays (Nov 27 2026)");
+        if (ctx.container.querySelector('[data-testid="voice-mode-silent-note"]')) {
+          throw new Error("the silent note stands while silent is picked — it is removed whole (Nov 27 2026)");
         }
       }
     );
   });
 
-await check("a saved direction pick outside the visible two takes the second seat (ADR 0365)", async (ctx) => {
-    // ADR 0365's last-seat reconciliation, on a fresh mount (its own
+await check("a saved direction pick outside the standing four takes the last seat (Nov 27 2026)", async (ctx) => {
+    // The last-seat rule at the four-standing count (Kasra's
+    // order, later Nov 27 2026, superseding ADR 0365's second
+    // seat), on a fresh mount (its own
     // ctx, so no reveal state can ride in from another check): the
-    // saved place sits fourth in its set, the pair shows two
-    // buttons, and the pick is one of them — in the second seat,
-    // lit — beside the set's first option.
-    const LOCATIONS = ["Location one", "Location two", "Location three", "Location four"];
+    // saved place sits fifth in its set, the pair shows four
+    // buttons, and the pick is one of them — in the last seat,
+    // lit — beside the set's first three options.
+    const LOCATIONS = ["Location one", "Location two", "Location three", "Location four", "Location five"];
     const WARDROBES = ["Wardrobe one", "Wardrobe two", "Wardrobe three", "Wardrobe four"];
     await inHookCta(
       ctx,
       {
-        createHookCtaProject: async () => blankRow({ id: "hook-cta-1", location: "Location four", visual_direction: "Wardrobe one" }),
+        createHookCtaProject: async () => blankRow({ id: "hook-cta-1", location: "Location five", visual_direction: "Wardrobe one" }),
         getDirectionOptions: async () => ({
           group: "default",
           location: LOCATIONS, wardrobe: WARDROBES,
@@ -18403,12 +18452,12 @@ await check("a saved direction pick outside the visible two takes the second sea
         const locGroup = ctx.container.querySelector('[data-testid="hook-cta-location-direction"]');
         if (!locGroup) throw new Error("the location pair did not render");
         const shown = [...locGroup.querySelectorAll("button[data-value]")];
-        if (shown.length !== 2) throw new Error(`a saved pick outside the two shows ${shown.length} buttons, not two (ADR 0365)`);
-        const picked = shown.find((b) => b.dataset.value === "Location four");
-        if (!picked) throw new Error("the saved place outside the visible two does not stand in the pair (ADR 0365)");
-        if (picked.getAttribute("aria-pressed") !== "true") throw new Error("the saved place does not stand picked (ADR 0365)");
-        if (shown[1] !== picked) throw new Error("the saved pick does not take the second seat (ADR 0365)");
-        if (shown[0].dataset.value !== "Location one") throw new Error("the first seat does not hold the set's first option (ADR 0365)");
+        if (shown.length !== 4) throw new Error(`a saved pick outside the four shows ${shown.length} buttons, not four (Nov 27 2026)`);
+        const picked = shown.find((b) => b.dataset.value === "Location five");
+        if (!picked) throw new Error("the saved place outside the standing four does not stand in the pair (Nov 27 2026)");
+        if (picked.getAttribute("aria-pressed") !== "true") throw new Error("the saved place does not stand picked (Nov 27 2026)");
+        if (shown[3] !== picked) throw new Error("the saved pick does not take the last seat (Nov 27 2026)");
+        if (shown[0].dataset.value !== "Location one") throw new Error("the first seat does not hold the set's first option (Nov 27 2026)");
       }
     );
   });
@@ -28581,12 +28630,13 @@ await check(
     }
   });
 
-  // The status slider's explainers (Nov 27 2026): a changed stop
-  // shows its brief note under the pick's name — except All
-  // statuses, whose explainer Kasra ordered removed. Landing on
-  // All statuses after a change shows no note at all, and the
-  // removed sentence stands nowhere on the page.
-  await check("the status slider explains a changed stop, and All statuses carries no explainer", async (ctx) => {
+  // The status slider carries NO explainer (Nov 27 2026): Kasra
+  // ordered every toggle's explainer line removed whole later
+  // that night, the status filter's included — this check's old
+  // form (a changed stop shows its note, All statuses none) is
+  // subsumed: no stop shows a note, standing or after a change,
+  // and the removed sentences stand nowhere on the page.
+  await check("the status slider carries no explainer on any stop (Nov 27 2026)", async (ctx) => {
     const GenerationHistory = load("pages/GenerationHistory.jsx").default;
     const previousParams = global.__SMOKE_PARAMS;
     const previousNavigations = global.__SMOKE_NAVIGATIONS;
@@ -28594,8 +28644,7 @@ await check(
     global.__SMOKE_NAVIGATIONS = [];
     // The slider walk needs the route change applied, the way the
     // stale-filter check installs it: a stop only fires for a value
-    // the page does not already stand on, and the note belongs to
-    // the stop the change landed on.
+    // the page does not already stand on.
     global.__SMOKE_ROUTE_CHANGE = (to) => { global.__SMOKE_PARAMS = to.search; ctx.root.render(React.createElement(GenerationHistory)); };
     try {
       await withApi({
@@ -28607,16 +28656,18 @@ await check(
         const slider = () => ctx.container.querySelector('#history-status-filter');
         if (!slider()) throw new Error("History lost the status filter");
         if (slider().querySelector('[data-testid="history-status-filter-explain"]')) {
-          throw new Error("a status explainer stands before any change — notes belong to the change, not the standing state");
+          throw new Error("a status explainer stands before any change — every toggle's explainer is removed whole");
         }
         await clickEl(ctx, slider().querySelector('[data-value="completed"]'), "no completed stop on the status slider");
-        const note = slider().querySelector('[data-testid="history-status-filter-explain"]');
-        if (!note || !note.textContent.includes("Shows only renders that finished and stand ready to use.")) {
-          throw new Error("the completed stop shows no explainer after the change");
+        if (slider().querySelector('[data-testid="history-status-filter-explain"]')) {
+          throw new Error("the completed stop shows an explainer after the change — removed whole (Nov 27 2026)");
+        }
+        if (ctx.container.textContent.includes("Shows only renders that finished")) {
+          throw new Error("the removed status explainer sentence still stands on the page");
         }
         await clickEl(ctx, slider().querySelector('[data-value=""]'), "no All statuses stop on the status slider");
         if (slider().querySelector('[data-testid="history-status-filter-explain"]')) {
-          throw new Error("the All statuses stop shows an explainer — its line was ordered removed");
+          throw new Error("the All statuses stop shows an explainer — removed whole with all the others");
         }
         if (ctx.container.textContent.includes("Shows renders in every state")) {
           throw new Error("the removed All statuses sentence still stands on the page");

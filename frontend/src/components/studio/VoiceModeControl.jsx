@@ -1,56 +1,48 @@
-import { useState } from "react";
 import { Mic } from "lucide-react";
 import { Button } from "../ui/button";
 import { GroupLabel } from "../SectionCard";
 import { PickSlider } from "./HookPicksControl";
-import { VOICE_EXPLAINERS } from "../../lib/pickExplainers";
 
 /**
  * The presenter voice pick (ADR 0246), shared by the Hook + CTA
  * direction card and Create Video's direction section — the two
  * places movement and direction are set.
  *
- * Four choices (Nov 27 2026, the four-stop rule): the app's
- * choice (resolves at generation — talking unless the angle or
- * profile carries a silent direction), the character talks (voice,
- * lips moving with the words), voiceover (the character stays
- * silent-lipped on camera while the model's own narration carries
- * the line over the segment), or the character stays silent (no
- * voice, and NO lip movement at all: the mouth stays closed and
- * still for the whole clip, while the opening and closing actions
- * still happen).
+ * Three choices (Nov 27 2026): the app's choice (resolves at
+ * generation — talking unless the angle or profile carries a
+ * silent direction), the character talks (voice, lips moving
+ * with the words), or the character stays silent (no voice, and
+ * NO lip movement at all: the mouth stays closed and still for
+ * the whole clip, while the opening and closing actions still
+ * happen). A fourth stop, Voiceover, stood here for a few hours
+ * the same day and Kasra ordered it removed — TikTok itself
+ * offers a voiceover, so the pick duplicated the platform; a
+ * project still stored as "voiceover" heals to talking on read
+ * and at generation. Three stops sit inside Kasra's 3–4 range
+ * for every toggle, so no replacement stop stands.
  *
- * The words are gender-neutral (ADR 0248): the founder uploads the
- * face, and the app does not know — or presume — whose it is, so
- * the pick says "character", never a pronoun. The same neutrality
- * ADR 0089 already required of the render directions.
+ * The words are gender-neutral (ADR 0248): the founder uploads
+ * the face, and the app does not know — or presume — whose it
+ * is, so the pick says "character", never a pronoun. The same
+ * neutrality ADR 0089 already required of the render directions.
  *
- * The pick is the project's, saved through the same draft PATCH as
- * every other direction pick; this control only reports the choice.
- * A caller may pass `pickedValue` to say which choice the buttons
- * show as picked, separately from the mode `value` the note names
+ * The pick is the project's, saved through the same draft PATCH
+ * as every other direction pick; this control only reports the
+ * choice. A caller may pass `pickedValue` to say which choice
+ * the buttons show as picked, separately from the mode `value`
  * (ADR 0361: Create passes "" while a project stands on its
  * defaults, so no button reads as chosen before a click).
- * When the user changes the pick onto silence the note below is
- * part of the feature, not decoration: it names the exact text to
- * paste into TikTok's text-to-speech so TikTok voices the post —
- * the line itself, shown verbatim once it exists. The note belongs
- * to the change, never to a standing saved pick (Kasra's order,
- * Nov 27 2026). What silence MEANS is the slider's own brief
- * explainer now (lib/pickExplainers, the shared band) — the long
- * sentence that used to open this note is replaced by it, and
- * only the text-to-speech handover stands here. Talking mode
- * carries no line of its own (Nov 27 2026: the descriptive
- * sentence that stood under the pills in talking mode is removed
- * whole). A caller may pass `hideNote` to stand the pills without
- * the silent note (ADR 0362: Create's direction section carries
- * no descriptive lines at all, so it opts out; HookSnap passes
- * nothing and keeps the note).
+ *
+ * No line stands under this pick (Kasra's orders, Nov 27 2026):
+ * the text-to-speech handover note that rose on changing onto
+ * silent is removed whole — it duplicated what the silent pick
+ * already says — and the brief explainer line every toggle
+ * carried the same day is removed with all the others: the
+ * pick's name is the whole information.
  */
 const OPTIONS = [
   { value: "auto", label: "App's choice" },
   { value: "talking", label: "Character talks" },
-  { value: "voiceover", label: "Voiceover" },
   { value: "silent", label: "Character stays silent" },
 ];
 
@@ -58,44 +50,27 @@ export default function VoiceModeControl({
   value = "talking",
   pickedValue,
   onChange,
-  silentText = "",
-  silentTextName = "the line",
-  hideNote = false,
   disabled = false,
   testId = "voice-mode",
   asSlider = false,
 }) {
-  // The silent note belongs to the change, not to the standing
-  // state (Kasra's order, Nov 27 2026): it renders only after the
-  // user changes this control during this page session and lands
-  // on silent. A saved silent pick standing on the page shows no
-  // note on its own; sliding to silent brings the note up, and
-  // sliding back to talking takes it away. The record of the
-  // change is local interaction state, never derived from the
-  // saved value alone.
-  const [changedTo, setChangedTo] = useState(null);
-  const reportChange = (next) => {
-    setChangedTo(next);
-    onChange?.(next);
-  };
   // The current mode the slider names and rests on: the stored
-  // pick itself when it is one of the four stops — an "auto" pick
-  // stands as the app's choice, its resolution happening at
+  // pick itself when it is one of the three stops — an "auto"
+  // pick stands as the app's choice, its resolution happening at
   // generation — and the talking default for an unset or
-  // unrecognized value, never silence.
+  // unrecognized value (a legacy "voiceover" included), never
+  // silence.
   const current = OPTIONS.some((option) => option.value === value) ? value : "talking";
   // Which choice the buttons may show as picked (ADR 0361): a
   // caller that tracks picks separately from the effective mode
   // passes pickedValue — "" stands for no pick made, so neither
-  // button wears the picked face while the note below still names
-  // the mode that will render. A caller that passes nothing keeps
-  // the original face: the buttons follow the value itself.
+  // button wears the picked face. A caller that passes nothing
+  // keeps the original face: the buttons follow the value itself.
   const pickedCurrent = pickedValue === undefined ? current : pickedValue;
-  const text = String(silentText || "").trim();
   return (
     // Layout reset: the group starts at its area's inset like
-    // everything else in the app — label, pick row and note on
-    // the container's one line, nothing centered.
+    // everything else in the app — label and pick row on the
+    // container's one line, nothing centered.
     <div className="space-y-2">
       <GroupLabel icon={Mic}>Voice</GroupLabel>
       {/* The pick wears the resolution treatment (ADR 0331) in its
@@ -103,7 +78,7 @@ export default function VoiceModeControl({
           and thumb-selected on the pick. The slider form (Kasra's
           order, Nov 27 2026) supersedes the row wherever a host
           passes asSlider — HookSnap first, then Create too, when
-          the unified toggle spread app-wide: the same four choices
+          the unified toggle spread app-wide: the same three choices
           as the one groove slider, the knob resting on the mode
           that will render while no pick stands (ADR 0361's
           unpicked state, restValue), a click or drag earning the
@@ -114,11 +89,10 @@ export default function VoiceModeControl({
           options={OPTIONS}
           current={pickedCurrent}
           restValue={current}
-          onChange={reportChange}
+          onChange={onChange}
           disabled={disabled}
           testId={testId}
           ariaLabel="Presenter voice"
-          explainers={VOICE_EXPLAINERS}
         />
       ) : (
         <div className="thumb-pair flex flex-wrap gap-2" role="group" aria-label="Presenter voice">
@@ -132,7 +106,7 @@ export default function VoiceModeControl({
                 variant={picked ? "brand" : "secondary"}
                 aria-pressed={picked}
                 disabled={disabled}
-                onClick={() => reportChange(option.value)}
+                onClick={() => onChange?.(option.value)}
                 data-testid={`${testId}-${option.value}`}
                 className={`tap-chip option-btn ${picked ? "thumb-selected" : ""}`}
               >
@@ -141,28 +115,6 @@ export default function VoiceModeControl({
             );
           })}
         </div>
-      )}
-      {/* Nov 27 2026 (Kasra's order): talking mode stands with no
-          line under the pills — the long descriptive sentence that
-          stood there is removed whole, on every caller. The silent
-          note below is a different line in a different role (it
-          hands over the exact text for TikTok's text-to-speech)
-          and stays — but only once the user changes this control
-          onto silent in this session: a standing saved pick shows
-          no note on load, sliding to silent brings it up, and
-          sliding back takes it away. */}
-      {!hideNote && current === "silent" && changedTo === "silent" && (
-        <p role="status" className="text-sm text-muted-foreground" data-testid={`${testId}-silent-note`}>
-          For a voice on TikTok, paste this line into TikTok&rsquo;s text-to-speech:{" "}
-          {text ? (
-            <span className="font-semibold text-foreground">&ldquo;{text}&rdquo;</span>
-          ) : (
-            <span>
-              {silentTextName.charAt(0).toUpperCase() + silentTextName.slice(1)} will
-              appear here once it is written.
-            </span>
-          )}
-        </p>
       )}
     </div>
   );

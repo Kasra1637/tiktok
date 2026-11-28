@@ -12,9 +12,11 @@ choices. The new stops under test:
     walks), wired through the plan/strategy/prompt chain. Fixed
     stays indoor-only exactly as before.
   * Voice gains "auto" (talking unless the angle/profile carries a
-    silent direction) and "voiceover" (silent-lipped presenter, the
-    spoken line delivered as the video model's own narration audio
-    over the segment — the only audio path the app has).
+    silent direction). A further stop, "voiceover", was added the
+    same day and removed again hours later at Kasra's order
+    (TikTok itself offers a voiceover) — Voice stands on three
+    stops, and the legacy heal for projects still stored with the
+    dead value is pinned at the bottom of this file.
 """
 import asyncio
 import importlib
@@ -182,7 +184,9 @@ class TestTheSetsCarryFourStops:
         assert ai_service.HOOK_SHAPE_PICKS == ("auto", "question", "statement", "command")
         assert ai_service.HOOK_OPENING_PICKS == ("auto", "action", "feeling", "reaction")
         assert generation_planning.CAMERA_SETUPS == ("auto", "handheld", "walking", "fixed")
-        assert server.VOICE_MODES == ("auto", "talking", "voiceover", "silent")
+        # Voice stands on three stops since the Voiceover removal
+        # (Nov 27 2026) — the other three sets carry four.
+        assert server.VOICE_MODES == ("auto", "talking", "silent")
 
 
 # ------------------------------------------------------- shape: command
@@ -339,10 +343,19 @@ class TestVoiceResolution:
             "auto", profile={"voice_mode": "silent"}) == "silent"
 
     def test_explicit_picks_resolve_to_themselves(self, api):
-        for pick in ("talking", "voiceover", "silent"):
+        for pick in ("talking", "silent"):
             assert api.resolve_voice_mode(pick) == pick
             assert api.resolve_voice_mode(
                 pick, angle={"voice_delivery": "silent"}) == pick
+
+    def test_the_removed_voiceover_pick_heals_to_talking(self, api):
+        # The legacy heal (Nov 27 2026): a stored "voiceover" from
+        # the hours the stop stood resolves to talking — voice on
+        # is the closest standing behavior — even over a silent
+        # direction, and never to the dead value itself.
+        assert api.resolve_voice_mode("voiceover") == "talking"
+        assert api.resolve_voice_mode(
+            "voiceover", angle={"voice_delivery": "silent"}) == "talking"
 
 
 # ------------------------------------------------------ API validation
@@ -351,10 +364,21 @@ class TestPickValidation:
     def test_the_new_voice_stops_save(self, api):
         from models import UpdateStudioProjectRequest
         project, _ = _hook_cta(api, "Four Stop Voice Saves")
-        for value in ("auto", "voiceover", "talking"):
+        for value in ("auto", "talking", "silent"):
             out = _run(api.update_studio_project(
                 project["id"], UpdateStudioProjectRequest(voice_mode=value), ANON))
             assert out["voice_mode"] == value
+
+    def test_the_removed_voiceover_stop_no_longer_saves(self, api):
+        # The Voiceover removal (Nov 27 2026): the dead value is
+        # refused at the API like any unknown pick — only a row
+        # already stored with it heals (pinned at submit below).
+        from models import UpdateStudioProjectRequest
+        project, _ = _hook_cta(api, "Voiceover No Longer Saves")
+        with pytest.raises(HTTPException) as exc:
+            _run(api.update_studio_project(
+                project["id"], UpdateStudioProjectRequest(voice_mode="voiceover"), ANON))
+        assert exc.value.status_code == 400
 
     def test_an_unknown_voice_value_is_still_refused(self, api):
         from models import UpdateStudioProjectRequest
@@ -363,7 +387,10 @@ class TestPickValidation:
             _run(api.update_studio_project(
                 project["id"], UpdateStudioProjectRequest(voice_mode="loud"), ANON))
         assert exc.value.status_code == 400
-        assert "voiceover" in exc.value.detail
+        # The refusal names the three standing stops (Nov 27 2026)
+        # — the removed voiceover stop is not among them.
+        assert "voiceover" not in exc.value.detail
+        assert "talking" in exc.value.detail
 
     def test_the_new_shape_and_opening_stops_save(self, api):
         from models import UpdateStudioProjectRequest
@@ -395,7 +422,7 @@ class TestPickValidation:
             UpdateStudioProjectRequest(camera_setup="orbit")
 
 
-# ------------------------------------------------- submit: the voiceover
+# --------------------------------------- submit: the legacy heal
 
 def _attach_face(api, project):
     from models import now_iso
@@ -452,29 +479,33 @@ def _ready_hook(api, monkeypatch, name):
 
 
 class TestVoiceSubmit:
-    def test_a_voiceover_hook_submits_audio_on_with_the_voiceover_direction(
+    def test_a_stored_voiceover_hook_heals_to_talking_at_submit(
             self, api, monkeypatch):
-        from models import GenerateHookRequest, UpdateStudioProjectRequest
-        project = _ready_hook(api, monkeypatch, "Four Stop Voiceover Submit")
-        _run(api.update_studio_project(
-            project["id"], UpdateStudioProjectRequest(voice_mode="voiceover"), ANON))
+        # The legacy heal end to end (Nov 27 2026): a project row
+        # still stored with the removed "voiceover" stop — written
+        # directly here, since the API refuses the value now —
+        # reads back as talking, submits with audio on and no
+        # voiceover direction in the prompt, and its generations
+        # row records the RESOLVED mode, never the dead value.
+        from models import GenerateHookRequest
+        project = _ready_hook(api, monkeypatch, "Legacy Voiceover Heal")
+        _run(api._execute(
+            "UPDATE studio_projects SET voice_mode = 'voiceover' WHERE id = ?",
+            (project["id"],)))
+        read = _run(api.get_studio_project(project["id"], ANON))
+        assert read["voice_mode"] == "talking"
         calls = _mock_submit(api, monkeypatch)
         _silence_poster(api, monkeypatch)
         generation = _run(api.generate_hook_cta(
             project["id"], GenerateHookRequest(), ANON))
-        # Audio is billed and requested — the model's own narration is
-        # the voiceover — and the prompt separates it from silence:
-        # silent-lipped presenter, off-camera narrator voice.
-        assert calls[0]["generate_audio"] is True
+        assert calls[0]["generate_audio"] is not False
         prompt = calls[0]["prompt"]
-        assert "VOICEOVER PERFORMANCE" in prompt
-        assert "mouth stays closed and still" in prompt
-        assert "off-camera narrator" in prompt
+        assert "VOICEOVER PERFORMANCE" not in prompt
         assert "SILENT PERFORMANCE" not in prompt
         row = _run(api._fetch_one(
             "SELECT voice_mode FROM generations WHERE id = ?",
             (generation["id"],)))
-        assert row["voice_mode"] == "voiceover"
+        assert row["voice_mode"] == "talking"
 
     def test_an_auto_hook_resolves_to_talking_at_submit(self, api, monkeypatch):
         from models import GenerateHookRequest, UpdateStudioProjectRequest

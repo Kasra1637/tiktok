@@ -367,6 +367,31 @@ One render path, single-pass video generation via OpenRouter.
   longer flips it into the indigo selected treatment. It keeps the
   one plain toggle face before, during and after any pick; the
   sort's options and behavior are unchanged.
+- Voice handover note removed (Nov 27 2026, Kasra's order): the
+  TikTok text-to-speech handover line under Voice is gone whole —
+  it duplicated what the silent pick already says.
+- Location and Wardrobe stand on four (Nov 27 2026, Kasra's
+  order): four standing picks by default, superseding ADR 0365's
+  two; a saved pick outside the four takes the fourth seat, and
+  New options beside each label is unchanged.
+- The 3–4 range + Focus in the row (Nov 27 2026, Kasra's order):
+  every toggle in the pick area carries three to four selections.
+  The Focus slider's standing stops cap at four (App's choice +
+  three complete lines; a chosen line takes the fourth seat; the
+  pop-up menu keeps the full list), and Focus stands in The
+  Hook's pick row as its first group — Focus, Tone, Shape,
+  Opening on one line (`.section-trio.section-quad`).
+- Voiceover removed (Nov 27 2026, Kasra's order): Voice stands on
+  three stops — App's choice / Character talks / Character stays
+  silent — superseding the Voiceover stop in the four-stop entry
+  above (TikTok itself offers a voiceover). A project stored as
+  "voiceover" heals to talking on read and at generation; the
+  generations row records the resolved mode.
+- Explainer lines removed (Nov 27 2026, Kasra's order): no
+  explainer sentence stands under any toggle — the pick's name
+  is the whole information. `lib/pickExplainers.js` is deleted
+  and the PickSlider renders no explainer; this supersedes the
+  explainer lines in the rounds above.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no

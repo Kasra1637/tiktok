@@ -794,9 +794,10 @@ export default function HookCta() {
                     lit before a click; the silent note stays,
                     inside the Voice area. Each DirectionSelect
                     heading wears the one GroupLabel eyebrow face
-                    with its own icon (ADR 0364), the two standing
+                    with its own icon (ADR 0364), the four standing
                     picks stand as slider stops until New options
-                    (ADR 0365; the slider form, Nov 27 2026), and the
+                    (Nov 27 2026, superseding ADR 0365's two; the
+                    slider form, Nov 27 2026), and the
                     plan-default line stands under the row. Below
                     1024px the trio stacks and the stylesheet's
                     rhythm puts a hairline between each two groups. */}
@@ -806,8 +807,6 @@ export default function HookCta() {
                       value={editValue("voice_mode", "talking")}
                       pickedValue={editPick("voice_mode", "talking")}
                       onChange={(value) => editField("voice_mode", value, { omitDefault: true, fallback: "talking" })}
-                      silentText={String(editValue("hook_line", "") || "").trim()}
-                      silentTextName="the hook line"
                       asSlider
                     />
                   </div>

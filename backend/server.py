@@ -1416,32 +1416,13 @@ SILENT_PERFORMANCE_DIRECTION = (
 )
 
 
-# The voiceover performance (Nov 27 2026, the voice pick's third
-# stop): the presenter stays silent-lipped exactly as in the silent
-# performance, and the model's own native audio carries the words as
-# narration over the picture instead of the presenter speaking them.
-# It rides the same generate_audio path as a talking render — the
-# only audio the app has ever had is the video model's own — so the
-# direction below is what separates a voiceover from a silent clip:
-# audio is billed and requested, and the prompt tells the model the
-# voice is a narrator's, never the presenter's.
-VOICEOVER_PERFORMANCE_DIRECTION = (
-    "\n\nVOICEOVER PERFORMANCE — NARRATED, NOT SPOKEN ON CAMERA: the "
-    "presenter does not speak the words above aloud and does not "
-    "mouth them — the mouth stays closed and still for the whole "
-    "clip, with no lip movement at all, while the presenter still "
-    "performs the opening and closing actions exactly as directed: "
-    "the beats, gestures, gaze and posture all happen. The words "
-    "above are delivered as a clear voiceover narration laid over "
-    "the picture by an off-camera narrator voice — the presenter is "
-    "never the one speaking, and no other sound replaces the "
-    "narration."
-)
-
-
-# The voice pick's four stops (Nov 27 2026). "auto" is the pick as
-# stored; it resolves at generation to a concrete mode, below.
-VOICE_MODES = ("auto", "talking", "voiceover", "silent")
+# The voice pick's three stops (Nov 27 2026). "auto" is the pick
+# as stored; it resolves at generation to a concrete mode, below.
+# A fourth stop, "voiceover", stood here for a few hours the same
+# day and Kasra ordered it removed (TikTok itself offers a
+# voiceover); a project still stored with it heals to talking —
+# see resolve_voice_mode and the read path in routers/studio.py.
+VOICE_MODES = ("auto", "talking", "silent")
 
 
 def resolve_voice_mode(pick, angle=None, profile=None) -> str:
@@ -1454,7 +1435,12 @@ def resolve_voice_mode(pick, angle=None, profile=None) -> str:
     itself.
     """
     value = str(pick or "").strip().lower()
-    if value in ("talking", "voiceover", "silent"):
+    if value == "voiceover":
+        # The legacy heal: the removed stop (Nov 27 2026) resolves
+        # to talking — voice on is the closest standing behavior
+        # to what it delivered — never to a dead mode or silence.
+        return "talking"
+    if value in ("talking", "silent"):
         return value
     for source in (angle, profile):
         if not isinstance(source, dict):
@@ -1548,20 +1534,21 @@ async def _submit_generation(
     # the pick (Nov 27 2026): resolve the pick now — the same
     # resolution the prompt chain restamps from the strategy below.
     camera_setup = generation_planning.resolve_camera_setup(camera_setup)
-    # The presenter voice pick (ADR 0246, widened Nov 27 2026 to the
-    # pick's four stops): the pick resolves to the mode this render
-    # actually uses before anything bills audio — "auto" talks unless
-    # the angle or profile carries a silent direction. A silent render
-    # never bills audio, whatever the caller passed: the pick is the
-    # founder's standing choice for this project, and a caller that
-    # forgot it (a retry, an older client) must not resurrect a voice
-    # the founder turned off. A voiceover render always bills audio —
-    # the model's own narration IS the voiceover — and refuses up
-    # front, before any spend, on a model that carries no audio of
-    # its own rather than silently shipping a mute clip. The prompt
+    # The presenter voice pick (ADR 0246; three stops since the
+    # Voiceover removal, Nov 27 2026): the pick resolves to the mode
+    # this render actually uses before anything bills audio — "auto"
+    # talks unless the angle or profile carries a silent direction.
+    # A silent render never bills audio, whatever the caller passed:
+    # the pick is the founder's standing choice for this project, and
+    # a caller that forgot it (a retry, an older client) must not
+    # resurrect a voice the founder turned off. A project still
+    # stored with the removed "voiceover" stop heals to talking
+    # here, so it can neither 400 nor render mute. The prompt
     # carries the matching direction further down, where the prompt
     # is finished, and the generations row records the resolved mode.
     voice_pick = str(project.get("voice_mode") or "auto").strip().lower()
+    if voice_pick == "voiceover":
+        voice_pick = "talking"
     if voice_pick not in VOICE_MODES:
         voice_pick = "auto"
     voice_angle = None
@@ -1573,20 +1560,8 @@ async def _submit_generation(
     resolved_voice_mode = resolve_voice_mode(
         voice_pick, angle=voice_angle, profile=profile)
     silent = resolved_voice_mode == "silent"
-    voiceover = resolved_voice_mode == "voiceover"
     if silent:
         generate_audio = False
-    if voiceover:
-        if not cap.get("supports_native_audio"):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Voiceover needs the model's own audio, and the picked "
-                    "model carries none. Pick Character talks or Character "
-                    "stays silent for this render."
-                ),
-            )
-        generate_audio = True
     # No model guard stands here (ADR 0225): every model left on the list
     # pins the photo as its first frame, and a fixed submit renders on
     # them — the fixed prompt opens on the presenter already framed by a
@@ -1752,13 +1727,9 @@ async def _submit_generation(
     prompt_ceiling = video_providers.capability(model_key).get("prompt_char_limit")
     prompt_budget = prompt_ceiling
     # The performance direction this render carries at the prompt's
-    # tail: the silence direction for a silent render (ADR 0246), the
-    # voiceover direction for a voiceover render (Nov 27 2026), and
-    # nothing for a talking one.
-    performance_direction = (
-        SILENT_PERFORMANCE_DIRECTION if silent
-        else VOICEOVER_PERFORMANCE_DIRECTION if voiceover else ""
-    )
+    # tail: the silence direction for a silent render (ADR 0246),
+    # and nothing for a talking one.
+    performance_direction = SILENT_PERFORMANCE_DIRECTION if silent else ""
     if performance_direction and prompt_budget:
         # The direction appended below is a fixed instruction: reserve
         # its characters from the BUILDER's budget so the assembled
@@ -1802,8 +1773,7 @@ async def _submit_generation(
         # The performance direction rides at the prompt's tail, after
         # every speaking instruction it overrides: the presenter
         # performs the beats but does not deliver the words — silently
-        # (ADR 0246), or under a narration the model lays over the
-        # picture (voiceover, Nov 27 2026). Appended before the ceiling
+        # (ADR 0246). Appended before the ceiling
         # check below so the check prices it like any other fixed
         # instruction.
         prompt = prompt + performance_direction

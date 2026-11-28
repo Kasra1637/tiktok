@@ -56,13 +56,6 @@ import { PickSlider } from "../components/studio/HookPicksControl";
 import { Disclosure } from "../components/Disclosure";
 import { recordSignal } from "../lib/feedback";
 import {
-  CLIP_STYLE_EXPLAINERS,
-  TRANSITION_EXPLAINERS,
-  animationExplainer,
-  backdropExplainer,
-  environmentExplainer,
-} from "../lib/pickExplainers";
-import {
   ANIMATIONS,
   BACKGROUNDS,
   BASE_PHONE_H,
@@ -266,7 +259,6 @@ function StylePicker({ label, hint, value, onChange, prefix }) {
           { value: "realistic", label: "Real Video" },
           { value: "propped", label: "Propped" },
         ]}
-        explainers={CLIP_STYLE_EXPLAINERS}
         current={value}
         onChange={onChange}
         testId={prefix.replace(/-$/, "")}
@@ -289,7 +281,6 @@ function TransitionPicker({ value, onChange }) {
       <SubLabel icon={Repeat}>Transition between clips</SubLabel>
       <PickSlider
         options={TRANSITIONS.map((t) => ({ value: t.id, label: t.label }))}
-        explainers={TRANSITION_EXPLAINERS}
         current={value}
         onChange={onChange}
         testId="transition"
@@ -307,7 +298,6 @@ function EnvGrid({ value, onChange, prefix }) {
   return (
     <PickSlider
       options={ENVIRONMENTS.map((env) => ({ value: env.id, label: env.label }))}
-      explainers={(option) => environmentExplainer(option.label)}
       current={value}
       onChange={onChange}
       testId={`${prefix}env`}
@@ -324,7 +314,6 @@ function BackgroundPicker({ value, onChange, prefix }) {
       <SubLabel icon={ImageIcon}>Background</SubLabel>
       <PickSlider
         options={BACKGROUNDS.map((b) => ({ value: b.id, label: b.label }))}
-        explainers={(option) => backdropExplainer(option.label)}
         current={value}
         onChange={onChange}
         testId={`${prefix}background`}
@@ -344,7 +333,6 @@ function AnimationPicker({ value, onChange, prefix }) {
       <div data-testid={`${prefix}animation-group`}>
         <PickSlider
           options={ANIMATIONS.map((a) => ({ value: a.id, label: a.label }))}
-          explainers={(option) => animationExplainer(option.label)}
           current={value}
           onChange={onChange}
           testId={`${prefix}animation`}

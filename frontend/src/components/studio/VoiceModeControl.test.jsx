@@ -20,8 +20,12 @@ async function mount(props = {}) {
 }
 
 describe("VoiceModeControl", () => {
-  test("offers exactly the two choices, in gender-neutral words", async () => {
+  test("offers exactly the three choices, in gender-neutral words", async () => {
+    // Three stops since the Voiceover removal (Nov 27 2026):
+    // App's choice / Character talks / Character stays silent.
     const view = await mount();
+    expect(view.q("voice-mode-auto").textContent).toBe("App's choice");
+    expect(view.q("voice-mode-voiceover")).toBeNull();
     expect(view.q("voice-mode-talking").textContent).toBe("Character talks");
     expect(view.q("voice-mode-silent").textContent).toBe("Character stays silent");
     expect(view.q("voice-mode-talking").getAttribute("aria-pressed")).toBe("true");
@@ -34,35 +38,35 @@ describe("VoiceModeControl", () => {
     await view.unmount();
   });
 
-  test("an explicitly unpicked face marks no choice and the note waits for a change", async () => {
+  test("an explicitly unpicked face marks no choice and no note rises on the change onto silent", async () => {
     // ADR 0361: Create passes pickedValue="" for a project standing
-    // on its defaults — no button is pressed. The note belongs to
-    // the change, not the standing state (Kasra's order, Nov 27
-    // 2026): a saved silent mode standing untouched shows no note;
-    // the note rises when the user changes onto silent.
+    // on its defaults — no button is pressed. The text-to-speech
+    // handover note is removed whole (Kasra's order, later Nov 27
+    // 2026 — it duplicated what the silent pick already says), so no
+    // note stands for the standing state and none rises on the
+    // change onto silent either.
     const view = await mount({ value: "silent", pickedValue: "" });
     expect(view.q("voice-mode-talking").getAttribute("aria-pressed")).toBe("false");
     expect(view.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("false");
     expect(view.q("voice-mode-silent-note")).toBeNull();
     await act(async () => { view.q("voice-mode-silent").click(); });
-    expect(view.q("voice-mode-silent-note")).not.toBeNull();
+    expect(view.q("voice-mode-silent-note")).toBeNull();
     await view.unmount();
   });
 
-  test("hideNote stands the pills without the note in either mode", async () => {
-    // ADR 0362: Create's direction section carries no descriptive
-    // lines, so it passes hideNote — the buttons and their picked
-    // faces are untouched, and the silent note does not render.
-    // Talking mode carries no line of its own at all (Nov 27
-    // 2026). A caller that passes nothing (HookSnap) keeps the
-    // silent note for the change onto silent, as the cases above
-    // and below pin.
-    const silent = await mount({ value: "silent", hideNote: true, silentText: "A line." });
+  test("no note stands in either mode — the handover note is removed whole", async () => {
+    // The silent note is gone on every caller (Kasra's order,
+    // later Nov 27 2026): it duplicated what the silent pick
+    // already says, and no explainer line stands either. The buttons and
+    // their picked faces are untouched, and talking mode carries
+    // no line of its own at all (Nov 27 2026).
+    const silent = await mount({ value: "silent" });
     expect(silent.q("voice-mode-silent-note")).toBeNull();
     expect(silent.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("true");
     expect(silent.container.textContent).not.toContain("The character stays silent in this video");
+    expect(silent.container.textContent).not.toContain("paste this line");
     await silent.unmount();
-    const talking = await mount({ value: "talking", hideNote: true });
+    const talking = await mount({ value: "talking" });
     expect(talking.container.textContent).not.toContain("The character speaks the line on camera");
     expect(talking.q("voice-mode-talking").getAttribute("aria-pressed")).toBe("true");
     await talking.unmount();
@@ -83,50 +87,37 @@ describe("VoiceModeControl", () => {
     await view.unmount();
   });
 
-  test("the silent note names the exact text for TikTok's text-to-speech", async () => {
-    const view = await mount({
-      value: "silent",
-      silentText: "I'm trying to clear my head before bed but my thoughts race.",
-      silentTextName: "the hook line",
-    });
-    // The standing silent pick shows no note; changing onto
-    // silent raises it.
+  test("changing onto silent raises no handover note and shows no line for pasting", async () => {
+    // Kasra's order (later Nov 27 2026): the "For a voice on
+    // TikTok, paste this line into TikTok's text-to-speech" note
+    // is removed whole — it duplicated what the silent pick
+    // already says. No explainer line stands under the pick
+    // either (pinned in the slider case below).
+    const view = await mount({ value: "silent" });
     expect(view.q("voice-mode-silent-note")).toBeNull();
     await act(async () => { view.q("voice-mode-silent").click(); });
-    const note = view.q("voice-mode-silent-note");
-    expect(note).not.toBeNull();
-    // The long sentence that used to open the note is gone (Nov 27
-    // 2026): the slider's brief explainer carries the meaning now
-    // (pinned in the slider case below), and the note itself is
-    // the text-to-speech handover alone.
-    expect(note.textContent).not.toContain("The character stays silent in this video");
-    expect(note.textContent).toContain("text-to-speech");
-    expect(note.textContent).toContain("I'm trying to clear my head before bed but my thoughts race.");
-    await view.unmount();
-  });
-
-  test("the silent note before any line exists names what will show", async () => {
-    const view = await mount({ value: "silent", silentText: "", silentTextName: "the hook line" });
-    await act(async () => { view.q("voice-mode-silent").click(); });
-    const note = view.q("voice-mode-silent-note");
-    expect(note).not.toBeNull();
-    expect(note.textContent).toContain("The hook line will appear here once it is written.");
+    expect(view.q("voice-mode-silent-note")).toBeNull();
+    expect(view.container.textContent).not.toContain("paste this line");
+    expect(view.container.textContent).not.toContain("will appear here once it is written");
     await view.unmount();
   });
 
   test("the slider form rests the knob on the standing mode with no pick lit", async () => {
     // Nov 27 2026 (Kasra's order): HookSnap passes asSlider — the
-    // two choices stand as slider stops. Unpicked (ADR 0361), no
+    // choices stand as slider stops. Unpicked (ADR 0361), no
     // stop is pressed, the knob rests on the mode that will
-    // render, and its name stands under the track. The note does
-    // not stand for the standing pick — it rises only when the
-    // user changes onto silent (later Nov 27 2026).
+    // render, and its name stands under the track. No note ever
+    // stands: the text-to-speech handover note is removed whole
+    // (Kasra's order, later Nov 27 2026), for the standing pick
+    // and for the change onto silent alike.
     const view = await mount({ value: "silent", pickedValue: "", asSlider: true });
     expect(view.q("voice-mode-slider")).not.toBeNull();
     const knob = view.q("voice-mode-knob");
     expect(knob).not.toBeNull();
     expect(knob.getAttribute("role")).toBe("slider");
-    expect(knob.getAttribute("aria-valuenow")).toBe("1");
+    // Silent is the third stop since the Voiceover removal
+    // (Nov 27 2026), so the resting knob reads 2.
+    expect(knob.getAttribute("aria-valuenow")).toBe("2");
     expect(view.q("voice-mode-talking").getAttribute("aria-pressed")).toBe("false");
     expect(view.q("voice-mode-silent").getAttribute("aria-pressed")).toBe("false");
     expect(view.q("voice-mode-value").textContent).toBe("Character stays silent");
@@ -134,7 +125,7 @@ describe("VoiceModeControl", () => {
     await act(async () => { view.q("voice-mode-talking").click(); });
     expect(view.onChange).toHaveBeenCalledWith("talking");
     await act(async () => { view.q("voice-mode-silent").click(); });
-    expect(view.q("voice-mode-silent-note")).not.toBeNull();
+    expect(view.q("voice-mode-silent-note")).toBeNull();
     await view.unmount();
   });
 
@@ -154,20 +145,29 @@ describe("VoiceModeControl", () => {
     await view.unmount();
   });
 
-  test("the slider's explainer names the stop just set, and only after a change", async () => {
-    // Kasra's order (Nov 27 2026): the explainer belongs to the
-    // change, never to the standing pick — it rises with the stop
-    // the user just set and follows the slider as it moves.
+  test("the slider carries three stops and no explainer ever stands", async () => {
+    // Kasra's orders (Nov 27 2026): the Voiceover stop is removed
+    // (three stops remain, inside his 3–4 range), and no explainer
+    // line stands under any toggle — standing or after a change,
+    // the pick's name is the whole information.
     const view = await mount({ value: "talking", pickedValue: "", asSlider: true });
+    const stops = [...view.container.querySelectorAll('[data-testid="voice-mode-slider"] .pick-slider-stop')]
+      .map((b) => b.dataset.value);
+    expect(stops).toEqual(["auto", "talking", "silent"]);
     expect(view.q("voice-mode-explain")).toBeNull();
     await act(async () => { view.q("voice-mode-silent").click(); });
-    expect(view.q("voice-mode-explain").textContent).toBe(
-      "No voice is recorded; TikTok text-to-speech can carry the line."
-    );
+    expect(view.q("voice-mode-explain")).toBeNull();
     await act(async () => { view.q("voice-mode-talking").click(); });
-    expect(view.q("voice-mode-explain").textContent).toBe(
-      "The character speaks the line aloud, lips moving with the words."
-    );
+    expect(view.q("voice-mode-explain")).toBeNull();
+    await view.unmount();
+  });
+
+  test("a legacy voiceover value reads as talking, never as a dead stop", async () => {
+    // Stored projects from the few hours the Voiceover stop
+    // stood must not break: the control maps the dead value to
+    // talking, the closest standing behavior.
+    const view = await mount({ value: "voiceover" });
+    expect(view.q("voice-mode-talking").getAttribute("aria-pressed")).toBe("true");
     await view.unmount();
   });
 });

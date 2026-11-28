@@ -28,7 +28,6 @@ import { HistoryFeedback } from "../components/HistoryFeedback";
 import { VideoVerdict } from "../components/VideoVerdict";
 import { recordSignal } from "../lib/feedback";
 import { isWinnerRow } from "../lib/nextTake";
-import { STATUS_FILTER_EXPLAINERS } from "../lib/pickExplainers";
 import { listPendingSaves } from "../demoCta/saveOutbox";
 import { PendingSaveCard } from "./PendingSaveCard";
 import {
@@ -1406,7 +1405,6 @@ export default function GenerationHistory() {
                     { value: s, label: humanize(s) }
                   )),
                 ]}
-                explainers={STATUS_FILTER_EXPLAINERS}
                 current={statusFilter}
                 onChange={(value) => setFilter("status", value)}
                 testId="history-status-filter"
