@@ -273,6 +273,11 @@ One render path, single-pass video generation via OpenRouter.
   muted foreground, smoke-pinned in the hook-picks slider check. The
   explainers themselves stay — a toggle like Focus means nothing with no
   word on what it selects.
+- Seat explainers, not pick restatements (Nov 27 2026, Kasra's order): the
+  five label seats (Location, Wardrobe, environment, backdrop, animation)
+  no longer repeat the pick's name — each carries one fixed line in
+  `lib/pickExplainers.js` explaining what the seat controls (45–70 chars,
+  exact texts smoke-pinned); the label argument is accepted and ignored.
 - Demo + CTA library picker + second-clip sequence (Nov 27 2026, Kasra's
   order): both clip slots' add doors open the Assets library pop-up
   (`demoCta/LibraryPicker.jsx`, the pop-scrim portal shell) listing the

@@ -15,9 +15,9 @@
  *
  * Stops whose names are themselves content (a Location, a
  * Wardrobe, an environment, a backdrop, an animation) take their
- * explainer from the small template functions at the bottom: the
- * sentence is the same shape for every stop of its group, with
- * the stop's own name inside it.
+ * explainer from the small functions at the bottom: one fixed
+ * line per seat explaining what the seat controls, never naming
+ * the stop — the pick's name already stands under the track.
  */
 
 export const VOICE_EXPLAINERS = {
@@ -88,27 +88,30 @@ export function resolutionExplainer(value, isDefault) {
     : "A lower resolution: a smaller file with a softer picture.";
 }
 
-// The label-carrying templates: one sentence shape per group,
-// the stop's own name inside it. Their lengths ride the name's
-// length, so the gate pins them to a wider sanity band (45–70)
-// with the app's real standing labels — still far under the old
-// note's ~200 characters.
+// The label-carrying seats (Kasra's order, later Nov 27 2026):
+// the old templates merely restated the pick ("The hook is
+// filmed in this place: Living room."), so each seat now carries
+// ONE fixed line explaining what the seat controls — the same
+// words for every stop, never naming the pick. The label
+// argument callers pass is ignored. The gate pins the exact
+// texts and the wider 45–70 sanity band — still far under the
+// old note's ~200 characters.
 export function locationExplainer(label) {
-  return `The hook is filmed in this place: ${String(label || "")}.`;
+  return "The place the hook is filmed in — pick the room or spot.";
 }
 
 export function wardrobeExplainer(label) {
-  return `The character wears this wardrobe look: ${String(label || "")}.`;
+  return "What the presenter wears on camera for this hook.";
 }
 
 export function environmentExplainer(label) {
-  return `The hand scene stands in the ${String(label || "").toLowerCase()} for the clip.`;
+  return "The setting painted around the clip in the editor.";
 }
 
 export function backdropExplainer(label) {
-  return `The phone floats over a ${String(label || "").toLowerCase()} backdrop in the clip.`;
+  return "What stands behind the phone in the second clip.";
 }
 
 export function animationExplainer(label) {
-  return `The ${String(label || "")} motion plays on the backdrop behind the phone.`;
+  return "How a still image moves while it is on screen.";
 }

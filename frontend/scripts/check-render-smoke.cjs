@@ -16187,11 +16187,11 @@ async function runHookCtaChecks() {
   await check("every slider explainer is brief and lands in the shared band (Nov 27 2026)", async () => {
     // Kasra's order (Nov 27 2026): every PickSlider carries one
     // explainer per stop, brief and uniform — the fixed texts land
-    // in one 55–65 character band, the label templates (Location,
-    // Wardrobe, environment, backdrop, animation) land in a wider
-    // 45–70 sanity band with the app's real labels, and every one
-    // is far under the old silent note's ~200 characters. A future
-    // explainer that drifts out of the band fails here.
+    // in one 55–65 character band, the five label seats (Location,
+    // Wardrobe, environment, backdrop, animation) carry one fixed
+    // line each in a wider 45–70 band, and every one is far under
+    // the old silent note's ~200 characters. A future explainer
+    // that drifts out of the band fails here.
     const ex = load("lib/pickExplainers.js");
     // The copy filter is removed whole (Nov 27 2026): its explainer
     // map goes with it, and the status slider's All statuses stop
@@ -16226,19 +16226,37 @@ async function runHookCtaChecks() {
         throw new Error(`a resolution explainer sits outside the 55–65 band (${text.length} chars): ${JSON.stringify(text)}`);
       }
     }
-    const { ENVIRONMENTS, BACKGROUNDS, ANIMATIONS } = load("demoCta/constants.js");
-    const templated = [
-      ...ENVIRONMENTS.map((env) => ex.environmentExplainer(env.label)),
-      ...BACKGROUNDS.map((b) => ex.backdropExplainer(b.label)),
-      ...ANIMATIONS.map((a) => ex.animationExplainer(a.label)),
-      ex.locationExplainer("A quiet kitchen"),
-      ex.locationExplainer("Plan default"),
-      ex.wardrobeExplainer("A plain dark hoodie"),
-      ex.wardrobeExplainer("Plan default"),
+    // The five label seats no longer restate the pick (Kasra's
+    // order, later Nov 27 2026): each is ONE fixed line explaining
+    // what the seat controls — the same words for every stop,
+    // never naming the pick. The exact texts are pinned here
+    // against the app's real labels, and each still lands in the
+    // 45–70 band.
+    const seatExplainers = [
+      [ex.locationExplainer, "The place the hook is filmed in — pick the room or spot."],
+      [ex.wardrobeExplainer, "What the presenter wears on camera for this hook."],
+      [ex.environmentExplainer, "The setting painted around the clip in the editor."],
+      [ex.backdropExplainer, "What stands behind the phone in the second clip."],
+      [ex.animationExplainer, "How a still image moves while it is on screen."],
     ];
-    for (const text of templated) {
-      if (text.length < 45 || text.length > 70) {
-        throw new Error(`a templated explainer sits outside the 45–70 band (${text.length} chars): ${JSON.stringify(text)}`);
+    const { ENVIRONMENTS, BACKGROUNDS, ANIMATIONS } = load("demoCta/constants.js");
+    const realLabels = [
+      ...ENVIRONMENTS.map((env) => env.label),
+      ...BACKGROUNDS.map((b) => b.label),
+      ...ANIMATIONS.map((a) => a.label),
+      "A quiet kitchen",
+      "A plain dark hoodie",
+      "Plan default",
+    ];
+    for (const [explain, expected] of seatExplainers) {
+      if (expected.length < 45 || expected.length > 70) {
+        throw new Error(`a seat explainer sits outside the 45–70 band (${expected.length} chars): ${JSON.stringify(expected)}`);
+      }
+      for (const label of realLabels) {
+        const text = explain(label);
+        if (text !== expected) {
+          throw new Error(`a seat explainer is not its one fixed line for label ${JSON.stringify(label)}: ${JSON.stringify(text)}`);
+        }
       }
     }
     const voiceSrc = fs.readFileSync(path.join(SRC, "components", "studio", "VoiceModeControl.jsx"), "utf8");
