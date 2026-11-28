@@ -304,8 +304,7 @@ One render path, single-pass video generation via OpenRouter.
   and ticks — centred on their percentage — land whole at 0%/100%
   instead of being halved by the player's `overflow-x-clip`. Trim
   tracks wear the `.trim-timeline` density of `.inset-panel`, and the
-  second clip's sequence stands as a wrapping row of item tiles with
-  the add tile last.
+  second clip's sequence stands as a wrapping row of item tiles.
 - Posted link, full-card History, switch glide, HookSnap score (Nov 27
   2026, Kasra's order): the render panel carries the History card's
   verdict + TikTok link section (`components/PostedLinkSection.jsx`)
@@ -331,6 +330,12 @@ One render path, single-pass video generation via OpenRouter.
   adjacent in that order; the status slider stays in the secondary
   group, and the More filters button reads active off it alone. The
   unified-toggle note above now covers History's status filter only.
+- Second clip add door (Nov 27 2026, Kasra's order): the sequence row
+  in the Demo + CTA editor carries item tiles only — the "Add more
+  images" tile that stood beside the items is removed, and the Second
+  clip's top row (beside "Add another clip") is the only add door.
+  The hidden images input stays: the library pop-up's upload door
+  drives it.
 - Significant trade-offs add or supersede a record in `docs/adr/` same-commit
   (see `docs/adr/README.md` for the rules).
 - Fail loudly, never silently: no fallback model, no invented lookalike, no

@@ -15,7 +15,6 @@ import {
   Hand,
   Heart,
   Image as ImageIcon,
-  ImagePlus,
   Images,
   Megaphone,
   MonitorSmartphone,
@@ -2491,9 +2490,11 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
               )}
               {/* The sequence stands as a row of tiles in the founder's
                   order (Kasra's order, Nov 27 2026): one tile per item,
-                  wrapping as the column narrows, with the add tile
-                  standing last in the same row. The tiles are the same
-                  rows with the same controls — only their seats changed. */}
+                  wrapping as the column narrows. Adding runs through
+                  the top row's doors alone — no add tile stands in this
+                  row (Kasra's order, later Nov 27 2026). The tiles are
+                  the same rows with the same controls — only their
+                  seats changed. */}
               <div className="flex flex-wrap items-stretch gap-2">
               {appendItems.map((entry, index) => entry.kind === "image" ? (
                 <div
@@ -2549,16 +2550,6 @@ export function DemoCtaEditor({ generation = null, sourceUrl = null, onSaved, dr
                   </div>
                 </div>
               ))}
-              <Button
-                variant="secondary"
-                size="sm"
-                className="min-h-[3.25rem] min-w-[10rem] flex-1 border-dashed"
-                onClick={() => appendImagesInputRef.current?.click()}
-                data-testid="append-images-add-more"
-              >
-                <ImagePlus className="h-3.5 w-3.5" />
-                <span>Add more images</span>
-              </Button>
               </div>
             </div>
           )}

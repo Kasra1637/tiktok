@@ -22113,8 +22113,13 @@ async function runDemoCtaChecks() {
         throw new Error(`reorder did not take: ${JSON.stringify(reordered)}`);
       }
       // Adding more images appends as many additional images as the founder picks
-      // rather than wiping the existing sequence.
-      await clickEl(ctx, ctx.container.querySelector('[data-testid="append-images-add-more"]'), "click add more images");
+      // rather than wiping the existing sequence. The pick runs through the
+      // top row's door and the library pop-up onto this same input — the
+      // sequence area itself carries no add tile (Kasra's order, Nov 27
+      // 2026: only the top shows).
+      if (ctx.container.querySelector('[data-testid="append-images-add-more"]')) {
+        throw new Error("the sequence area still carries its own Add more images tile");
+      }
       liveFileList.push(
         new dom.window.File([new Uint8Array(8)], "profile.png", { type: "image/png" }),
         new dom.window.File([new Uint8Array(8)], "settings.png", { type: "image/png" })
@@ -22445,17 +22450,16 @@ async function runDemoCtaChecks() {
           if (labels.some((label) => /Video \d/.test(label))) throw new Error("a sequence row is named for a video");
           // The sequence stands as a row of tiles in the founder's
           // order (Kasra's order, Nov 27 2026): every item row shares
-          // one wrapping flex row, and the add tile stands last in it.
+          // one wrapping flex row, and the row holds item tiles only —
+          // the add tile that once stood last is gone (Kasra's order,
+          // later Nov 27 2026: only the top row carries the add door).
           const tileRow = sequenceRows()[0]?.parentElement;
           if (!tileRow || !tileRow.classList.contains("flex") || !tileRow.classList.contains("flex-wrap")) {
             throw new Error("the sequence items do not stand in a wrapping tile row");
           }
           const tileSeats = [...tileRow.children].map((el) => el.getAttribute("data-testid") || "");
-          if (tileSeats.length !== 4 || tileSeats[3] !== "append-images-add-more") {
-            throw new Error(`the tile row's seats are wrong (add tile last): ${JSON.stringify(tileSeats)}`);
-          }
-          if (!tileSeats.slice(0, 3).every((id) => /append-(item|image)-row-/.test(id))) {
-            throw new Error(`the tile row does not hold the three item tiles in order: ${JSON.stringify(tileSeats)}`);
+          if (tileSeats.length !== 3 || !tileSeats.every((id) => /append-(item|image)-row-/.test(id))) {
+            throw new Error(`the tile row does not hold the three item tiles alone, in order: ${JSON.stringify(tileSeats)}`);
           }
           // Drop a clip on the second tile: it inserts at that seat and
           // files its library copy on the way in.
